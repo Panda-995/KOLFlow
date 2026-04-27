@@ -1,0 +1,15 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+*.sqlite
+*.apk
+.env
+
+# Keep .env.example
+!.env.example
+
+# Android IDE files
+android/.idea/

@@ -1,0 +1,115 @@
+import { Router } from 'express';
+import db from '../db.js';
+import { v4 as uuidv4 } from 'uuid';
+import { logActivity, getUserId } from './utils/index.js';
+import { validateAmount } from './utils/helpers.js';
+
+const router = Router();
+
+// 获取所有账单
+router.get('/', (req, res) => {
+  const userId = getUserId(req);
+  const payments = db.prepare('SELECT * FROM payments WHERE userId = ? ORDER BY createdAt DESC').all(userId);
+  res.json(payments);
+});
+
+// 创建账单
+router.post('/', (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const { orderNo, brand, amount, type, date, method } = req.body;
+
+    if (!validateAmount(amount)) {
+      return res.status(400).json({ error: '金额数值无效' });
+    }
+    if (!brand || brand.trim().length === 0) {
+      return res.status(400).json({ error: '品牌名称不能为空' });
+    }
+
+    const id = uuidv4();
+    db.prepare(`
+      INSERT INTO payments (id, userId, orderNo, brand, amount, type, date, method)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, userId, orderNo || null, brand.trim(), amount || 0, type || 'pending', date || null, method || null);
+
+    logActivity(userId, 'create', 'payment', id, `创建账单: ${brand} ¥${amount}`);
+
+    const newPayment = db.prepare('SELECT * FROM payments WHERE id = ?').get(id);
+    res.json(newPayment);
+  } catch (error) {
+    console.error('创建账单错误:', error);
+    res.status(500).json({ error: '创建账单失败，请稍后重试' });
+  }
+});
+
+// 结算账单
+router.put('/:id/settle', (req, res) => {
+  const userId = getUserId(req);
+  const { id } = req.params;
+  const payment = db.prepare('SELECT * FROM payments WHERE id = ? AND userId = ?').get(id, userId) as any;
+
+  if (!payment) {
+    return res.status(404).json({ error: '账单不存在' });
+  }
+
+  const newType = payment.type === 'pending' ? 'settled' : 'pending';
+  const newDate = newType === 'settled' ? new Date().toISOString().split('T')[0] : payment.date;
+  const newMethod = newType === 'settled' ? '已结算' : payment.method;
+
+  db.prepare('UPDATE payments SET type = ?, date = ?, method = ? WHERE id = ? AND userId = ?')
+    .run(newType, newDate, newMethod, id, userId);
+
+  logActivity(userId, 'settle', 'payment', id, `账单结算: ${payment.brand} ¥${payment.amount} (${payment.type} → ${newType})`);
+
+  const updatedPayment = db.prepare('SELECT * FROM payments WHERE id = ?').get(id);
+  res.json(updatedPayment);
+});
+
+// 更新账单
+router.put('/:id', (req, res) => {
+  const userId = getUserId(req);
+  const { id } = req.params;
+  const { orderNo, brand, amount, type, date, method } = req.body;
+
+  const payment = db.prepare('SELECT * FROM payments WHERE id = ? AND userId = ?').get(id, userId) as any;
+  if (!payment) {
+    return res.status(404).json({ error: '账单不存在' });
+  }
+
+  db.prepare(`
+    UPDATE payments
+    SET orderNo = ?, brand = ?, amount = ?, type = ?, date = ?, method = ?
+    WHERE id = ? AND userId = ?
+  `).run(
+    orderNo || payment.orderNo,
+    brand || payment.brand,
+    amount !== undefined ? amount : payment.amount,
+    type || payment.type,
+    date || payment.date,
+    method || payment.method,
+    id,
+    userId
+  );
+
+  logActivity(userId, 'update', 'payment', id, `更新账单: ${brand || payment.brand} ¥${amount || payment.amount}`);
+
+  const updatedPayment = db.prepare('SELECT * FROM payments WHERE id = ?').get(id);
+  res.json(updatedPayment);
+});
+
+// 删除账单
+router.delete('/:id', (req, res) => {
+  const userId = getUserId(req);
+  const { id } = req.params;
+
+  const payment = db.prepare('SELECT * FROM payments WHERE id = ? AND userId = ?').get(id, userId) as any;
+  if (!payment) {
+    return res.status(404).json({ error: '账单不存在' });
+  }
+
+  logActivity(userId, 'delete', 'payment', id, `删除账单: ${payment.brand} ¥${payment.amount}`);
+  db.prepare('DELETE FROM payments WHERE id = ? AND userId = ?').run(id, userId);
+  res.json({ success: true });
+});
+
+export default router;
