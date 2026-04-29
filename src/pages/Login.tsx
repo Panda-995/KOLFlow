@@ -17,7 +17,7 @@ export default function Login() {
   useEffect(() => {
     const checkUsers = async () => {
       try {
-        const res = await fetch(getApiUrl('/api/auth/check-users'));
+        const res = await fetch('/api/auth/check-users');
         const data = await res.json();
         if (data.hasUsers === false) {
           setMode('register');

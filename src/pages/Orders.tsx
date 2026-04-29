@@ -229,7 +229,7 @@ export default function Orders() {
       formData.append('file', file);
 
       const token = localStorage.getItem('token');
-      const response = await fetch(getApiUrl('/api/data/orders/file'), {
+      const response = await fetch('/api/data/orders/file', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: formData
