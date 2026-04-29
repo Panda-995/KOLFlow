@@ -53,10 +53,18 @@ const isValidUrl = (url: string): boolean => {
 };
 
 router.get('/:orderId', (req, res) => {
-  const userId = getUserId(req);
-  const { orderId } = req.params;
-  const links = db.prepare('SELECT * FROM publish_links WHERE orderId = ? AND userId = ? ORDER BY createdAt DESC').all(orderId, userId);
-  res.json(links);
+  try {
+    const userId = getUserId(req);
+    const { orderId } = req.params;
+    const links = db.prepare('SELECT * FROM publish_links WHERE orderId = ? AND userId = ? ORDER BY createdAt DESC').all(orderId, userId);
+    res.json(links);
+  } catch (error) {
+    console.error('获取发布链接错误:', error instanceof Error ? error.message : error);
+    res.status(500).json({ 
+      error: '获取发布链接失败，请稍后重试',
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 router.post('/', (req, res) => {
@@ -211,60 +219,76 @@ router.post('/batch', (req, res) => {
 });
 
 router.put('/:id', (req, res) => {
-  const userId = getUserId(req);
-  const { id } = req.params;
-  const { platform, url } = req.body;
+  try {
+    const userId = getUserId(req);
+    const { id } = req.params;
+    const { platform, url } = req.body;
 
-  const existingLink = db.prepare('SELECT * FROM publish_links WHERE id = ? AND userId = ?').get(id, userId) as any;
-  if (!existingLink) {
-    return res.status(404).json({ error: '链接不存在' });
-  }
+    const existingLink = db.prepare('SELECT * FROM publish_links WHERE id = ? AND userId = ?').get(id, userId) as any;
+    if (!existingLink) {
+      return res.status(404).json({ error: '链接不存在' });
+    }
 
-  let newPlatform = platform || existingLink.platform;
-  let newUrl = url || existingLink.url;
+    let newPlatform = platform || existingLink.platform;
+    let newUrl = url || existingLink.url;
 
-  if (url && !platform) {
-    const chineseColonIndex = url.indexOf('：');
-    const englishColonIndex = url.indexOf(':');
-    
-    if (chineseColonIndex > 0) {
-      const parsedPlatform = url.substring(0, chineseColonIndex).trim();
-      if (parsedPlatform && !parsedPlatform.toLowerCase().includes('http')) {
-        newPlatform = parsedPlatform;
-        newUrl = url.substring(chineseColonIndex + 1).trim();
-      }
-    } else if (englishColonIndex > 0) {
-      const parsedPlatform = url.substring(0, englishColonIndex).trim();
-      if (parsedPlatform && !parsedPlatform.toLowerCase().includes('http')) {
-        newPlatform = parsedPlatform;
-        newUrl = url.substring(englishColonIndex + 1).trim();
+    if (url && !platform) {
+      const chineseColonIndex = url.indexOf('：');
+      const englishColonIndex = url.indexOf(':');
+      
+      if (chineseColonIndex > 0) {
+        const parsedPlatform = url.substring(0, chineseColonIndex).trim();
+        if (parsedPlatform && !parsedPlatform.toLowerCase().includes('http')) {
+          newPlatform = parsedPlatform;
+          newUrl = url.substring(chineseColonIndex + 1).trim();
+        }
+      } else if (englishColonIndex > 0) {
+        const parsedPlatform = url.substring(0, englishColonIndex).trim();
+        if (parsedPlatform && !parsedPlatform.toLowerCase().includes('http')) {
+          newPlatform = parsedPlatform;
+          newUrl = url.substring(englishColonIndex + 1).trim();
+        }
       }
     }
+
+    if (!isValidUrl(newUrl)) {
+      newUrl = 'https://' + newUrl;
+    }
+
+    db.prepare('UPDATE publish_links SET platform = ?, url = ? WHERE id = ?').run(newPlatform, newUrl, id);
+
+    logActivity(userId, 'update', 'publish_link', id, `更新发布链接: ${newPlatform}`);
+
+    const updatedLink = db.prepare('SELECT * FROM publish_links WHERE id = ?').get(id);
+    res.json(updatedLink);
+  } catch (error) {
+    console.error('更新发布链接错误:', error instanceof Error ? error.message : error);
+    res.status(500).json({ 
+      error: '更新发布链接失败，请稍后重试',
+      timestamp: new Date().toISOString()
+    });
   }
-
-  if (!isValidUrl(newUrl)) {
-    newUrl = 'https://' + newUrl;
-  }
-
-  db.prepare('UPDATE publish_links SET platform = ?, url = ? WHERE id = ?').run(newPlatform, newUrl, id);
-
-  logActivity(userId, 'update', 'publish_link', id, `更新发布链接: ${newPlatform}`);
-
-  const updatedLink = db.prepare('SELECT * FROM publish_links WHERE id = ?').get(id);
-  res.json(updatedLink);
 });
 
 router.delete('/:id', (req, res) => {
-  const userId = getUserId(req);
-  const { id } = req.params;
+  try {
+    const userId = getUserId(req);
+    const { id } = req.params;
 
-  const link = db.prepare('SELECT * FROM publish_links WHERE id = ? AND userId = ?').get(id, userId) as any;
-  if (link) {
-    logActivity(userId, 'delete', 'publish_link', id, `删除发布链接: ${link.platform}`);
+    const link = db.prepare('SELECT * FROM publish_links WHERE id = ? AND userId = ?').get(id, userId) as any;
+    if (link) {
+      logActivity(userId, 'delete', 'publish_link', id, `删除发布链接: ${link.platform}`);
+    }
+
+    db.prepare('DELETE FROM publish_links WHERE id = ? AND userId = ?').run(id, userId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('删除发布链接错误:', error instanceof Error ? error.message : error);
+    res.status(500).json({ 
+      error: '删除发布链接失败，请稍后重试',
+      timestamp: new Date().toISOString()
+    });
   }
-
-  db.prepare('DELETE FROM publish_links WHERE id = ? AND userId = ?').run(id, userId);
-  res.json({ success: true });
 });
 
 export default router;

@@ -1,21 +1,21 @@
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import db from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
 import * as XLSX from 'xlsx';
-import { logActivity, getUserId, authMiddleware } from './utils/index.js';
+import { logActivity, getUserId } from './utils/index.js';
 import { EXCEL_FIELD_MAP, ORDER_TYPE_MAP, ORDER_STATUS_MAP } from './utils/constants.js';
 import { generateOrderNo, safeJsonParse } from './utils/helpers.js';
 
-// 配置 multer - 限制文件大小和类型
+// Multer 文件过滤器
 const upload = multer({
   dest: 'uploads/',
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB 限制
   },
-  fileFilter: (req, file, cb) => {
+  fileFilter: (_req, file, cb) => {
     // 只允许 Excel 文件
     const allowedTypes = [
       'application/vnd.ms-excel',
@@ -221,58 +221,66 @@ router.post('/import', (req, res) => {
 
 // JSON 批量导入商单
 router.post('/orders', (req, res) => {
-  const userId = getUserId(req);
-  const { data } = req.body;
+  try {
+    const userId = getUserId(req);
+    const { data } = req.body;
 
-  if (!Array.isArray(data) || data.length === 0) {
-    return res.status(400).json({ error: '导入数据为空' });
-  }
-
-  const results = { success: 0, failed: 0, errors: [] as string[] };
-
-  data.forEach((row: any, index: number) => {
-    try {
-      const mappedRow: any = {};
-      Object.keys(row).forEach(key => {
-        const mappedKey = EXCEL_FIELD_MAP[key.trim()];
-        if (mappedKey) mappedRow[mappedKey] = row[key];
-      });
-
-      if (!mappedRow.title) {
-        results.failed++;
-        results.errors.push(`第${index + 1}行: 缺少标题`);
-        return;
-      }
-
-      mappedRow.type = mappedRow.type && ORDER_TYPE_MAP[mappedRow.type] ? ORDER_TYPE_MAP[mappedRow.type] : 'paid';
-      mappedRow.status = mappedRow.status && ORDER_STATUS_MAP[mappedRow.status] ? ORDER_STATUS_MAP[mappedRow.status] : 'in_progress';
-
-      if (mappedRow.platforms && typeof mappedRow.platforms === 'string') {
-        mappedRow.platforms = mappedRow.platforms.split(/[,，]/).map((p: string) => p.trim()).filter(Boolean);
-      } else {
-        mappedRow.platforms = [];
-      }
-
-      const amount = Number(mappedRow.actualAmount);
-      mappedRow.actualAmount = isNaN(amount) ? 0 : amount;
-
-      const id = uuidv4();
-      const orderNo = generateOrderNo();
-
-      db.prepare(`
-        INSERT INTO orders (id, userId, orderNo, title, type, status, expectedAmount, actualAmount, brandName, platforms, acceptDate, submitDate)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, userId, orderNo, mappedRow.title.trim(), mappedRow.type, mappedRow.status, 0, mappedRow.actualAmount, mappedRow.brandName || null, JSON.stringify(mappedRow.platforms), mappedRow.acceptDate || null, mappedRow.submitDate || null);
-
-      results.success++;
-    } catch (error) {
-      results.failed++;
-      results.errors.push(`第${index + 1}行: ${error instanceof Error ? error.message : '处理失败'}`);
+    if (!Array.isArray(data) || data.length === 0) {
+      return res.status(400).json({ error: '导入数据为空' });
     }
-  });
 
-  logActivity(userId, 'import', 'order', 'batch', `批量导入商单: 成功${results.success}条, 失败${results.failed}条`);
-  res.json(results);
+    const results = { success: 0, failed: 0, errors: [] as string[] };
+
+    data.forEach((row: any, index: number) => {
+      try {
+        const mappedRow: any = {};
+        Object.keys(row).forEach(key => {
+          const mappedKey = EXCEL_FIELD_MAP[key.trim()];
+          if (mappedKey) mappedRow[mappedKey] = row[key];
+        });
+
+        if (!mappedRow.title) {
+          results.failed++;
+          results.errors.push(`第${index + 1}行: 缺少标题`);
+          return;
+        }
+
+        mappedRow.type = mappedRow.type && ORDER_TYPE_MAP[mappedRow.type] ? ORDER_TYPE_MAP[mappedRow.type] : 'paid';
+        mappedRow.status = mappedRow.status && ORDER_STATUS_MAP[mappedRow.status] ? ORDER_STATUS_MAP[mappedRow.status] : 'in_progress';
+
+        if (mappedRow.platforms && typeof mappedRow.platforms === 'string') {
+          mappedRow.platforms = mappedRow.platforms.split(/[,，]/).map((p: string) => p.trim()).filter(Boolean);
+        } else {
+          mappedRow.platforms = [];
+        }
+
+        const amount = Number(mappedRow.actualAmount);
+        mappedRow.actualAmount = isNaN(amount) ? 0 : amount;
+
+        const id = uuidv4();
+        const orderNo = generateOrderNo();
+
+        db.prepare(`
+          INSERT INTO orders (id, userId, orderNo, title, type, status, expectedAmount, actualAmount, brandName, platforms, acceptDate, submitDate)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(id, userId, orderNo, mappedRow.title.trim(), mappedRow.type, mappedRow.status, 0, mappedRow.actualAmount, mappedRow.brandName || null, JSON.stringify(mappedRow.platforms), mappedRow.acceptDate || null, mappedRow.submitDate || null);
+
+        results.success++;
+      } catch (error) {
+        results.failed++;
+        results.errors.push(`第${index + 1}行: ${error instanceof Error ? error.message : '处理失败'}`);
+      }
+    });
+
+    logActivity(userId, 'import', 'order', 'batch', `批量导入商单: 成功${results.success}条, 失败${results.failed}条`);
+    res.json(results);
+  } catch (error) {
+    console.error('批量导入商单错误:', error instanceof Error ? error.message : error);
+    res.status(500).json({ 
+      error: '批量导入商单失败，请稍后重试',
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 router.post('/orders/file', upload.single('file'), (req, res) => {

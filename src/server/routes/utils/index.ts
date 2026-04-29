@@ -33,7 +33,8 @@ export const generateToken = (userId: string, email: string): string => {
 export const verifyToken = (token: string): { userId: string; email: string } | null => {
   try {
     return jwt.verify(token, JWT_SECRET) as { userId: string; email: string };
-  } catch {
+  } catch (e) {
+    console.error('JWT验证失败:', e instanceof Error ? e.message : e);
     return null;
   }
 };

@@ -15,7 +15,7 @@ export default function Analytics() {
   const [year, setYear] = useState(new Date().getFullYear().toString());
   const [month, setMonth] = useState('all');
   const [brandFilter, setBrandFilter] = useState('all');
-  const { orders, payments, brands, todos } = useStore();
+  const { orders, payments } = useStore();
 
   const availableYears = useMemo(() => {
     const years = new Set<string>();
@@ -120,16 +120,6 @@ export default function Analytics() {
     return Object.entries(brandIncome).map(([name, income]) => ({ name, income })).sort((a, b) => b.income - a.income).slice(0, 5);
   }, [filteredOrders]);
 
-  const typeData = useMemo(() => {
-    const typeCounts: Record<string, number> = { '付费推广': 0, '产品置换': 0, '直发': 0 };
-    filteredOrders.forEach(order => {
-      if (order.type === 'paid') typeCounts['付费推广']++;
-      else if (order.type === 'product_exchange') typeCounts['产品置换']++;
-      else if (order.type === 'direct') typeCounts['直发']++;
-    });
-    return Object.entries(typeCounts).map(([name, value]) => ({ name, value })).filter(d => d.value > 0);
-  }, [filteredOrders]);
-
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -219,7 +209,7 @@ export default function Analytics() {
                     <Pie data={platformData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={5} dataKey="value" stroke="none">
                       {platformData.map((_, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                     </Pie>
-                    <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }} formatter={(value: number, name: string, props: any) => [`${value}单 (${props.payload.percentage}%)`, name]} />
+                    <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }} formatter={(value, name, props) => [`${value}单 (${props.payload.percentage}%)`, name]} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>

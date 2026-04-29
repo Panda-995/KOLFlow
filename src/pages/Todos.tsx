@@ -11,11 +11,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Building2,
-  MoreHorizontal,
   AlertCircle,
   Filter,
   Search,
-  Tag,
   Package
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -33,7 +31,7 @@ const PRIORITIES = [
 ];
 
 export default function Todos() {
-  const { todos, toggleTodo, addTodo, deleteTodo, brands, fetchBrands, fetchTodos, orders } = useStore();
+  const { todos, toggleTodo, addTodo, deleteTodo, brands, fetchBrands, orders } = useStore();
   const { showToast } = useToast();
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
@@ -157,8 +155,8 @@ export default function Todos() {
   }, [currentMonth, todos, orders]);
 
   const renderCalendar = useCallback(() => {
-    const rows: JSX.Element[] = [];
-    let days: JSX.Element[] = [];
+    const rows: React.ReactElement[] = [];
+    let days: React.ReactElement[] = [];
 
     calendarData.forEach((dayData, index) => {
       const { date, isCurrentMonth, todos: dayTodos, orders: dayOrders } = dayData;

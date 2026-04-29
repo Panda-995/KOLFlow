@@ -1,19 +1,69 @@
 import 'dotenv/config';
 import express, { ErrorRequestHandler } from 'express';
 import { createServer as createViteServer } from 'vite';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
 import apiRoutes from './src/server/api.js';
+import os from 'os';
 
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
-  // CORS for mobile app
-  app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
+  // Security: Helmet HTTP headers
+  app.use(helmet({
+    contentSecurityPolicy: false,
+  }));
+
+  // Rate limiting (loginLimiter available for auth routes)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // 5 attempts
+    message: { error: '登录尝试过多，请稍后再试' },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  const apiLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 100, // 100 requests
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  // CORS with origin validation
+  // 获取局域网IP地址，允许APP从局域网访问
+  const getLocalIPs = (): string[] => {
+    const ips: string[] = [];
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+      for (const iface of interfaces[name]) {
+        if (iface.family === 'IPv4' && !iface.internal) {
+          ips.push(`http://${iface.address}:3000`);
+          ips.push(`http://${iface.address}:5173`);
+        }
+      }
+    }
+    return ips;
+  };
+  
+  const allowedOrigins = process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',')
+    : ['http://localhost:3000', 'http://localhost:5173', ...getLocalIPs()];
+
+  app.use((req, res, next): void => {
+    const origin = req.headers.origin;
+    if (origin && allowedOrigins.includes(origin)) {
+      res.header('Access-Control-Allow-Origin', origin);
+    } else if (!origin) {
+      res.header('Access-Control-Allow-Origin', '*');
+    }
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
     if (req.method === 'OPTIONS') {
-      return res.sendStatus(200);
+      res.sendStatus(200);
+      return;
     }
     next();
   });
@@ -21,20 +71,23 @@ async function startServer() {
   app.use(express.json({ limit: '10mb' }));
 
   // 安全中间件：阻止直接访问 uploads 目录
-  app.use('/uploads', (req, res) => {
+  app.use('/uploads', (_req, res) => {
     res.status(403).json({ error: '禁止直接访问上传文件' });
   });
 
-  // Health check endpoint (no auth required)
-  app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-  });
+  // API rate limiter
+  app.use('/api/', apiLimiter);
+
+// Health check endpoint (no auth required)
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
 
   // API routes
   app.use('/api', apiRoutes);
 
-  // Global error handler - must be after all routes
-  const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
+  // 全局错误处理 - 必须在所有路由之后
+  const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     // Determine status code
     const status = err.status || (err.message.includes('未授权') ? 401 : 500);
     
@@ -58,7 +111,7 @@ async function startServer() {
     app.use(express.static('dist'));
 
     // SPA 路由回退：所有非 API 路由返回 index.html
-    app.get('*', (req, res) => {
+    app.get('*', (_req, res) => {
       res.sendFile('index.html', { root: 'dist' });
     });
   }

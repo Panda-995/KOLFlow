@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { clsx } from 'clsx';
-import { getApiUrl } from '../lib/mobileApi';
 
 type Mode = 'login' | 'register';
 

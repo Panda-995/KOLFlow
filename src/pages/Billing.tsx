@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useStore, Payment } from '../store/useStore';
-import { ArrowUpRight, ArrowDownRight, Download, X, CheckCircle, Clock, Edit2, ChevronDown, Trash2 } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Download, X, CheckCircle, Clock, Edit2, Trash2 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -20,7 +20,7 @@ export default function Billing() {
     orderNo: '',
     brand: '',
     amount: '',
-    type: 'pending' as 'settled' | 'pending',
+    type: 'pending' as Payment['type'],
     date: '',
     method: ''
   });
@@ -66,10 +66,6 @@ export default function Billing() {
       method: payment.method || ''
     });
     setIsModalOpen(true);
-  };
-
-  const handleSettle = async (id: string) => {
-    await settlePayment(id);
   };
 
   const handleDelete = (payment: Payment) => {

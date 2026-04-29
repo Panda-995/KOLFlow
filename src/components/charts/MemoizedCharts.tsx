@@ -195,7 +195,7 @@ export const PieChartComponent = memo(function PieChartComponent({
               border: 'none',
               boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
             }}
-            formatter={(value: number, name: string, props: any) => [
+            formatter={(value, name, props) => [
               `${value}单 (${props.payload.percentage}%)`,
               name
             ]}

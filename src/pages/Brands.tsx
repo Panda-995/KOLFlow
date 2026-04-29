@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useStore, Brand, Todo, Order } from '../store/useStore';
+import { useStore, Brand } from '../store/useStore';
 import {
   Search,
   Plus,

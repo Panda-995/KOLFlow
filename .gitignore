@@ -1,15 +1,55 @@
+# 依赖
 node_modules/
-build/
+
+# 构建产物
 dist/
+build/
+
+# 测试
 coverage/
+
+# 系统文件
 .DS_Store
+Thumbs.db
+
+# 日志
 *.log
+npm-debug.log*
+
+# 数据库
 *.sqlite
+*.db
+
+# 环境变量（保留示例）
 .env
+.env.local
+.env.production
 
 # Keep .env.example
 !.env.example
 
-# Android IDE files
-android/.idea/
-kolflow-mobile.apk
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Android（已移除）
+android/
+capacitor.config.ts
+
+# 移动端构建产物
+*.apk
+*.aab
+*.ipa
+
+# 临时文件
+.tmp*
+.cache/
+.temp/
+
+# GitHub Actions
+.github/
+
+# Docker
+.dockerignore

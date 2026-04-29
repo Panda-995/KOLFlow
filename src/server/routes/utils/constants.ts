@@ -1,6 +1,6 @@
 // 共享常量和工具
 
-// 邀请码（支持环境变量配置）
+// 邀请码（支持环境变量配置，生产环境建议修改）
 export const VALID_INVITE_CODE = process.env.INVITE_CODE || 'panda995';
 
 // 商单类型映射

@@ -115,11 +115,12 @@ router.post('/verify', (req, res) => {
   }
 });
 
-router.get('/check-users', (req, res) => {
+router.get('/check-users', (_req, res) => {
   try {
     const user = db.prepare('SELECT id FROM users LIMIT 1').get();
     res.json({ hasUsers: !!user });
   } catch (error) {
+    console.error('检查用户存在失败:', error instanceof Error ? error.message : error);
     res.json({ hasUsers: false });
   }
 });

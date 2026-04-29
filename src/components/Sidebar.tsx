@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Package, Receipt, CheckSquare, Users, BarChart3, Settings, FileText, X, Keyboard, PanelLeftClose, PanelLeft } from 'lucide-react';
+import { LayoutDashboard, Package, Receipt, CheckSquare, Users, BarChart3, Settings, FileText, X, PanelLeftClose, PanelLeft } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useStore } from '../store/useStore';
 

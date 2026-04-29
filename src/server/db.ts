@@ -140,8 +140,8 @@ try {
     defaultUserId = firstUser.id;
   }
 } catch (e) {
-  // users 表可能不存在，使用默认值
-}
+    console.warn('查询用户设置失败，使用默认值:', e instanceof Error ? e.message : e);
+  }
 
 const migrations = [
   { table: 'brands', column: 'userId', type: `TEXT NOT NULL DEFAULT "${defaultUserId}"` },
@@ -169,7 +169,7 @@ if (!settingsColumnNames.includes('userId')) {
   try {
     db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_settings_userId ON settings(userId);`);
   } catch (e) {
-    // Index might already exist or there are duplicate values, ignore
+    console.warn('创建索引时出现警告（可能已存在）:', e instanceof Error ? e.message : e);
   }
 }
 

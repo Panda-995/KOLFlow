@@ -1,6 +1,6 @@
-import { useMemo, useState, useEffect, memo, useCallback } from 'react';
+import { useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { ArrowUpRight, ArrowDownRight, Package, DollarSign, CheckCircle2, Clock, Plus, Calendar as CalendarIcon, Users, Receipt, Target, Edit3, X } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Package, DollarSign, CheckCircle2, Calendar as CalendarIcon, Receipt, Target, Edit3 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { Link, useNavigate } from 'react-router-dom';
 import Modal from '../components/Modal';

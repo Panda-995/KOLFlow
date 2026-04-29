@@ -8,9 +8,17 @@ const router = Router();
 
 // 获取所有账单
 router.get('/', (req, res) => {
-  const userId = getUserId(req);
-  const payments = db.prepare('SELECT * FROM payments WHERE userId = ? ORDER BY createdAt DESC').all(userId);
-  res.json(payments);
+  try {
+    const userId = getUserId(req);
+    const payments = db.prepare('SELECT * FROM payments WHERE userId = ? ORDER BY createdAt DESC').all(userId);
+    res.json(payments);
+  } catch (error) {
+    console.error('获取账单列表错误:', error instanceof Error ? error.message : error);
+    res.status(500).json({ 
+      error: '获取账单列表失败，请稍后重试',
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // 创建账单
@@ -44,72 +52,96 @@ router.post('/', (req, res) => {
 
 // 结算账单
 router.put('/:id/settle', (req, res) => {
-  const userId = getUserId(req);
-  const { id } = req.params;
-  const payment = db.prepare('SELECT * FROM payments WHERE id = ? AND userId = ?').get(id, userId) as any;
+  try {
+    const userId = getUserId(req);
+    const { id } = req.params;
+    const payment = db.prepare('SELECT * FROM payments WHERE id = ? AND userId = ?').get(id, userId) as any;
 
-  if (!payment) {
-    return res.status(404).json({ error: '账单不存在' });
+    if (!payment) {
+      return res.status(404).json({ error: '账单不存在' });
+    }
+
+    const newType = payment.type === 'pending' ? 'settled' : 'pending';
+    const newDate = newType === 'settled' ? new Date().toISOString().split('T')[0] : payment.date;
+    const newMethod = newType === 'settled' ? '已结算' : payment.method;
+
+    db.prepare('UPDATE payments SET type = ?, date = ?, method = ? WHERE id = ? AND userId = ?')
+      .run(newType, newDate, newMethod, id, userId);
+
+    logActivity(userId, 'settle', 'payment', id, `账单结算: ${payment.brand} ¥${payment.amount} (${payment.type} → ${newType})`);
+
+    const updatedPayment = db.prepare('SELECT * FROM payments WHERE id = ?').get(id);
+    res.json(updatedPayment);
+  } catch (error) {
+    console.error('结算账单错误:', error instanceof Error ? error.message : error);
+    res.status(500).json({ 
+      error: '结算账单失败，请稍后重试',
+      timestamp: new Date().toISOString()
+    });
   }
-
-  const newType = payment.type === 'pending' ? 'settled' : 'pending';
-  const newDate = newType === 'settled' ? new Date().toISOString().split('T')[0] : payment.date;
-  const newMethod = newType === 'settled' ? '已结算' : payment.method;
-
-  db.prepare('UPDATE payments SET type = ?, date = ?, method = ? WHERE id = ? AND userId = ?')
-    .run(newType, newDate, newMethod, id, userId);
-
-  logActivity(userId, 'settle', 'payment', id, `账单结算: ${payment.brand} ¥${payment.amount} (${payment.type} → ${newType})`);
-
-  const updatedPayment = db.prepare('SELECT * FROM payments WHERE id = ?').get(id);
-  res.json(updatedPayment);
 });
 
 // 更新账单
 router.put('/:id', (req, res) => {
-  const userId = getUserId(req);
-  const { id } = req.params;
-  const { orderNo, brand, amount, type, date, method } = req.body;
+  try {
+    const userId = getUserId(req);
+    const { id } = req.params;
+    const { orderNo, brand, amount, type, date, method } = req.body;
 
-  const payment = db.prepare('SELECT * FROM payments WHERE id = ? AND userId = ?').get(id, userId) as any;
-  if (!payment) {
-    return res.status(404).json({ error: '账单不存在' });
+    const payment = db.prepare('SELECT * FROM payments WHERE id = ? AND userId = ?').get(id, userId) as any;
+    if (!payment) {
+      return res.status(404).json({ error: '账单不存在' });
+    }
+
+    db.prepare(`
+      UPDATE payments
+      SET orderNo = ?, brand = ?, amount = ?, type = ?, date = ?, method = ?
+      WHERE id = ? AND userId = ?
+    `).run(
+      orderNo || payment.orderNo,
+      brand || payment.brand,
+      amount !== undefined ? amount : payment.amount,
+      type || payment.type,
+      date || payment.date,
+      method || payment.method,
+      id,
+      userId
+    );
+
+    logActivity(userId, 'update', 'payment', id, `更新账单: ${brand || payment.brand} ¥${amount || payment.amount}`);
+
+    const updatedPayment = db.prepare('SELECT * FROM payments WHERE id = ?').get(id);
+    res.json(updatedPayment);
+  } catch (error) {
+    console.error('更新账单错误:', error instanceof Error ? error.message : error);
+    res.status(500).json({ 
+      error: '更新账单失败，请稍后重试',
+      timestamp: new Date().toISOString()
+    });
   }
-
-  db.prepare(`
-    UPDATE payments
-    SET orderNo = ?, brand = ?, amount = ?, type = ?, date = ?, method = ?
-    WHERE id = ? AND userId = ?
-  `).run(
-    orderNo || payment.orderNo,
-    brand || payment.brand,
-    amount !== undefined ? amount : payment.amount,
-    type || payment.type,
-    date || payment.date,
-    method || payment.method,
-    id,
-    userId
-  );
-
-  logActivity(userId, 'update', 'payment', id, `更新账单: ${brand || payment.brand} ¥${amount || payment.amount}`);
-
-  const updatedPayment = db.prepare('SELECT * FROM payments WHERE id = ?').get(id);
-  res.json(updatedPayment);
 });
 
 // 删除账单
 router.delete('/:id', (req, res) => {
-  const userId = getUserId(req);
-  const { id } = req.params;
+  try {
+    const userId = getUserId(req);
+    const { id } = req.params;
 
-  const payment = db.prepare('SELECT * FROM payments WHERE id = ? AND userId = ?').get(id, userId) as any;
-  if (!payment) {
-    return res.status(404).json({ error: '账单不存在' });
+    const payment = db.prepare('SELECT * FROM payments WHERE id = ? AND userId = ?').get(id, userId) as any;
+    if (!payment) {
+      return res.status(404).json({ error: '账单不存在' });
+    }
+
+    logActivity(userId, 'delete', 'payment', id, `删除账单: ${payment.brand} ¥${payment.amount}`);
+    db.prepare('DELETE FROM payments WHERE id = ? AND userId = ?').run(id, userId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('删除账单错误:', error instanceof Error ? error.message : error);
+    res.status(500).json({ 
+      error: '删除账单失败，请稍后重试',
+      timestamp: new Date().toISOString()
+    });
   }
-
-  logActivity(userId, 'delete', 'payment', id, `删除账单: ${payment.brand} ¥${payment.amount}`);
-  db.prepare('DELETE FROM payments WHERE id = ? AND userId = ?').run(id, userId);
-  res.json({ success: true });
 });
 
 export default router;

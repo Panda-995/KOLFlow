@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import {
   getOrdersByUserId,
-  getOrderById,
   createOrderWithTodo,
   updateOrderWithSync,
   deleteOrderWithRelated,
@@ -13,9 +12,17 @@ const router = Router();
 
 // 获取所有商单
 router.get('/', (req, res) => {
-  const userId = getUserId(req);
-  const orders = getOrdersByUserId(userId);
-  res.json(orders);
+  try {
+    const userId = getUserId(req);
+    const orders = getOrdersByUserId(userId);
+    res.json(orders);
+  } catch (error) {
+    console.error('获取商单列表错误:', error instanceof Error ? error.message : error);
+    res.status(500).json({ 
+      error: '获取商单列表失败，请稍后重试',
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // 创建商单

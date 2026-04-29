@@ -1,29 +1,34 @@
 import { useState, useEffect, useRef } from 'react';
-import { Save, User, Bell, Shield, Database, Upload, Key, Copy, RefreshCw, LogOut, Download, AlertTriangle, Palette, Check, Cloud, RefreshCw as Sync, Settings2, Info, Heart, ExternalLink, X, ZoomIn } from 'lucide-react';
+import { Save, User, Bell, Shield, Database, Key, Palette, Cloud, Info, LogOut } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
-import { clsx } from 'clsx';
 import { MAX_AVATAR_SIZE } from '../constants';
-import { getApiUrl, getBaseUrl } from '../lib/mobileApi';
 
-// 主题色配置
-const THEME_COLORS = [
-  { id: 'panda', name: '熊猫黑', primary: '#1a1a1a', accent: '#ff6b6b', description: '经典熊猫配色' },
-  { id: 'ocean', name: '深海蓝', primary: '#0d47a1', accent: '#00bcd4', description: '沉稳专业风格' },
-  { id: 'forest', name: '森林绿', primary: '#2e7d32', accent: '#81c784', description: '清新自然风格' },
-  { id: 'sunset', name: '落日橙', primary: '#e65100', accent: '#ffb74d', description: '温暖活力风格' },
-  { id: 'lavender', name: '薰衣紫', primary: '#7b1fa2', accent: '#ce93d8', description: '优雅浪漫风格' },
-];
+// 导入拆分的 Tab 组件
+import {
+  ProfileTab,
+  NotificationsTab,
+  SecurityTab,
+  BackupTab,
+  ApiTab,
+  ThemeTab,
+  SyncTab,
+  AboutTab,
+  THEME_COLORS,
+  type FormData,
+  type SecurityFormData,
+  type WebdavConfig,
+} from '../components/settings';
 
 export default function Settings() {
-  const { settings, updateSettings, updateSecurity, orders, brands, payments, todos, clearData, logout, setAllData } = useStore();
+  const { settings, updateSettings, updateSecurity, clearData, logout, setAllData } = useStore();
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState('profile');
   const [currentTheme, setCurrentTheme] = useState(() => {
     return localStorage.getItem('theme') || 'panda';
   });
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     displayName: '',
     email: '',
     bio: '',
@@ -32,12 +37,12 @@ export default function Settings() {
     avatar: ''
   });
   const [reportFrequency, setReportFrequency] = useState<'weekly' | 'monthly'>('weekly');
-  const [securityData, setSecurityData] = useState({
+  const [securityData, setSecurityData] = useState<SecurityFormData>({
     email: '',
     password: '',
     oldPassword: ''
   });
-  const [webdavConfig, setWebdavConfig] = useState({
+  const [webdavConfig, setWebdavConfig] = useState<WebdavConfig>({
     url: '',
     username: '',
     password: '',
@@ -48,16 +53,17 @@ export default function Settings() {
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(() => {
     return localStorage.getItem('lastWebdavSync');
   });
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const importInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
-  // 确认弹窗状态
   const [clearDataConfirm, setClearDataConfirm] = useState(false);
   const [webdavRestoreConfirm, setWebdavRestoreConfirm] = useState(false);
   const [apiKeyConfirm, setApiKeyConfirm] = useState(false);
 
-  // 图片预览状态
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  // 测试API连接状态
+  const [isTestingApi, setIsTestingApi] = useState(false);
 
   // 加载 WebDAV 配置
   useEffect(() => {
@@ -133,7 +139,7 @@ export default function Settings() {
   const handleExportData = async () => {
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(getApiUrl('/api/data/export'), {
+      const res = await fetch('/api/data/export', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) {
@@ -215,7 +221,7 @@ export default function Settings() {
       if (direction === 'upload') {
         // 从 API 获取完整数据（包括发布链接）
         const token = localStorage.getItem('token');
-        const exportRes = await fetch(getApiUrl('/api/data/export'), {
+        const exportRes = await fetch('/api/data/export', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!exportRes.ok) {
@@ -288,7 +294,6 @@ export default function Settings() {
   };
 
   // 测试API连接
-  const [isTestingApi, setIsTestingApi] = useState(false);
   const testApiConnection = async () => {
     if (!settings?.apiKey) {
       showToast('请先生成 API Key', 'warning');
@@ -296,9 +301,7 @@ export default function Settings() {
     }
     setIsTestingApi(true);
     try {
-      const baseUrl = getBaseUrl();
-      const apiUrl = baseUrl ? `${baseUrl}/api/external/statistics?token=${settings.apiKey}` : `${window.location.origin}/api/external/statistics?token=${settings.apiKey}`;
-      const response = await fetch(apiUrl);
+      const response = await fetch(`/api/external/statistics?token=${settings.apiKey}`);
       if (response.ok) {
         const data = await response.json();
         showToast(`连接成功！共 ${data.orders?.total || 0} 个商单`, 'success');
@@ -419,6 +422,7 @@ curl "${window.location.origin}/api/external/orders?token=${settings?.apiKey || 
       </div>
 
       <div className="flex flex-col md:flex-row gap-8">
+        {/* 左侧导航 */}
         <div className="w-full md:w-64 flex flex-col gap-2">
           <button 
             onClick={() => setActiveTab('profile')}
@@ -469,7 +473,7 @@ curl "${window.location.origin}/api/external/orders?token=${settings?.apiKey || 
             <Cloud size={18} />
             云端同步
           </button>
-          <button
+          <button 
             onClick={() => setActiveTab('about')}
             className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'about' ? 'bg-white shadow-sm border border-border/50 text-panda-black font-medium' : 'text-gray-500 hover:bg-white hover:text-panda-black'}`}
           >
@@ -478,736 +482,87 @@ curl "${window.location.origin}/api/external/orders?token=${settings?.apiKey || 
           </button>
         </div>
 
+        {/* 右侧内容 */}
         <div className="flex-1 space-y-6">
           {activeTab === 'profile' && (
-            <div className="card-sketch p-6 bg-white">
-              <h2 className="text-lg font-bold mb-6">个人资料</h2>
-              <div className="space-y-4">
-                <div className="flex items-center gap-6">
-                  <div className="w-20 h-20 rounded-full bg-accent flex items-center justify-center text-2xl font-bold text-white overflow-hidden border border-border">
-                    {formData.avatar ? (
-                      <img src={formData.avatar} alt="Avatar" className="w-full h-full object-cover" />
-                    ) : (
-                      formData.displayName.charAt(0) || '博'
-                    )}
-                  </div>
-                  <div>
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      className="hidden" 
-                      ref={fileInputRef} 
-                      onChange={handleAvatarChange} 
-                    />
-                    <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 border border-border rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2">
-                      <Upload size={16} />
-                      更换头像
-                    </button>
-                    <p className="text-xs text-gray-400 mt-2">支持 JPG, PNG 格式，建议尺寸 200x200</p>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-gray-600">显示名称</label>
-                    <input 
-                      type="text" 
-                      value={formData.displayName} 
-                      onChange={e => setFormData({...formData, displayName: e.target.value})}
-                      className="w-full px-4 py-2 bg-bg-tertiary border border-transparent focus:border-accent focus:bg-white rounded-xl outline-none transition-all text-sm" 
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-gray-600">邮箱地址</label>
-                    <input 
-                      type="email" 
-                      value={formData.email} 
-                      onChange={e => setFormData({...formData, email: e.target.value})}
-                      className="w-full px-4 py-2 bg-bg-tertiary border border-transparent focus:border-accent focus:bg-white rounded-xl outline-none transition-all text-sm" 
-                    />
-                  </div>
-                  <div className="space-y-1.5 md:col-span-2">
-                    <label className="text-sm font-medium text-gray-600">个人简介</label>
-                    <textarea 
-                      rows={3} 
-                      value={formData.bio} 
-                      onChange={e => setFormData({...formData, bio: e.target.value})}
-                      className="w-full px-4 py-2 bg-bg-tertiary border border-transparent focus:border-accent focus:bg-white rounded-xl outline-none transition-all text-sm resize-none"
-                    ></textarea>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <ProfileTab 
+              formData={formData}
+              setFormData={setFormData}
+              fileInputRef={fileInputRef}
+              handleAvatarChange={handleAvatarChange}
+            />
           )}
 
           {activeTab === 'notifications' && (
-            <div className="space-y-6">
-              <div className="card-sketch p-6 bg-white">
-                <h2 className="text-lg font-bold mb-6">通知设置</h2>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-bg-tertiary rounded-xl">
-                    <div>
-                      <div className="font-medium text-panda-black">商单即将到期提醒</div>
-                      <div className="text-sm text-gray-500">在商单截止日期前3天发送通知</div>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        className="sr-only peer"
-                        checked={formData.orderReminder}
-                        onChange={e => setFormData({...formData, orderReminder: e.target.checked})}
-                      />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent"></div>
-                    </label>
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 bg-bg-tertiary rounded-xl">
-                    <div>
-                      <div className="font-medium text-panda-black">每周数据汇总</div>
-                      <div className="text-sm text-gray-500">每周一早上发送上周的收入与商单数据</div>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        className="sr-only peer"
-                        checked={formData.weeklyReport}
-                        onChange={e => setFormData({...formData, weeklyReport: e.target.checked})}
-                      />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent"></div>
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              <div className="card-sketch p-6 bg-white">
-                <h2 className="text-lg font-bold mb-4">报告设置</h2>
-                <div className="space-y-4">
-                  <div className="p-4 bg-bg-tertiary rounded-xl">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-medium text-panda-black">自动报告频率</div>
-                        <div className="text-sm text-gray-500">设置自动生成报告的周期</div>
-                      </div>
-                      <select
-                        value={reportFrequency}
-                        onChange={e => setReportFrequency(e.target.value as 'weekly' | 'monthly')}
-                        className="px-4 py-2 bg-white border border-border rounded-xl text-sm outline-none focus:border-accent"
-                      >
-                        <option value="weekly">每周</option>
-                        <option value="monthly">每月</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <NotificationsTab
+              formData={formData}
+              setFormData={setFormData}
+              reportFrequency={reportFrequency}
+              setReportFrequency={setReportFrequency}
+            />
           )}
 
           {activeTab === 'security' && (
-            <div className="card-sketch p-6 bg-white">
-              <h2 className="text-lg font-bold mb-6">账号安全</h2>
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-gray-600">登录账号 (邮箱)</label>
-                  <input
-                    type="email"
-                    value={securityData.email}
-                    onChange={e => setSecurityData({...securityData, email: e.target.value})}
-                    className="w-full px-4 py-2 bg-bg-tertiary border border-transparent focus:border-accent focus:bg-white rounded-xl outline-none transition-all text-sm"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-gray-600">原密码</label>
-                  <input
-                    type="password"
-                    value={securityData.oldPassword || ''}
-                    onChange={e => setSecurityData({...securityData, oldPassword: e.target.value})}
-                    className="w-full px-4 py-2 bg-bg-tertiary border border-transparent focus:border-accent focus:bg-white rounded-xl outline-none transition-all text-sm"
-                    placeholder="请输入原密码以验证身份"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-gray-600">新密码</label>
-                  <input
-                    type="password"
-                    value={securityData.password}
-                    onChange={e => setSecurityData({...securityData, password: e.target.value})}
-                    className="w-full px-4 py-2 bg-bg-tertiary border border-transparent focus:border-accent focus:bg-white rounded-xl outline-none transition-all text-sm"
-                    placeholder="至少6位，包含字母和数字"
-                  />
-                  <p className="text-xs text-gray-400">密码需至少6位，且包含字母和数字</p>
-                </div>
-                <div className="pt-2">
-                  <button onClick={handleSecuritySave} disabled={isSaving} className="btn-sketch py-2 px-6 disabled:opacity-50">
-                    {isSaving ? '保存中...' : '更新账号与密码'}
-                  </button>
-                </div>
-              </div>
-            </div>
+            <SecurityTab
+              securityData={securityData}
+              setSecurityData={setSecurityData}
+              isSaving={isSaving}
+              handleSecuritySave={handleSecuritySave}
+              showToast={showToast}
+            />
           )}
 
           {activeTab === 'backup' && (
-            <div className="card-sketch p-6 bg-white">
-              <h2 className="text-lg font-bold mb-6">数据管理</h2>
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <button 
-                    onClick={handleExportData}
-                    className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-border rounded-2xl hover:border-panda-black hover:bg-gray-50 transition-all group"
-                  >
-                    <div className="w-12 h-12 rounded-full bg-panda-black/5 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                      <Download className="text-panda-black" size={24} />
-                    </div>
-                    <span className="font-bold text-panda-black">导出备份</span>
-                    <span className="text-xs text-gray-500 mt-1">下载所有数据的 JSON 备份</span>
-                  </button>
-
-                  <button 
-                    onClick={() => importInputRef.current?.click()}
-                    className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-border rounded-2xl hover:border-accent hover:bg-accent/5 transition-all group"
-                  >
-                    <div className="w-12 h-12 rounded-full bg-accent/5 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                      <Upload className="text-accent" size={24} />
-                    </div>
-                    <span className="font-bold text-panda-black">导入数据</span>
-                    <span className="text-xs text-gray-500 mt-1">从备份文件恢复数据</span>
-                    <input 
-                      type="file" 
-                      ref={importInputRef} 
-                      onChange={handleImportData} 
-                      accept=".json" 
-                      className="hidden" 
-                    />
-                  </button>
-                </div>
-
-                <div className="p-4 bg-danger/5 border border-danger/10 rounded-xl flex gap-3">
-                  <AlertTriangle className="text-danger shrink-0" size={20} />
-                  <div>
-                    <h4 className="font-bold text-danger text-sm">危险操作</h4>
-                    <p className="text-xs text-danger/80 mt-1">
-                      导入数据将完全覆盖您当前的所有商单、品牌、账单和待办事项。此操作不可逆，请在操作前确保已做好备份。
-                    </p>
-                  </div>
-                </div>
-
-                <div className="pt-6 border-t border-border/50">
-                  <div className="flex items-center justify-between p-4 bg-bg-tertiary rounded-xl">
-                    <div>
-                      <div className="font-medium text-panda-black">清空所有数据</div>
-                      <div className="text-sm text-danger">警告：此操作不可逆，将删除所有数据</div>
-                    </div>
-                    <button onClick={() => setClearDataConfirm(true)} className="px-4 py-2 border border-danger text-danger rounded-xl text-sm font-medium hover:bg-danger/10 transition-colors">
-                      清空
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <BackupTab
+              handleExportData={handleExportData}
+              handleImportData={handleImportData}
+              importInputRef={importInputRef}
+              setClearDataConfirm={setClearDataConfirm}
+            />
           )}
+
           {activeTab === 'api' && (
-            <div className="card-sketch p-6 bg-white">
-              <h2 className="text-lg font-bold mb-6">API 设置</h2>
-              <div className="space-y-6">
-                {/* API Key 管理 */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-600">API Key</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      readOnly
-                      value={settings.apiKey || '尚未生成'}
-                      className="flex-1 px-4 py-2 bg-bg-tertiary border border-border rounded-xl outline-none text-sm font-mono text-gray-600"
-                    />
-                    {settings.apiKey && (
-                      <button onClick={() => copyToClipboard(settings.apiKey!)} className="p-2 border border-border rounded-xl text-gray-500 hover:bg-gray-50 transition-colors" title="复制">
-                        <Copy size={18} />
-                      </button>
-                    )}
-                    <button
-                      onClick={testApiConnection}
-                      disabled={isTestingApi || !settings.apiKey}
-                      className="px-3 py-2 border border-border rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2 disabled:opacity-50"
-                      title="测试连接"
-                    >
-                      {isTestingApi ? <RefreshCw size={16} className="animate-spin" /> : <Check size={16} />}
-                      测试
-                    </button>
-                    <button onClick={handleGenerateApiKey} className="px-4 py-2 border border-border rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2">
-                      <RefreshCw size={16} />
-                      {settings.apiKey ? '重新生成' : '生成 Key'}
-                    </button>
-                  </div>
-                  <p className="text-xs text-gray-400">8字符短Token，用于外部API认证</p>
-                </div>
-
-                {/* 服务器地址 */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-600">服务器地址</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      readOnly
-                      value={window.location.origin}
-                      className="flex-1 px-4 py-2 bg-bg-tertiary border border-border rounded-xl outline-none text-sm font-mono text-gray-600"
-                    />
-                    <button onClick={() => copyToClipboard(window.location.origin)} className="p-2 border border-border rounded-xl text-gray-500 hover:bg-gray-50 transition-colors" title="复制">
-                      <Copy size={18} />
-                    </button>
-                  </div>
-                </div>
-
-                {/* 认证方式说明 */}
-                <div className="p-4 bg-accent/5 border border-accent/20 rounded-xl">
-                  <h3 className="text-sm font-bold text-panda-black mb-3">认证方式</h3>
-                  <div className="space-y-2 text-xs text-gray-600">
-                    <div className="flex items-start gap-2">
-                      <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded font-medium shrink-0">推荐</span>
-                      <code className="bg-white px-2 py-1 rounded border">?token=YOUR_KEY</code>
-                      <span className="text-gray-400">URL参数，简单快捷</span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-medium shrink-0">Header</span>
-                      <code className="bg-white px-2 py-1 rounded border">Authorization: Bearer YOUR_KEY</code>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 快速复制 */}
-                <div className="p-4 bg-gray-50 border border-border rounded-xl">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-600">快速复制配置</span>
-                    <button
-                      onClick={copyFullConfig}
-                      className="px-3 py-1.5 bg-panda-black text-white rounded-lg text-xs font-medium hover:bg-panda-black/90 transition-colors flex items-center gap-1"
-                    >
-                      <Copy size={14} />
-                      复制全部
-                    </button>
-                  </div>
-                  <pre className="text-xs text-gray-500 bg-white p-3 rounded-lg border border-border overflow-x-auto">
-{`服务器地址: ${typeof window !== 'undefined' ? window.location.origin : ''}
-API Key: ${settings?.apiKey || '尚未生成'}
-
-# 快速测试
-curl "${typeof window !== 'undefined' ? window.location.origin : ''}/api/external/statistics?token=${settings?.apiKey || 'YOUR_KEY'}"`}
-                  </pre>
-                </div>
-
-                {/* curl 示例 */}
-                <div className="p-4 bg-gray-50 border border-border rounded-xl">
-                  <h3 className="text-sm font-bold text-panda-black mb-3">常用 curl 示例</h3>
-                  <div className="space-y-2">
-                    {[
-                      { name: '获取商单列表', endpoint: '/api/external/orders' },
-                      { name: '创建商单', endpoint: '/api/external/orders', method: 'POST' },
-                      { name: '获取统计数据', endpoint: '/api/external/statistics' },
-                      { name: '导出全部数据', endpoint: '/api/external/export' },
-                    ].map((item) => (
-                      <div key={item.endpoint} className="flex items-center justify-between p-2 bg-white rounded-lg border border-border">
-                        <div className="flex items-center gap-2">
-                          <span className={`px-2 py-0.5 text-xs font-medium rounded ${item.method === 'POST' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                            {item.method || 'GET'}
-                          </span>
-                          <span className="text-xs text-gray-600">{item.name}</span>
-                        </div>
-                        <button
-                          onClick={() => copyCurlExample(item.endpoint)}
-                          className="text-xs text-accent hover:underline"
-                        >
-                          复制命令
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 外部API文档 */}
-                <div className="p-4 bg-info/10 border border-info/20 rounded-xl">
-                  <h3 className="text-sm font-bold text-info-dark mb-3">外部API接口 <code className="text-xs bg-info/20 px-1.5 py-0.5 rounded">/api/external/*</code></h3>
-                  <p className="text-xs text-info-dark/70 mb-4">
-                    使用 API Key 认证，支持 URL 参数或 Header 方式
-                  </p>
-
-                  <div className="space-y-4">
-                    {/* 商单 */}
-                    <div>
-                      <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">商单 Orders</h4>
-                      <div className="grid gap-1.5">
-                        {[
-                          ['GET', '/orders', '获取列表'],
-                          ['POST', '/orders', '创建商单'],
-                          ['PUT', '/orders/:id', '更新商单'],
-                          ['DEL', '/orders/:id', '删除商单'],
-                        ].map(([method, path, desc]) => (
-                          <div key={path} className="flex items-center gap-2 p-1.5 bg-white/50 rounded text-xs">
-                            <span className={`px-1.5 py-0.5 rounded font-medium ${method === 'GET' ? 'bg-blue-100 text-blue-700' : method === 'POST' ? 'bg-green-100 text-green-700' : method === 'PUT' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>{method}</span>
-                            <code className="flex-1">{path}</code>
-                            <span className="text-gray-400">{desc}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* 待办 */}
-                    <div>
-                      <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">待办 Todos</h4>
-                      <div className="grid gap-1.5">
-                        {[
-                          ['GET', '/todos', '获取列表'],
-                          ['POST', '/todos', '创建待办'],
-                          ['PUT', '/todos/:id', '更新待办'],
-                        ].map(([method, path, desc]) => (
-                          <div key={path} className="flex items-center gap-2 p-1.5 bg-white/50 rounded text-xs">
-                            <span className={`px-1.5 py-0.5 rounded font-medium ${method === 'GET' ? 'bg-blue-100 text-blue-700' : method === 'POST' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{method}</span>
-                            <code className="flex-1">{path}</code>
-                            <span className="text-gray-400">{desc}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* 品牌 */}
-                    <div>
-                      <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">品牌 Brands</h4>
-                      <div className="grid gap-1.5">
-                        {[
-                          ['GET', '/brands', '获取列表'],
-                          ['POST', '/brands', '创建品牌'],
-                          ['PUT', '/brands/:id', '更新品牌'],
-                          ['DEL', '/brands/:id', '删除品牌'],
-                        ].map(([method, path, desc]) => (
-                          <div key={path} className="flex items-center gap-2 p-1.5 bg-white/50 rounded text-xs">
-                            <span className={`px-1.5 py-0.5 rounded font-medium ${method === 'GET' ? 'bg-blue-100 text-blue-700' : method === 'POST' ? 'bg-green-100 text-green-700' : method === 'PUT' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>{method}</span>
-                            <code className="flex-1">{path}</code>
-                            <span className="text-gray-400">{desc}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* 财务 */}
-                    <div>
-                      <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">财务 Payments</h4>
-                      <div className="grid gap-1.5">
-                        {[
-                          ['GET', '/payments', '获取列表'],
-                          ['POST', '/payments', '创建账单'],
-                          ['PUT', '/payments/:id', '更新账单'],
-                          ['DEL', '/payments/:id', '删除账单'],
-                        ].map(([method, path, desc]) => (
-                          <div key={path} className="flex items-center gap-2 p-1.5 bg-white/50 rounded text-xs">
-                            <span className={`px-1.5 py-0.5 rounded font-medium ${method === 'GET' ? 'bg-blue-100 text-blue-700' : method === 'POST' ? 'bg-green-100 text-green-700' : method === 'PUT' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>{method}</span>
-                            <code className="flex-1">{path}</code>
-                            <span className="text-gray-400">{desc}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* 其他 */}
-                    <div>
-                      <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">其他 Others</h4>
-                      <div className="grid gap-1.5">
-                        {[
-                          ['GET', '/statistics', '统计数据'],
-                          ['GET', '/settings', '用户设置'],
-                          ['GET', '/logs', '操作日志'],
-                          ['GET', '/export', '导出数据'],
-                        ].map(([method, path, desc]) => (
-                          <div key={path} className="flex items-center gap-2 p-1.5 bg-white/50 rounded text-xs">
-                            <span className="px-1.5 py-0.5 rounded font-medium bg-blue-100 text-blue-700">{method}</span>
-                            <code className="flex-1">{path}</code>
-                            <span className="text-gray-400">{desc}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <ApiTab
+              settings={settings}
+              isTestingApi={isTestingApi}
+              testApiConnection={testApiConnection}
+              handleGenerateApiKey={handleGenerateApiKey}
+              apiKeyConfirm={apiKeyConfirm}
+              setApiKeyConfirm={setApiKeyConfirm}
+              confirmGenerateApiKey={confirmGenerateApiKey}
+              copyCurlExample={copyCurlExample}
+              copyFullConfig={copyFullConfig}
+              copyToClipboard={copyToClipboard}
+            />
           )}
+
           {activeTab === 'theme' && (
-            <div className="card-sketch p-6 bg-white">
-              <h2 className="text-lg font-bold mb-6">主题外观</h2>
-              <div className="space-y-6">
-                <p className="text-sm text-gray-500">选择您喜欢的主题配色，让系统更符合您的个性风格。</p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {THEME_COLORS.map(theme => (
-                    <button
-                      key={theme.id}
-                      onClick={() => applyTheme(theme.id)}
-                      className={clsx(
-                        "relative p-4 rounded-2xl border-2 transition-all hover:scale-[1.02] text-left",
-                        currentTheme === theme.id
-                          ? "border-accent shadow-lg"
-                          : "border-border/50 hover:border-gray-300"
-                      )}
-                    >
-                      {currentTheme === theme.id && (
-                        <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-accent flex items-center justify-center">
-                          <Check size={14} className="text-white" />
-                        </div>
-                      )}
-
-                      <div className="flex items-center gap-3 mb-3">
-                        <div
-                          className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold"
-                          style={{ backgroundColor: theme.primary }}
-                        >
-                          K
-                        </div>
-                        <div
-                          className="w-10 h-10 rounded-xl flex items-center justify-center text-white"
-                          style={{ backgroundColor: theme.accent }}
-                        >
-                          +
-                        </div>
-                      </div>
-
-                      <h3 className="font-bold text-panda-black">{theme.name}</h3>
-                      <p className="text-xs text-gray-400 mt-1">{theme.description}</p>
-
-                      <div className="flex items-center gap-2 mt-3">
-                        <div
-                          className="flex-1 h-2 rounded-full"
-                          style={{ backgroundColor: theme.primary }}
-                        />
-                        <div
-                          className="flex-1 h-2 rounded-full"
-                          style={{ backgroundColor: theme.accent }}
-                        />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-
-                <div className="p-4 bg-gray-50 rounded-xl">
-                  <p className="text-xs text-gray-500">
-                    💡 提示：主题设置保存在浏览器本地，切换设备后需要重新设置。
-                  </p>
-                </div>
-              </div>
-            </div>
+            <ThemeTab
+              currentTheme={currentTheme}
+              setCurrentTheme={setCurrentTheme}
+              applyTheme={applyTheme}
+              showToast={showToast}
+            />
           )}
+
           {activeTab === 'sync' && (
-            <div className="card-sketch p-6 bg-white">
-              <h2 className="text-lg font-bold mb-6">云端同步</h2>
-              <div className="space-y-6">
-                <div className="p-4 bg-info/5 border border-info/20 rounded-xl">
-                  <div className="flex items-center gap-2 text-info mb-2">
-                    <Cloud size={18} />
-                    <span className="font-bold">WebDAV 同步</span>
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    通过 WebDAV 协议将数据同步到坚果云、NextCloud 等云存储服务，实现多设备数据同步。
-                  </p>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-gray-700">WebDAV 服务器地址</label>
-                    <input
-                      type="url"
-                      value={webdavConfig.url}
-                      onChange={(e) => setWebdavConfig({ ...webdavConfig, url: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-bg-tertiary border border-transparent focus:border-accent focus:bg-white rounded-xl outline-none transition-all text-sm"
-                      placeholder="https://dav.jianguoyun.com/dav/"
-                    />
-                    <p className="text-xs text-gray-400">例如：坚果云 https://dav.jianguoyun.com/dav/</p>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-gray-700">用户名</label>
-                      <input
-                        type="text"
-                        value={webdavConfig.username}
-                        onChange={(e) => setWebdavConfig({ ...webdavConfig, username: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-bg-tertiary border border-transparent focus:border-accent focus:bg-white rounded-xl outline-none transition-all text-sm"
-                        placeholder="WebDAV 用户名"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-gray-700">密码/应用密码</label>
-                      <input
-                        type="password"
-                        value={webdavConfig.password}
-                        onChange={(e) => setWebdavConfig({ ...webdavConfig, password: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-bg-tertiary border border-transparent focus:border-accent focus:bg-white rounded-xl outline-none transition-all text-sm"
-                        placeholder="WebDAV 密码"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-gray-700">自动同步周期</label>
-                    <select
-                      value={webdavConfig.syncInterval}
-                      onChange={(e) => setWebdavConfig({ ...webdavConfig, syncInterval: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-bg-tertiary border border-transparent focus:border-accent focus:bg-white rounded-xl outline-none transition-all text-sm"
-                    >
-                      <option value="0">手动同步</option>
-                      <option value="1">每小时</option>
-                      <option value="24">每天</option>
-                      <option value="168">每周</option>
-                    </select>
-                  </div>
-
-                  {lastSyncTime && (
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <Sync size={14} />
-                      上次同步：{new Date(lastSyncTime).toLocaleString('zh-CN')}
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap gap-3 pt-4 border-t border-border/50">
-                  <button
-                    onClick={handleSaveWebdavConfig}
-                    className="btn-secondary flex items-center gap-2"
-                  >
-                    <Settings2 size={16} />
-                    保存配置
-                  </button>
-                  <button
-                    onClick={() => handleWebdavSync('upload')}
-                    disabled={isSyncing || !webdavConfig.url}
-                    className="btn-sketch flex items-center gap-2 disabled:opacity-50"
-                  >
-                    <Upload size={16} />
-                    {isSyncing ? '同步中...' : '上传备份'}
-                  </button>
-                  <button
-                    onClick={() => handleWebdavSync('download')}
-                    disabled={isSyncing || !webdavConfig.url}
-                    className="btn-secondary flex items-center gap-2 disabled:opacity-50"
-                  >
-                    <Download size={16} />
-                    恢复数据
-                  </button>
-                </div>
-
-                <div className="p-4 bg-gray-50 rounded-xl space-y-2">
-                  <h4 className="text-sm font-bold text-gray-700">常见 WebDAV 服务配置</h4>
-                  <div className="text-xs text-gray-500 space-y-1">
-                    <p><strong>坚果云：</strong>https://dav.jianguoyun.com/dav/（需在坚果云设置中创建应用密码）</p>
-                    <p><strong>NextCloud：</strong>https://your-domain/remote.php/dav/files/用户名/</p>
-                    <p><strong>群晖 NAS：</strong>https://your-nas:5006/（需启用 WebDAV 服务）</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <SyncTab
+              webdavConfig={webdavConfig}
+              setWebdavConfig={setWebdavConfig}
+              lastSyncTime={lastSyncTime}
+              isSyncing={isSyncing}
+              handleSaveWebdavConfig={handleSaveWebdavConfig}
+              handleWebdavSync={handleWebdavSync}
+              setWebdavRestoreConfirm={setWebdavRestoreConfirm}
+              showToast={showToast}
+            />
           )}
+
           {activeTab === 'about' && (
-            <div className="card-sketch p-6 bg-white">
-              <h2 className="text-lg font-bold mb-6 flex items-center gap-2">
-                <Heart size={20} className="text-accent" />
-                关于 KOLFlow
-              </h2>
-              <div className="space-y-6">
-                {/* 项目介绍 */}
-                <div className="p-6 bg-gradient-to-br from-gray-50 to-white rounded-2xl border border-border/30">
-                  <h3 className="text-xl font-bold text-panda-black mb-4 flex items-center gap-2">
-                    🐼 KOLFlow
-                    <span className="text-sm font-normal text-gray-400">达人商单流管理系统</span>
-                  </h3>
-                  <p className="text-sm text-gray-600 leading-relaxed mb-4">
-                    KOLFlow 是一款专为 KOL/达人设计的商单管理系统，帮助您轻松管理每一笔商业合作。
-                    从商单创建、进度跟踪到财务结算，让繁琐的商单管理变得简单高效。
-                  </p>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                    {[
-                      { icon: '📊', title: '仪表盘', desc: '收入统计、月度目标' },
-                      { icon: '📦', title: '商单管理', desc: '创建、编辑、状态跟踪' },
-                      { icon: '✅', title: '待办日历', desc: '任务管理、日历视图' },
-                      { icon: '💰', title: '账单管理', desc: '收支统计、结算状态' },
-                    ].map((feature) => (
-                      <div key={feature.title} className="p-3 bg-white rounded-xl border border-border/20 text-center">
-                        <div className="text-2xl mb-1">{feature.icon}</div>
-                        <div className="text-xs font-bold text-panda-black">{feature.title}</div>
-                        <div className="text-[10px] text-gray-400">{feature.desc}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <span className="px-2 py-1 bg-gray-100 rounded-lg">React 19</span>
-                    <span className="px-2 py-1 bg-gray-100 rounded-lg">TypeScript</span>
-                    <span className="px-2 py-1 bg-gray-100 rounded-lg">Tailwind CSS</span>
-                    <span className="px-2 py-1 bg-gray-100 rounded-lg">SQLite</span>
-                  </div>
-                </div>
-
-                {/* 二维码区域 */}
-                <div className="space-y-4">
-                  {/* 上方两个方图：小程序和赞赏码 */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="p-5 bg-white rounded-2xl border-2 border-panda-black/10 hover:border-panda-black/30 transition-colors">
-                      <div className="text-center">
-                        <div className="inline-block p-3 bg-gray-50 rounded-xl mb-3 relative group cursor-pointer" onClick={() => setPreviewImage('/小程序.jpg')}>
-                          <img
-                            src="/小程序.jpg"
-                            alt="小程序二维码"
-                            className="w-32 h-32 object-contain rounded-lg"
-                          />
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
-                            <ZoomIn className="text-white" size={24} />
-                          </div>
-                        </div>
-                        <h4 className="font-bold text-panda-black text-sm">微信小程序</h4>
-                        <p className="text-xs text-gray-400 mt-1">扫码体验小程序版本</p>
-                      </div>
-                    </div>
-                    <div className="p-5 bg-white rounded-2xl border-2 border-panda-black/10 hover:border-panda-black/30 transition-colors">
-                      <div className="text-center">
-                        <div className="inline-block p-3 bg-gray-50 rounded-xl mb-3 relative group cursor-pointer" onClick={() => setPreviewImage('/赞赏码.png')}>
-                          <img
-                            src="/赞赏码.png"
-                            alt="赞赏码"
-                            className="w-32 h-32 object-contain rounded-lg"
-                          />
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
-                            <ZoomIn className="text-white" size={24} />
-                          </div>
-                        </div>
-                        <h4 className="font-bold text-panda-black text-sm">赞赏码</h4>
-                        <p className="text-xs text-gray-400 mt-1">感谢您的支持</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 下方横图：公众号 */}
-                  <div className="p-5 bg-white rounded-2xl border-2 border-panda-black/10 hover:border-panda-black/30 transition-colors">
-                    <div className="text-center">
-                      <div className="inline-block p-3 bg-gray-50 rounded-xl mb-3 relative group cursor-pointer" onClick={() => setPreviewImage('/公众号.png')}>
-                        <img
-                          src="/公众号.png"
-                          alt="微信公众号"
-                          className="w-full max-w-md object-contain rounded-lg"
-                        />
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
-                          <ZoomIn className="text-white" size={24} />
-                        </div>
-                      </div>
-                      <h4 className="font-bold text-panda-black text-sm">微信公众号</h4>
-                      <p className="text-xs text-gray-400 mt-1">关注获取最新动态和教程</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 版权信息 */}
-                <div className="pt-4 border-t border-border/30 text-center">
-                  <p className="text-xs text-gray-400">
-                    Made with ❤️ by 熊猫不是猫 QAQ
-                  </p>
-                  <p className="text-[10px] text-gray-300 mt-1">
-                    © 2024 KOLFlow. 本项目仅供个人学习和研究使用。
-                  </p>
-                </div>
-              </div>
-            </div>
+            <AboutTab
+              previewImage={previewImage}
+              setPreviewImage={setPreviewImage}
+            />
           )}
         </div>
       </div>
@@ -1232,37 +587,6 @@ curl "${typeof window !== 'undefined' ? window.location.origin : ''}/api/externa
         confirmText="确认恢复"
         type="warning"
       />
-
-      <ConfirmDialog
-        isOpen={apiKeyConfirm}
-        onClose={() => setApiKeyConfirm(false)}
-        onConfirm={confirmGenerateApiKey}
-        title="确认生成新 API Key"
-        message="生成新的 API Key 将导致旧的 API Key 失效。确定要继续吗？"
-        confirmText="确认生成"
-        type="warning"
-      />
-
-      {/* 图片预览弹窗 */}
-      {previewImage && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
-          onClick={() => setPreviewImage(null)}
-        >
-          <button
-            className="absolute top-4 right-4 text-white/80 hover:text-white p-2"
-            onClick={() => setPreviewImage(null)}
-          >
-            <X size={24} />
-          </button>
-          <img
-            src={previewImage}
-            alt="Preview"
-            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      )}
     </div>
   );
 }

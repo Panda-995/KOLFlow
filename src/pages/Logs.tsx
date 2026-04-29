@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useStore, ActivityLog } from '../store/useStore';
+import { useStore } from '../store/useStore';
 import { Clock, User, Package, Edit2, Trash2, MessageSquare, AlertCircle, Trash } from 'lucide-react';
-import { clsx } from 'clsx';
 import Modal from '../components/Modal';
 
 const actionIcons: Record<string, React.ReactNode> = {
