@@ -353,22 +353,29 @@ curl "${window.location.origin}/api/external/orders?token=${settings?.apiKey || 
 
   const copyToClipboard = async (text: string) => {
     try {
-      // 优先使用现代API
-      if (navigator.clipboard && window.isSecureContext) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(text);
+        showToast('已复制到剪贴板');
       } else {
-        // 备用方案：创建临时textarea
         const textarea = document.createElement('textarea');
         textarea.value = text;
         textarea.style.position = 'fixed';
         textarea.style.left = '-9999px';
+        textarea.style.top = '-9999px';
+        textarea.setAttribute('readonly', '');
         document.body.appendChild(textarea);
         textarea.select();
-        document.execCommand('copy');
+        textarea.setSelectionRange(0, 99999);
+        const success = document.execCommand('copy');
         document.body.removeChild(textarea);
+        if (success) {
+          showToast('已复制到剪贴板');
+        } else {
+          showToast('复制失败，请手动复制', 'error');
+        }
       }
-      showToast('已复制到剪贴板');
     } catch (error) {
+      console.error('Copy error:', error);
       showToast('复制失败，请手动复制', 'error');
     }
   };
