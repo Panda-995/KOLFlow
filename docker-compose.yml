@@ -2,10 +2,7 @@ version: '3.8'
 
 services:
   kolflow:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: kolflow:latest
+    image: ghcr.io/panda-995/kolflow:latest
     container_name: kolflow
     ports:
       - "3000:3000"
