@@ -24,8 +24,6 @@ npm-debug.log*
 .env
 .env.local
 .env.production
-
-# Keep .env.example
 !.env.example
 
 # IDE
@@ -48,8 +46,10 @@ capacitor.config.ts
 .cache/
 .temp/
 
-# GitHub Actions
-.github/
+# GitHub（只保留 workflows）
+.github/*
+!.github/workflows/
+!.github/workflows/*
 
 # Docker
 .dockerignore
