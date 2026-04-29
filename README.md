@@ -216,7 +216,7 @@ GET /api/external/statistics?token=<API_KEY>
 **Panda-995**
 
 - GitHub: https://github.com/Panda-995
-- Email: panda@panda995.com
+- Email: 676096193@qq.com
 
 ---
 
