@@ -353,26 +353,21 @@ curl "${window.location.origin}/api/external/orders?token=${settings?.apiKey || 
 
   const copyToClipboard = async (text: string) => {
     try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(text);
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      textarea.style.top = '-9999px';
+      textarea.setAttribute('readonly', '');
+      document.body.appendChild(textarea);
+      textarea.select();
+      textarea.setSelectionRange(0, 99999);
+      const success = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      if (success) {
         showToast('已复制到剪贴板');
       } else {
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        textarea.style.position = 'fixed';
-        textarea.style.left = '-9999px';
-        textarea.style.top = '-9999px';
-        textarea.setAttribute('readonly', '');
-        document.body.appendChild(textarea);
-        textarea.select();
-        textarea.setSelectionRange(0, 99999);
-        const success = document.execCommand('copy');
-        document.body.removeChild(textarea);
-        if (success) {
-          showToast('已复制到剪贴板');
-        } else {
-          showToast('复制失败，请手动复制', 'error');
-        }
+        showToast('复制失败，请手动复制', 'error');
       }
     } catch (error) {
       console.error('Copy error:', error);
