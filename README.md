@@ -13,15 +13,21 @@
   <a href="#技术栈">技术栈</a>
 </p>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/Node.js-20+-green.svg" alt="Node.js">
+  <img src="https://img.shields.io/badge/React-19-blue.svg" alt="React">
+  <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License">
+</p>
+
 ---
 
 ## 功能特性
 
-- 📊 **仪表盘** - 收入统计、月度目标进度、商单概览
+- 📊 **仪表盘** - 收入统计、月度目标进度，商单概览
 - 📦 **商单管理** - 创建、编辑、状态跟踪、批量导入/导出
 - ✅ **待办/日历** - 任务管理、日历视图、优先级标签
 - 💰 **账单管理** - 收支统计、结算状态、月份筛选
-- 🏢 **品牌管理** - 品牌信息维护、合作统计
+- 🏢 **品牌管理** - 品牌信息维护，合作统计
 - 📈 **数据统计** - 多维度筛选、图表可视化
 - 🔐 **安全设置** - API Key 管理、账号安全
 - 🎨 **主题外观** - 5种配色方案
@@ -51,8 +57,8 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/your-username/kolflow.git
-cd kolflow
+git clone https://github.com/Panda-995/KOLFlow.git
+cd KOLFlow
 
 # 安装依赖
 npm install
@@ -66,7 +72,7 @@ npm install
 # 生产环境必须设置
 NODE_ENV=production
 PORT=3000
-JWT_SECRET=your-secret-key-here  # 使用强随机密钥
+JWT_SECRET=your-secret-key-here
 INVITE_CODE=your-invite-code
 ```
 
@@ -98,219 +104,122 @@ npm run preview
 
 ## 部署
 
-### Docker（推荐）
+### Docker 部署（推荐）
 
 ```bash
-# 使用 docker-compose
-docker-compose up -d --build
+# 构建并启动
+docker-compose up -d
 
 # 查看日志
 docker-compose logs -f
 
-# 停止服务
+# 停止
 docker-compose down
 ```
 
-### 手动部署
-
+需要配置环境变量：
 ```bash
-# 构建镜像
-docker build -t kolflow:latest .
-
-# 运行容器
-docker run -d \
-  --name kolflow \
-  -p 3000:3000 \
-  -v kolflow-data:/app/data \
-  --restart unless-stopped \
-  kolflow:latest
+export JWT_SECRET=your-secret-key
+export INVITE_CODE=your-invite-code
+docker-compose up -d
 ```
 
-### 数据持久化
+### Vercel 部署
 
-| 目录 | 说明 |
-|------|------|
-| `/app/data/database.sqlite` | SQLite 数据库 |
-| `/app/data/uploads/` | 上传的文件 |
+```bash
+# 安装 Vercel CLI
+npm i -g vercel
+
+# 部署
+vercel --prod
+```
+
+### 宝塔面板部署
+
+1. 上传代码到服务器
+2. 使用 Node.js 项目管理器
+3. 设置环境变量
+4. 启动项目
 
 ---
 
 ## API 文档
 
-### 认证方式
-
-支持三种认证方式：
+### 认证
 
 ```bash
-# 1. Authorization Header（推荐）
-curl -H "Authorization: Bearer <token>" http://localhost:3000/api/orders
+# 注册
+POST /api/auth/register
+Body: { email, password, inviteCode }
 
-# 2. URL 参数
-curl "http://localhost:3000/api/orders?token=<api-key>"
+# 登录
+POST /api/auth/login
+Body: { email, password }
 
-# 3. API Key（外部接口）
-curl "http://localhost:3000/api/external/orders?key=<api-key>"
+# 验证 Token
+POST /api/auth/verify
+Headers: Authorization: Bearer <token>
 ```
 
-### 接口列表
+### 商单
 
-#### 认证
+```bash
+# 获取列表
+GET /api/orders
+Headers: Authorization: Bearer <token>
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/auth/register` | 用户注册 |
-| POST | `/api/auth/login` | 用户登录 |
-| POST | `/api/auth/verify` | 验证 Token |
+# 创建
+POST /api/orders
+Body: { title, type, brandName, ... }
 
-#### 商单
+# 更新
+PUT /api/orders/:id
+Body: { ... }
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/orders` | 获取商单列表 |
-| POST | `/api/orders` | 创建商单 |
-| PUT | `/api/orders/:id` | 更新商单 |
-| DELETE | `/api/orders/:id` | 删除商单 |
+# 删除
+DELETE /api/orders/:id
+```
 
-#### 品牌
+### 外部 API
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/brands` | 获取品牌列表 |
-| POST | `/api/brands` | 创建品牌 |
-| PUT | `/api/brands/:id` | 更新品牌 |
-| DELETE | `/api/brands/:id` | 删除品牌 |
-
-#### 待办
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/todos` | 获取待办列表 |
-| POST | `/api/todos` | 创建待办 |
-| PUT | `/api/todos/:id/update` | 更新待办 |
-| PUT | `/api/todos/:id/toggle` | 切换完成状态 |
-| DELETE | `/api/todos/:id` | 删除待办 |
-
-#### 账单
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/payments` | 获取账单列表 |
-| POST | `/api/payments` | 创建账单 |
-| PUT | `/api/payments/:id` | 更新账单 |
-| PUT | `/api/payments/:id/settle` | 结算账单 |
-| DELETE | `/api/payments/:id` | 删除账单 |
-
-#### 外部 API
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/external/orders` | 商单列表 |
-| GET | `/api/external/statistics` | 统计数据 |
-| GET | `/api/external/export` | 导出全部数据 |
+```bash
+# 公开接口（需要 API Key）
+GET /api/external/orders?token=<API_KEY>
+GET /api/external/statistics?token=<API_KEY>
+```
 
 ---
 
 ## 技术栈
 
-### 前端
-
-- **React 19** - UI 框架
-- **TypeScript** - 类型安全
-- **Zustand** - 状态管理
-- **React Router** - 路由
-- **Tailwind CSS** - 样式
-- **Recharts** - 图表
-- **Lucide React** - 图标
-- **date-fns** - 日期处理
-
-### 后端
-
-- **Express** - Web 框架
-- **SQLite** (better-sqlite3) - 数据库
-- **JWT** - 认证
-- **bcrypt** - 密码加密
-
----
-
-## 项目结构
-
-```
-kolflow/
-├── src/
-│   ├── components/        # 公共组件
-│   ├── hooks/             # 自定义 Hooks
-│   ├── pages/             # 页面组件
-│   ├── server/            # 后端代码
-│   │   ├── routes/        # API 路由
-│   │   ├── services/      # 业务服务
-│   │   └── utils/         # 工具函数
-│   ├── store/             # Zustand Store
-│   └── types/             # TypeScript 类型
-├── public/                # 静态资源
-├── server.ts              # 服务入口
-├── vite.config.ts         # Vite 配置
-├── Dockerfile             # Docker 构建
-├── docker-compose.yml     # Docker Compose
-└── package.json
-```
-
----
-
-## 快捷键
-
-| 快捷键 | 功能 |
-|--------|------|
-| `Ctrl + Alt + N` | 新建商单 |
-| `Ctrl + Alt + T` | 待办管理 |
-| `Ctrl + Alt + B` | 品牌管理 |
-| `Ctrl + Alt + S` | 系统设置 |
-
----
-
-## 环境变量
-
-| 变量名 | 默认值 | 说明 |
-|--------|--------|------|
-| `PORT` | 3000 | 服务端口 |
-| `NODE_ENV` | development | 运行环境 |
-| `JWT_SECRET` | - | JWT 密钥（生产环境必须修改） |
-| `INVITE_CODE` | panda995 | 注册邀请码 |
-
----
-
-## 开发
-
-```bash
-# 开发模式
-npm run dev
-
-# 类型检查
-npm run lint
-
-# 构建生产版本
-npm run build
-```
-
----
-
-## 贡献
-
-欢迎提交 Issue 和 Pull Request。
-
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 创建 Pull Request
+| 分类 | 技术 |
+|------|------|
+| 前端 | React 19, TypeScript, Tailwind CSS |
+| 后端 | Express, better-sqlite3 |
+| 状态 | Zustand |
+| 图表 | Recharts |
+| 安全 | bcrypt, JWT, helmet |
+| 部署 | Docker, Vercel |
 
 ---
 
 ## 许可证
 
-本项目仅供个人学习和研究使用。
+**MIT License** - 可免费商用，但必须保留作者信息
+
+详细许可证内容请查看 [LICENSE](LICENSE) 文件。
+
+---
+
+## 作者
+
+**Panda-995**
+
+- GitHub: https://github.com/Panda-995
+- Email: panda@panda995.com
 
 ---
 
 <p align="center">
-  Made with ❤️ by KOLFlow Team
+  Made with ❤️ by <a href="https://github.com/Panda-995">Panda-995</a>
 </p>
