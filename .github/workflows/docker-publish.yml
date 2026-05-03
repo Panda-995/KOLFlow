@@ -10,15 +10,11 @@ env:
   IMAGE_NAME: panda-995/kolflow
 
 jobs:
-  build-and-push:
+  build-amd64:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-    strategy:
-      matrix:
-        platform: [linux/amd64, linux/arm64]
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -36,29 +32,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
-
-      - name: Build and push
+      - name: Build and push AMD64 image
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: ${{ matrix.platform }}
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.platform }}-latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:amd64
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  build-arm-only:
+  build-arm64:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -80,13 +66,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push ARM image
+      - name: Build and push ARM64 image
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/arm64
           push: true
           tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64
           cache-from: type=gha
           cache-to: type=gha,mode=max
