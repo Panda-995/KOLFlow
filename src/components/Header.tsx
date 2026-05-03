@@ -1,4 +1,4 @@
-import { Bell, LogOut, X, Menu, Plus, AlertTriangle, Clock, Globe } from 'lucide-react';
+import { Bell, LogOut, X, Menu, Plus, AlertTriangle, Clock } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useStore } from '../store/useStore';
@@ -13,7 +13,6 @@ export default function Header({ onMenuClick }: HeaderProps) {
   const notificationRef = useRef<HTMLDivElement>(null);
   const { logout, orders, payments, dismissedNotifications, dismissNotification } = useStore();
   const navigate = useNavigate();
-  const [language, setLanguage] = useState<'zh' | 'en'>(() => (localStorage.getItem('language') as 'zh' | 'en') || 'zh');
 
   const notifications = useMemo(() => {
     const notifs: { id: string; title: string; message: string; type: 'warning' | 'danger'; link: string }[] = [];
@@ -167,26 +166,13 @@ export default function Header({ onMenuClick }: HeaderProps) {
         {/* Mobile: just show + button, Desktop: show full button */}
         <Link to="/orders" className="btn-primary py-2 px-3 md:px-4 text-sm flex items-center gap-1 md:gap-2">
           <Plus size={16} />
-          <span className="hidden md:inline">{language === 'zh' ? '新建商单' : 'New Order'}</span>
+          <span className="hidden md:inline">新建商单</span>
         </Link>
-
-        <button
-          onClick={() => {
-            const newLang = language === 'zh' ? 'en' : 'zh';
-            setLanguage(newLang);
-            localStorage.setItem('language', newLang);
-          }}
-          className="p-2 text-gray-500 hover:text-panda-black transition-colors rounded-full hover:bg-bg-tertiary flex items-center gap-1.5"
-          title={language === 'zh' ? 'Switch to English' : '切换到中文'}
-        >
-          <Globe size={18} />
-          <span className="text-xs font-medium uppercase">{language}</span>
-        </button>
 
         <button
           onClick={() => logout()}
           className="p-2 text-gray-400 hover:text-danger hover:bg-danger/10 rounded-xl transition-colors"
-          title={language === 'zh' ? '退出登录' : 'Logout'}
+          title="退出登录"
         >
           <LogOut size={20} />
         </button>
