@@ -101,18 +101,27 @@ npm run preview
 
 ### Docker (Recommended) | Docker 部署（推荐）
 
+支持多架构镜像：amd64 (x86_64) 和 arm64 (Apple Silicon, 树莓派等)
+
 ```bash
-# Pull and start | 拉取并启动
+# 拉取并启动（自动选择对应架构）
 docker-compose up -d
 
-# View logs | 查看日志
-docker-compose logs -f
-
-# Stop | 停止
-docker-compose down
+# 或手动指定镜像
+docker run -d -p 3000:3000 \
+  -e JWT_SECRET=your-secret \
+  -e INVITE_CODE=your-code \
+  ghcr.io/panda-995/kolflow:latest
 ```
 
-**Image | 镜像**: `ghcr.io/panda-995/kolflow:latest`
+**镜像标签**:
+
+| Tag | 说明 |
+|-----|------|
+| `latest` | 最新版（多架构） |
+| `arm` | ARM64 架构专用 |
+| `arm64` | ARM64 架构专用 |
+| `linux/amd64` | x86_64 架构 |
 
 Set environment variables | 设置环境变量:
 ```bash
