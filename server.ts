@@ -15,9 +15,8 @@ async function startServer() {
     contentSecurityPolicy: false,
   }));
 
-  // Rate limiting (loginLimiter available for auth routes)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _loginLimiter = rateLimit({
+  // Rate limiting for auth routes
+  const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 5, // 5 attempts
     message: { error: '登录尝试过多，请稍后再试' },
@@ -38,7 +37,10 @@ async function startServer() {
     const ips: string[] = [];
     const interfaces = os.networkInterfaces();
     for (const name of Object.keys(interfaces)) {
-      for (const iface of interfaces[name]) {
+      const ifaceList = interfaces[name];
+      if (!ifaceList) continue;
+
+      for (const iface of ifaceList) {
         if (iface.family === 'IPv4' && !iface.internal) {
           ips.push(`http://${iface.address}:3000`);
           ips.push(`http://${iface.address}:5173`);
@@ -69,6 +71,9 @@ async function startServer() {
   });
 
   app.use(express.json({ limit: '10mb' }));
+
+  // Stricter auth rate limiter
+  app.use(['/api/auth/login', '/api/auth/register'], loginLimiter);
 
   // 安全中间件：阻止直接访问 uploads 目录
   app.use('/uploads', (_req, res) => {

@@ -147,6 +147,7 @@ export default function Brands() {
         showToast('品牌已删除', 'success');
       } catch (error) {
         showToast('删除失败', 'error');
+        throw error;
       }
     }
   };

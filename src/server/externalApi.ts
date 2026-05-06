@@ -350,9 +350,23 @@ router.put('/brands/:id', async (req, res) => {
 
 router.delete('/brands/:id', async (req, res) => {
   try {
-    const userId = req.userId;
+    const userId = getUserId(req);
     const { id } = req.params;
-    db.prepare('DELETE FROM brands WHERE id = ? AND userId = ?').run(id, userId);
+
+    const brand = db.prepare('SELECT name FROM brands WHERE id = ? AND userId = ?').get(id, userId) as any;
+    if (!brand) {
+      res.status(404).json({ error: 'Brand not found' });
+      return;
+    }
+
+    const deleteBrand = db.transaction(() => {
+      db.prepare('UPDATE orders SET brandName = NULL WHERE brandName = ? AND userId = ?').run(brand.name, userId);
+      db.prepare('UPDATE todos SET category = NULL, brandId = NULL WHERE (brandId = ? OR category = ?) AND userId = ?').run(id, brand.name, userId);
+      db.prepare('UPDATE payments SET brand = ? WHERE brand = ? AND userId = ?').run(`已删除品牌(${brand.name})`, brand.name, userId);
+      db.prepare('DELETE FROM brands WHERE id = ? AND userId = ?').run(id, userId);
+    });
+
+    deleteBrand();
     res.json({ success: true });
   } catch (error) {
     console.error('externalApi DELETE /brands/:id失败:', error);

@@ -192,6 +192,7 @@ export default function Settings() {
       showToast('数据已清空');
     } catch (error) {
       showToast(error instanceof Error ? error.message : '清空数据失败', 'error');
+      throw error;
     }
   };
 
@@ -347,6 +348,7 @@ curl "${window.location.origin}/api/external/orders?token=${settings?.apiKey || 
         window.location.reload();
       } catch (error) {
         showToast(error instanceof Error ? error.message : '恢复数据失败', 'error');
+        throw error;
       }
     }
   };

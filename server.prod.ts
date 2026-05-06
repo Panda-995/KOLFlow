@@ -19,9 +19,8 @@ app.use(helmet({
   },
 }));
 
-// Rate limiting (loginLimiter available for auth routes)
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const _loginLimiter = rateLimit({
+// Rate limiting for auth routes
+const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // 5 attempts
   message: { error: '登录尝试过多，请稍后再试' },
@@ -56,6 +55,9 @@ app.use((req, res, next): void => {
 });
 
 app.use(express.json({ limit: '10mb' }));
+
+// Stricter auth rate limiter
+app.use(['/api/auth/login', '/api/auth/register'], loginLimiter);
 
 // API rate limiter
 app.use('/api/', apiLimiter);

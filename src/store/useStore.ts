@@ -221,8 +221,20 @@ export const useStore = create<AppState>((set, get) => ({
     localStorage.removeItem('isAuthenticated');
     localStorage.removeItem('userId');
     localStorage.removeItem('token');
+    localStorage.removeItem('dismissedNotifications');
     invalidateAllCache();
-    set({ isAuthenticated: false, settings: null, orders: [], todos: [], brands: [], payments: [] });
+    set({
+      isAuthenticated: false,
+      settings: null,
+      orders: [],
+      todos: [],
+      brands: [],
+      payments: [],
+      activityLogs: [],
+      comments: [],
+      publishLinks: [],
+      dismissedNotifications: []
+    });
   },
 
   updateSecurity: async (email, password, oldPassword) => {
@@ -301,10 +313,6 @@ export const useStore = create<AppState>((set, get) => ({
       invalidateCache('orders');
       const previousOrders = get().orders;
       set({ orders: [newOrder, ...previousOrders] });
-      set((state) => {
-        const { fetchTodos } = state;
-        return state;
-      });
       get().showToast('商单创建成功', 'success');
       await get().fetchTodos();
     } catch (error) {

@@ -14,7 +14,7 @@ import { ToastProvider } from './components/Toast';
 import { useEffect, useState } from 'react';
 
 export default function App() {
-  const { isAuthenticated, darkMode, fetchSettings, setAuthenticated } = useStore();
+  const { isAuthenticated, darkMode, fetchSettings, logout } = useStore();
   const [isVerifying, setIsVerifying] = useState(true);
 
   useEffect(() => {
@@ -29,10 +29,7 @@ export default function App() {
         
         const token = localStorage.getItem('token');
         if (data.hasUsers === false || !token) {
-          localStorage.removeItem('isAuthenticated');
-          localStorage.removeItem('userId');
-          localStorage.removeItem('token');
-          setAuthenticated(false);
+          logout();
           setIsVerifying(false);
           return;
         }
@@ -45,21 +42,18 @@ export default function App() {
         if (verifyRes.ok) {
           await fetchSettings();
         } else {
-          localStorage.removeItem('isAuthenticated');
-          localStorage.removeItem('userId');
-          localStorage.removeItem('token');
-          setAuthenticated(false);
+          logout();
         }
       } catch (e) {
         console.error('Token verification failed:', e);
-        setAuthenticated(false);
+        logout();
       } finally {
         setIsVerifying(false);
       }
     };
 
     verifyToken();
-  }, [fetchSettings, setAuthenticated]);
+  }, [fetchSettings, logout]);
 
   if (isVerifying) {
     return (
