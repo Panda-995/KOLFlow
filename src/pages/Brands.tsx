@@ -59,7 +59,7 @@ export default function Brands() {
   const filteredBrands = useMemo(() => {
     return brands.filter(brand => {
       const matchesSearch = brand.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          brand.contact.toLowerCase().includes(searchTerm.toLowerCase());
+                          (brand.contact || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchesIndustry = industryFilter === 'all' ? true : brand.industry === industryFilter;
       return matchesSearch && matchesIndustry;
     });
@@ -110,8 +110,8 @@ export default function Brands() {
       setFormData({
         name: brand.name,
         industry: brand.industry || '',
-        contact: brand.contact,
-        phone: brand.phone
+        contact: brand.contact || '',
+        phone: brand.phone || ''
       });
     } else {
       setEditingBrandId(null);

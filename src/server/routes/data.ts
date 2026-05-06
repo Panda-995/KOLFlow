@@ -35,6 +35,15 @@ const upload = multer({
 });
 const router = Router();
 
+const requireAuth = (req: any, res: any, next: any) => {
+  try {
+    getUserId(req);
+    next();
+  } catch {
+    res.status(401).json({ error: '未授权访问，请先登录' });
+  }
+};
+
 // 导出数据
 router.get('/export', (req, res) => {
   try {
@@ -283,7 +292,7 @@ router.post('/orders', (req, res) => {
   }
 });
 
-router.post('/orders/file', upload.single('file'), (req, res) => {
+router.post('/orders/file', requireAuth, upload.single('file'), (req, res) => {
   const userId = getUserId(req);
   const file = req.file;
 

@@ -12,9 +12,9 @@ const getBaseUrl = (): string => {
 };
 
 const createAuthFetch = () => {
-  const token = getToken();
   const baseUrl = getBaseUrl();
   return (url: string, options: RequestInit = {}) => {
+    const token = getToken();
     const headers: Record<string, string> = {
       ...options.headers as Record<string, string>,
     };
@@ -106,6 +106,7 @@ interface AppState {
 
   fetchPayments: () => Promise<void>;
   addPayment: (payment: Partial<Payment>) => Promise<void>;
+  updatePayment: (id: string, payment: Partial<Payment>) => Promise<void>;
   settlePayment: (id: string) => Promise<void>;
   deletePayment: (id: string) => Promise<void>;
 
@@ -587,12 +588,31 @@ export const useStore = create<AppState>((set, get) => ({
       throw error;
     }
   },
-  settlePayment: async (id) => {
+  updatePayment: async (id, payment) => {
     try {
       const res = await createAuthFetch()(`/api/payments/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'settled' })
+        body: JSON.stringify(payment)
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || '更新账单失败');
+      }
+      const updatedPayment = await res.json();
+      invalidateCache('payments');
+      set((state) => ({ payments: state.payments.map(p => p.id === id ? updatedPayment : p) }));
+      get().showToast('账单更新成功', 'success');
+    } catch (error) {
+      console.error('updatePayment失败:', error instanceof Error ? error.message : error);
+      get().showToast('更新账单失败，请稍后重试', 'error');
+      throw error;
+    }
+  },
+  settlePayment: async (id) => {
+    try {
+      const res = await createAuthFetch()(`/api/payments/${id}/settle`, {
+        method: 'PUT'
       });
       if (!res.ok) {
         const data = await res.json();
@@ -682,13 +702,12 @@ export const useStore = create<AppState>((set, get) => ({
   },
   clearData: async () => {
     try {
-      const res = await createAuthFetch()('/data/clear', { method: 'DELETE' });
+      const res = await createAuthFetch()('/api/data/clear', { method: 'POST' });
       if (!res.ok) {
         throw new Error('清空数据失败');
       }
-      localStorage.clear();
       invalidateAllCache();
-      set({ orders: [], todos: [], brands: [], payments: [], activityLogs: [], comments: [], publishLinks: [], settings: null });
+      set({ orders: [], todos: [], brands: [], payments: [], activityLogs: [], comments: [], publishLinks: [] });
       get().showToast('数据已清空', 'success');
     } catch (error) {
       console.error('clearData失败:', error instanceof Error ? error.message : error);
@@ -699,7 +718,7 @@ export const useStore = create<AppState>((set, get) => ({
   setAllData: async (data) => {
     try {
       const token = localStorage.getItem('token');
-      const res = await createFetch()('/api/data/import', {
+      const res = await createAuthFetch()('/api/data/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
@@ -757,7 +776,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   fetchComments: async (orderId) => {
     try {
-      const res = await createAuthFetch()(`/comments/${orderId}`);
+      const res = await createAuthFetch()(`/api/comments/${orderId}`);
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || '获取评论失败');
@@ -772,7 +791,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
   addComment: async (orderId, content) => {
     try {
-      const res = await createAuthFetch()('/comments', {
+      const res = await createAuthFetch()('/api/comments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orderId, content })
@@ -792,7 +811,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
   deleteComment: async (id) => {
     try {
-      const res = await createAuthFetch()(`/comments/${id}`, { method: 'DELETE' });
+      const res = await createAuthFetch()(`/api/comments/${id}`, { method: 'DELETE' });
       if (!res.ok) {
         throw new Error('删除评论失败');
       }
@@ -806,7 +825,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   fetchPublishLinks: async (orderId) => {
     try {
-      const res = await createAuthFetch()(`/publish-links/${orderId}`);
+      const res = await createAuthFetch()(`/api/publish-links/${orderId}`);
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || '获取发布链接失败');
@@ -821,7 +840,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
   addPublishLink: async (orderId, platform, url) => {
     try {
-      const res = await createAuthFetch()('/publish-links', {
+      const res = await createAuthFetch()('/api/publish-links', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orderId, platform, url })
@@ -839,21 +858,30 @@ export const useStore = create<AppState>((set, get) => ({
       throw error;
     }
   },
-  batchAddPublishLinks: async (orderId, links) => {
-    let created = 0;
-    for (const link of links) {
-      try {
-        await get().addPublishLink(orderId, link.platform, link.url);
-        created++;
-      } catch (e) {
-        console.error('批量添加发布链接失败:', e);
+  batchAddPublishLinks: async (orderId, urls) => {
+    try {
+      const res = await createAuthFetch()('/api/publish-links/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, links: urls })
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || '批量添加发布链接失败');
       }
+      const data = await res.json();
+      set((state) => ({ publishLinks: [...state.publishLinks, ...(data.links || [])] }));
+      get().showToast(`已批量添加 ${data.created} 个发布链接`, 'success');
+      return { created: data.created };
+    } catch (error) {
+      console.error('batchAddPublishLinks失败:', error instanceof Error ? error.message : error);
+      get().showToast('批量添加发布链接失败', 'error');
+      throw error;
     }
-    return { created };
   },
   updatePublishLink: async (id, platform, url) => {
     try {
-      const res = await createAuthFetch()(`/publish-links/${id}`, {
+      const res = await createAuthFetch()(`/api/publish-links/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ platform, url })
@@ -873,7 +901,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
   deletePublishLink: async (id) => {
     try {
-      const res = await createAuthFetch()(`/publish-links/${id}`, { method: 'DELETE' });
+      const res = await createAuthFetch()(`/api/publish-links/${id}`, { method: 'DELETE' });
       if (!res.ok) {
         throw new Error('删除发布链接失败');
       }

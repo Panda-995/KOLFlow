@@ -39,30 +39,12 @@ export const verifyToken = (token: string): { userId: string; email: string } | 
   }
 };
 
-// 从请求头获取用户 ID (支持 JWT 和旧的 x-user-id 方式用于兼容)
+// 从请求头获取用户 ID。内部 API 只接受登录 JWT；API Key 仅用于 /api/external。
 export const getUserId = (req: any): string => {
   const authHeader = req.headers.authorization;
 
-  // 支持 URL 参数认证 (?token=xxx 或 ?key=xxx)
-  const urlToken = req.query.token || req.query.key;
-
-  if (urlToken) {
-    const userId = getUserIdByApiKey(urlToken as string);
-    if (userId) {
-      req.userId = userId;
-      return userId;
-    }
-  }
-
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.substring(7);
-    // 尝试 API Key 认证
-    const userIdByKey = getUserIdByApiKey(token);
-    if (userIdByKey) {
-      req.userId = userIdByKey;
-      return userIdByKey;
-    }
-    // 尝试 JWT 认证
     const decoded = verifyToken(token);
     if (decoded) {
       req.userId = decoded.userId;
