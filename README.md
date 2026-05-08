@@ -189,6 +189,27 @@ GET /api/external/statistics?token=<API_KEY>
 
 ---
 
+## Support | 支持
+
+如果这个项目对你有帮助，欢迎赞赏支持！
+
+<table align="center">
+  <tr>
+    <td align="center">
+      <img src="public/赞赏码.png" width="200" alt="赞赏码">
+      <br>
+      <sub>赞赏码</sub>
+    </td>
+    <td align="center">
+      <img src="public/小程序.jpg" width="200" alt="小程序码">
+      <br>
+      <sub>小程序码</sub>
+    </td>
+  </tr>
+</table>
+
+---
+
 <p align="center">
   Made with ❤️ by <a href="https://github.com/Panda-995">Panda-995</a>
 </p>
