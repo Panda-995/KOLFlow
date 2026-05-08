@@ -193,6 +193,10 @@ GET /api/external/statistics?token=<API_KEY>
 
 如果这个项目对你有帮助，欢迎赞赏支持！
 
+### Tutorial | 使用教程
+
+值得买详细教程：[KOLFlow 达人商单管理系统使用教程](https://post.smzdm.com/p/a6zg63m0/)
+
 <table align="center">
   <tr>
     <td align="center">
