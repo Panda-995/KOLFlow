@@ -302,15 +302,20 @@ router.get('/brands', async (req, res) => {
 router.post('/brands', async (req, res) => {
   try {
     const userId = req.userId;
-    const { name, industry, contact, phone } = req.body;
+    const { name, industry, contact, phone, contacts } = req.body;
     const id = uuidv4();
 
+    const contactsJson = contacts && contacts.length > 0
+      ? JSON.stringify(contacts)
+      : (contact || phone ? JSON.stringify([{ id: uuidv4(), name: contact || '', phone: phone || '', note: '' }]) : null);
+
     db.prepare(`
-      INSERT INTO brands (id, userId, name, industry, contact, phone)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, userId, name, industry || '', contact || '', phone || '');
+      INSERT INTO brands (id, userId, name, industry, contact, phone, contacts)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(id, userId, name, industry || '', contact || '', phone || '', contactsJson);
 
     const newBrand = db.prepare('SELECT * FROM brands WHERE id = ?').get(id) as any;
+    newBrand.contacts = newBrand.contacts ? JSON.parse(newBrand.contacts) : [];
     res.json(newBrand);
   } catch (error) {
     console.error('externalApi POST /brands失败:', error);
@@ -325,19 +330,31 @@ router.put('/brands/:id', async (req, res) => {
   try {
     const userId = req.userId;
     const { id } = req.params;
-    const { name, industry, contact, phone } = req.body;
+    const { name, industry, contact, phone, contacts } = req.body;
 
     const existing = db.prepare('SELECT * FROM brands WHERE id = ? AND userId = ?').get(id, userId) as any;
     if (!existing) {
       return res.status(404).json({ error: 'Brand not found' });
     }
 
+    const newContacts = contacts !== undefined
+      ? (contacts.length > 0 ? JSON.stringify(contacts) : null)
+      : existing.contacts;
+
     db.prepare(`
-      UPDATE brands SET name = ?, industry = ?, contact = ?, phone = ?
+      UPDATE brands SET name = ?, industry = ?, contact = ?, phone = ?, contacts = ?
       WHERE id = ?
-    `).run(name || existing.name, industry || existing.industry, contact || existing.contact, phone || existing.phone, id);
+    `).run(
+      name !== undefined ? name : existing.name,
+      industry !== undefined ? industry : existing.industry,
+      contact !== undefined ? contact : existing.contact,
+      phone !== undefined ? phone : existing.phone,
+      newContacts,
+      id
+    );
 
     const updated = db.prepare('SELECT * FROM brands WHERE id = ?').get(id) as any;
+    updated.contacts = updated.contacts ? JSON.parse(updated.contacts) : [];
     res.json(updated);
   } catch (error) {
     console.error('externalApi PUT /brands/:id失败:', error);

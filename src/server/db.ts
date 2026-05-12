@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import crypto from 'crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -32,6 +33,7 @@ db.exec(`
     industry TEXT,
     contact TEXT,
     phone TEXT,
+    contacts TEXT,
     totalOrders INTEGER DEFAULT 0,
     totalIncome REAL DEFAULT 0,
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -242,6 +244,24 @@ if (!orderColumnNames.includes('acceptDate')) {
 if (!orderColumnNames.includes('submitDate')) {
   db.exec('ALTER TABLE orders ADD COLUMN submitDate TEXT;');
   db.exec("UPDATE orders SET submitDate = deadline WHERE submitDate IS NULL AND deadline IS NOT NULL;");
+}
+
+// Ensure brands has contacts column and migrate existing data
+const brandColumns = db.prepare("PRAGMA table_info(brands)").all() as any[];
+const brandColumnNames = brandColumns.map(c => c.name);
+if (!brandColumnNames.includes('contacts')) {
+  db.exec('ALTER TABLE brands ADD COLUMN contacts TEXT;');
+  const brandsWithContact = db.prepare('SELECT id, contact, phone FROM brands WHERE contact IS NOT NULL OR phone IS NOT NULL').all() as any[];
+  const updateStmt = db.prepare('UPDATE brands SET contacts = ? WHERE id = ?');
+  for (const brand of brandsWithContact) {
+    const contactEntry = {
+      id: crypto.randomUUID(),
+      name: brand.contact || '',
+      phone: brand.phone || '',
+      note: ''
+    };
+    updateStmt.run(JSON.stringify([contactEntry]), brand.id);
+  }
 }
 
 // ========== 性能优化：创建索引 ==========

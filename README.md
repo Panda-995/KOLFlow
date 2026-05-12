@@ -15,7 +15,8 @@
   <a href="#getting-started">Getting Started</a> •
   <a href="#deployment">Deployment</a> •
   <a href="#api-docs">API Docs</a> •
-  <a href="#tech-stack">Tech Stack</a>
+  <a href="#tech-stack">Tech Stack</a> •
+  <a href="#-更新日志--changelog">Changelog</a>
 </p>
 
 <p align="center">
@@ -169,6 +170,46 @@ GET /api/external/statistics?token=<API_KEY>
 | Charts | 图表 | Recharts |
 | Security | 安全 | bcrypt, JWT, helmet |
 | Deployment | 部署 | Docker, Vercel |
+
+---
+
+## 📝 更新日志 | Changelog
+
+### 2026-05-12
+
+- **品牌多联系人**: 品牌管理支持添加多个联系人，每个联系人可独立设置姓名、电话和备注
+- **联系人备注**: 支持为每个联系人添加备注信息（如"负责商务对接"）
+- **搜索增强**: 品牌搜索支持按联系人姓名、电话、备注进行模糊搜索
+- **数据兼容**: 旧版单联系人数据自动迁移为新格式，无缝升级
+
+### 2026-05-11
+
+- **商单-账单金额联动**: 修改商单金额时自动同步更新关联账单金额
+- **账单金额编辑修复**: 修复账单手动修改金额时的校验报错问题
+- **字段更新逻辑优化**: 修复 `||` 运算符导致的空值覆盖问题，改用严格的 `undefined` 判断
+
+### 2026-04
+
+- **使用教程**: 添加值得买平台详细使用教程链接
+- **赞赏支持**: README 中添加赞赏码和小程序码
+- **认证流程优化**: 优化 JWT 认证和 API Key 鉴权逻辑
+- **发布链接功能**: 修复发布链接批量添加和复制功能
+- **UI 组件修复**: 修复服务器启动和前端 UI 组件问题
+
+### 2026-03
+
+- **Docker 多架构支持**: 支持 amd64 / arm64 双架构自动构建
+- **GitHub Actions CI**: 添加自动构建 Docker 镜像的工作流
+- **中英双语 README**: README 全面支持中英文双语展示
+- **开源协议**: 更新为 MIT License 并完善协议说明
+
+### 更早版本
+
+- **核心功能**: 仪表盘、商单管理、待办日历、账单管理、品牌管理、数据统计
+- **数据联动**: 创建商单自动生成待办、商单完成自动创建账单、删除品牌自动清理关联数据
+- **API 系统**: 内部 RESTful API + 外部 API Key 鉴权体系
+- **主题外观**: 支持亮色/暗色主题切换
+- **剪贴板功能**: 修复复制到剪贴板兼容性问题
 
 ---
 

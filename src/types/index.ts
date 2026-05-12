@@ -30,6 +30,14 @@ export interface Todo {
   orderNo?: string;
 }
 
+// 品牌联系人接口
+export interface BrandContact {
+  id: string;
+  name: string;
+  phone: string;
+  note: string;
+}
+
 // 品牌接口
 export interface Brand {
   id: string;
@@ -37,6 +45,7 @@ export interface Brand {
   industry: string;
   contact: string;
   phone: string;
+  contacts: BrandContact[];
   totalOrders: number;
   totalIncome: number;
 }

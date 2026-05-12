@@ -105,7 +105,7 @@ export function AboutTab({ previewImage, setPreviewImage }: AboutTabProps) {
               Made with ❤️ by 熊猫不是猫 QAQ
             </p>
             <p className="text-[10px] text-gray-300 mt-1">
-              © 2024 KOLFlow. 本项目仅供个人学习和研究使用。
+              © 2026 KOLFlow. 本项目仅供个人学习和研究使用。
             </p>
           </div>
         </div>

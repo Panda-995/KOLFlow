@@ -118,14 +118,17 @@ router.post('/import', (req, res) => {
       // 导入品牌
       if (Array.isArray(brands)) {
         const brandStmt = db.prepare(`
-          INSERT INTO brands (id, userId, name, industry, contact, phone, totalOrders, totalIncome, createdAt)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO brands (id, userId, name, industry, contact, phone, contacts, totalOrders, totalIncome, createdAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         brands.forEach((brand: any) => {
           const brandId = brand.id || uuidv4();
+          const contactsJson = brand.contacts
+            ? (typeof brand.contacts === 'string' ? brand.contacts : JSON.stringify(brand.contacts))
+            : (brand.contact || brand.phone ? JSON.stringify([{ id: uuidv4(), name: brand.contact || '', phone: brand.phone || '', note: '' }]) : null);
           brandStmt.run(
             brandId, userId, brand.name, brand.industry || null, brand.contact || null, brand.phone || null,
-            brand.totalOrders || 0, brand.totalIncome || 0, brand.createdAt || new Date().toISOString()
+            contactsJson, brand.totalOrders || 0, brand.totalIncome || 0, brand.createdAt || new Date().toISOString()
           );
         });
       }

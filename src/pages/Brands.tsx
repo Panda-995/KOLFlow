@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useStore, Brand } from '../store/useStore';
+import type { BrandContact } from '../types';
 import {
   Search,
   Plus,
@@ -12,7 +13,9 @@ import {
   CheckCircle2,
   Clock,
   Eye,
-  FileText
+  FileText,
+  X,
+  MessageSquare
 } from 'lucide-react';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -45,7 +48,8 @@ export default function Brands() {
     name: '',
     industry: '',
     contact: '',
-    phone: ''
+    phone: '',
+    contacts: [] as BrandContact[]
   });
 
   const allIndustries = useMemo(() => {
@@ -58,8 +62,14 @@ export default function Brands() {
 
   const filteredBrands = useMemo(() => {
     return brands.filter(brand => {
+      const contactsSearch = (brand.contacts || []).some(c =>
+        (c.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (c.phone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (c.note || '').toLowerCase().includes(searchTerm.toLowerCase())
+      );
       const matchesSearch = brand.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (brand.contact || '').toLowerCase().includes(searchTerm.toLowerCase());
+                          (brand.contact || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          contactsSearch;
       const matchesIndustry = industryFilter === 'all' ? true : brand.industry === industryFilter;
       return matchesSearch && matchesIndustry;
     });
@@ -111,11 +121,12 @@ export default function Brands() {
         name: brand.name,
         industry: brand.industry || '',
         contact: brand.contact || '',
-        phone: brand.phone || ''
+        phone: brand.phone || '',
+        contacts: brand.contacts || []
       });
     } else {
       setEditingBrandId(null);
-      setFormData({ name: '', industry: '', contact: '', phone: '' });
+      setFormData({ name: '', industry: '', contact: '', phone: '', contacts: [] });
     }
     setIsModalOpen(true);
   };
@@ -319,15 +330,25 @@ export default function Brands() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs mb-2">
-                    <div>
-                      <span className="text-gray-400 text-[10px] block">联系人</span>
-                      <span className="font-medium truncate">{brand.contact || '-'}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-400 text-[10px] block">电话</span>
-                      <span className="font-medium truncate">{brand.phone || '-'}</span>
-                    </div>
+                  <div className="space-y-1.5 mb-2">
+                    {(brand.contacts && brand.contacts.length > 0 ? brand.contacts : (brand.contact || brand.phone ? [{ id: '0', name: brand.contact || '', phone: brand.phone || '', note: '' }] : [])).map((c, idx) => (
+                      <div key={c.id || idx} className="flex items-center gap-1.5 text-xs">
+                        <User size={10} className="text-gray-400 flex-shrink-0" />
+                        <span className="font-medium truncate">{c.name || '-'}</span>
+                        {c.phone && <span className="text-gray-400 truncate">{c.phone}</span>}
+                        {c.note && (
+                          <span className="text-gray-400 flex items-center gap-0.5" title={c.note}>
+                            <MessageSquare size={9} />
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                    {(!brand.contacts || brand.contacts.length === 0) && !brand.contact && !brand.phone && (
+                      <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                        <User size={10} />
+                        <span>暂无联系人</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border/50 text-xs">
@@ -387,35 +408,93 @@ export default function Brands() {
           </div>
 
           <div className="space-y-4">
-            <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider border-b border-border/50 pb-2">联系人信息</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">联系人姓名</label>
-                <div className="relative">
-                  <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    value={formData.contact}
-                    onChange={e => setFormData({...formData, contact: e.target.value})}
-                    placeholder="姓名"
-                    className="w-full pl-10 pr-4 py-2.5 border border-border rounded-xl outline-none focus:border-accent transition-all"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">联系电话</label>
-                <div className="relative">
-                  <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    value={formData.phone}
-                    onChange={e => setFormData({...formData, phone: e.target.value})}
-                    placeholder="手机号/微信"
-                    className="w-full pl-10 pr-4 py-2.5 border border-border rounded-xl outline-none focus:border-accent transition-all"
-                  />
-                </div>
-              </div>
+            <div className="flex items-center justify-between border-b border-border/50 pb-2">
+              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">联系人信息</h3>
+              <button
+                type="button"
+                onClick={() => setFormData({
+                  ...formData,
+                  contacts: [...formData.contacts, { id: crypto.randomUUID(), name: '', phone: '', note: '' }]
+                })}
+                className="text-xs text-accent hover:text-accent/80 font-medium flex items-center gap-1"
+              >
+                <Plus size={12} />
+                添加联系人
+              </button>
             </div>
+            {formData.contacts.length === 0 && (
+              <p className="text-sm text-gray-400 text-center py-4">暂无联系人，点击上方按钮添加</p>
+            )}
+            {formData.contacts.map((contact, index) => (
+              <div key={contact.id} className="p-3 bg-gray-50 rounded-xl border border-border/50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-gray-500">联系人 {index + 1}</span>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({
+                      ...formData,
+                      contacts: formData.contacts.filter(c => c.id !== contact.id)
+                    })}
+                    className="p-0.5 text-gray-400 hover:text-danger rounded transition-colors"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">姓名</label>
+                    <div className="relative">
+                      <User size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        value={contact.name}
+                        onChange={e => {
+                          const newContacts = [...formData.contacts];
+                          newContacts[index] = { ...newContacts[index], name: e.target.value };
+                          setFormData({ ...formData, contacts: newContacts });
+                        }}
+                        placeholder="姓名"
+                        className="w-full pl-8 pr-3 py-2 border border-border rounded-lg outline-none focus:border-accent transition-all text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">电话</label>
+                    <div className="relative">
+                      <Phone size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        value={contact.phone}
+                        onChange={e => {
+                          const newContacts = [...formData.contacts];
+                          newContacts[index] = { ...newContacts[index], phone: e.target.value };
+                          setFormData({ ...formData, contacts: newContacts });
+                        }}
+                        placeholder="手机号/微信"
+                        className="w-full pl-8 pr-3 py-2 border border-border rounded-lg outline-none focus:border-accent transition-all text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">备注</label>
+                  <div className="relative">
+                    <MessageSquare size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
+                    <input
+                      type="text"
+                      value={contact.note}
+                      onChange={e => {
+                        const newContacts = [...formData.contacts];
+                        newContacts[index] = { ...newContacts[index], note: e.target.value };
+                        setFormData({ ...formData, contacts: newContacts });
+                      }}
+                      placeholder="如：负责商务对接、周一联系等"
+                      className="w-full pl-8 pr-3 py-2 border border-border rounded-lg outline-none focus:border-accent transition-all text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
 
           <div className="pt-6 flex justify-end gap-3">
