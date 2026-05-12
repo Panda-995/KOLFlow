@@ -93,22 +93,24 @@ router.put('/:id', (req, res) => {
       return res.status(404).json({ error: '账单不存在' });
     }
 
+    if (amount !== undefined && !validateAmount(amount)) {
+      return res.status(400).json({ error: '金额数值无效' });
+    }
+
+    const newOrderNo = orderNo !== undefined ? orderNo : payment.orderNo;
+    const newBrand = brand !== undefined ? brand : payment.brand;
+    const newAmount = amount !== undefined ? amount : payment.amount;
+    const newType = type !== undefined ? type : payment.type;
+    const newDate = date !== undefined ? date : payment.date;
+    const newMethod = method !== undefined ? method : payment.method;
+
     db.prepare(`
       UPDATE payments
       SET orderNo = ?, brand = ?, amount = ?, type = ?, date = ?, method = ?
       WHERE id = ? AND userId = ?
-    `).run(
-      orderNo || payment.orderNo,
-      brand || payment.brand,
-      amount !== undefined ? amount : payment.amount,
-      type || payment.type,
-      date || payment.date,
-      method || payment.method,
-      id,
-      userId
-    );
+    `).run(newOrderNo, newBrand, newAmount, newType, newDate, newMethod, id, userId);
 
-    logActivity(userId, 'update', 'payment', id, `更新账单: ${brand || payment.brand} ¥${amount || payment.amount}`);
+    logActivity(userId, 'update', 'payment', id, `更新账单: ${newBrand || '未知品牌'} ¥${newAmount}`);
 
     const updatedPayment = db.prepare('SELECT * FROM payments WHERE id = ?').get(id);
     res.json(updatedPayment);

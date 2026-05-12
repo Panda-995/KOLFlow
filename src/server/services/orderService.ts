@@ -125,6 +125,16 @@ export const updateOrderWithSync = (userId: string, orderId: string, updateData:
       .run(`商单任务: ${newTitle}`, newSubmitDate, newBrandName || null, brandId, orderId);
   }
 
+  // 同步关联账单金额
+  if (actualAmount !== undefined && actualAmount !== existingOrder.actualAmount) {
+    const existingPayment = db.prepare('SELECT id FROM payments WHERE orderNo = ? AND userId = ?').get(existingOrder.orderNo, userId) as any;
+    if (existingPayment) {
+      db.prepare('UPDATE payments SET amount = ?, brand = ? WHERE id = ? AND userId = ?')
+        .run(newActualAmount, newBrandName || existingOrder.brandName, existingPayment.id, userId);
+      logActivity(userId, 'sync_amount', 'payment', existingPayment.id, `商单金额同步: ${existingOrder.title} (¥${existingOrder.actualAmount} → ¥${newActualAmount})`);
+    }
+  }
+
   const updatedOrder = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as any;
   if (updatedOrder) {
     updatedOrder.platforms = safeJsonParse(updatedOrder.platforms, []);
