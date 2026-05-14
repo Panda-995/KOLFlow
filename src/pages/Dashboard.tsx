@@ -16,7 +16,7 @@ const safeParseDate = (dateStr: string | null | undefined): Date | null => {
 };
 
 export default function Dashboard() {
-  const { orders, todos, toggleTodo, payments } = useStore();
+  const { orders, todos, toggleTodo, payments, assets } = useStore();
   const { showToast } = useToast();
   const navigate = useNavigate();
 
@@ -45,14 +45,12 @@ export default function Dashboard() {
 
   // 使用 useMemo 缓存所有计算结果
   const paymentStats = useMemo(() => {
-    // 当月收入
     const monthlyIncome = payments.filter(p => {
       if (p.type !== 'settled') return false;
       const date = safeParseDate(p.date);
       return date && date.getMonth() === currentMonth && date.getFullYear() === currentYear;
     }).reduce((acc, p) => acc + p.amount, 0);
 
-    // 上月收入
     const lastMonthIncome = payments.filter(p => {
       if (p.type !== 'settled') return false;
       const date = safeParseDate(p.date);
@@ -61,8 +59,25 @@ export default function Dashboard() {
              date.getFullYear() === (currentMonth === 0 ? currentYear - 1 : currentYear);
     }).reduce((acc, p) => acc + p.amount, 0);
 
-    return { monthlyIncome, lastMonthIncome };
-  }, [payments, currentMonth, currentYear]);
+    const monthlyAssetIncome = assets.filter(a => {
+      if (a.saleStatus !== 'sold' || !a.soldDate) return false;
+      const date = safeParseDate(a.soldDate);
+      return date && date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+    }).reduce((acc, a) => acc + a.soldAmount, 0);
+
+    const lastMonthAssetIncome = assets.filter(a => {
+      if (a.saleStatus !== 'sold' || !a.soldDate) return false;
+      const date = safeParseDate(a.soldDate);
+      if (!date) return false;
+      return date.getMonth() === (currentMonth === 0 ? 11 : currentMonth - 1) &&
+             date.getFullYear() === (currentMonth === 0 ? currentYear - 1 : currentYear);
+    }).reduce((acc, a) => acc + a.soldAmount, 0);
+
+    return {
+      monthlyIncome: monthlyIncome + monthlyAssetIncome,
+      lastMonthIncome: lastMonthIncome + lastMonthAssetIncome
+    };
+  }, [payments, assets, currentMonth, currentYear]);
 
   const monthlyIncome = paymentStats.monthlyIncome;
   const lastMonthIncome = paymentStats.lastMonthIncome;
@@ -121,9 +136,17 @@ export default function Dashboard() {
       }
     });
 
+    assets.filter(a => a.saleStatus === 'sold' && a.soldDate && a.soldDate.startsWith(currentYear))
+      .forEach(a => {
+        const month = safeParseDate(a.soldDate!)?.getMonth();
+        if (month !== undefined && month !== null && !isNaN(month)) {
+          monthlyStats[month].income += a.soldAmount;
+        }
+      });
+
     const currentMonth = new Date().getMonth();
     return monthlyStats.slice(0, currentMonth + 1).length > 0 ? monthlyStats.slice(0, currentMonth + 1) : monthlyStats.slice(0, 1);
-  }, [payments]);
+  }, [payments, assets]);
 
   const quickActions = [
     { name: '新建商单', icon: Package, path: '/orders', color: 'bg-blue-500' },

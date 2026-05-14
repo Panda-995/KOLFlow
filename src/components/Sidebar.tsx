@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Package, Receipt, CheckSquare, Users, BarChart3, Settings, FileText, X, PanelLeftClose, PanelLeft } from 'lucide-react';
+import { LayoutDashboard, Package, Receipt, CheckSquare, Users, BarChart3, Settings, FileText, X, PanelLeftClose, PanelLeft, Archive } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useStore } from '../store/useStore';
 
@@ -9,6 +9,7 @@ const navItems = [
   { name: '账单', path: '/billing', icon: Receipt },
   { name: 'Todo', path: '/todos', icon: CheckSquare, shortcut: 'Ctrl+Alt+T' },
   { name: '品牌', path: '/brands', icon: Users, shortcut: 'Ctrl+Alt+B' },
+  { name: '资产库', path: '/assets', icon: Archive },
   { name: '统计', path: '/analytics', icon: BarChart3 },
   { name: '日志', path: '/logs', icon: FileText },
   { name: '设置', path: '/settings', icon: Settings, shortcut: 'Ctrl+Alt+S' },

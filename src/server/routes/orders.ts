@@ -4,7 +4,8 @@ import {
   createOrderWithTodo,
   updateOrderWithSync,
   deleteOrderWithRelated,
-  autoCreatePaymentIfCompleted
+  autoCreatePaymentIfCompleted,
+  autoCreateAssetIfExchange
 } from '../services/orderService.js';
 import { getUserId } from './utils/index.js';
 
@@ -29,7 +30,7 @@ router.get('/', (req, res) => {
 router.post('/', (req, res) => {
   try {
     const userId = getUserId(req);
-    const { title, type, actualAmount, brandName, platforms, acceptDate, submitDate } = req.body;
+    const { title, type, actualAmount, brandName, platforms, acceptDate, submitDate, productName, productValue } = req.body;
 
     const newOrder = createOrderWithTodo(userId, {
       title,
@@ -38,7 +39,9 @@ router.post('/', (req, res) => {
       brandName,
       platforms,
       acceptDate,
-      submitDate
+      submitDate,
+      productName,
+      productValue
     });
 
     res.json(newOrder);
@@ -54,7 +57,7 @@ router.put('/:id', (req, res) => {
   try {
     const userId = getUserId(req);
     const { id } = req.params;
-    const { status, title, type, actualAmount, brandName, platforms, acceptDate, submitDate } = req.body;
+    const { status, title, type, actualAmount, brandName, platforms, acceptDate, submitDate, productName, productValue } = req.body;
 
     const updatedOrder = updateOrderWithSync(userId, id, {
       status,
@@ -64,11 +67,16 @@ router.put('/:id', (req, res) => {
       brandName,
       platforms,
       acceptDate,
-      submitDate
+      submitDate,
+      productName,
+      productValue
     });
 
     // 商单完成时自动创建账单
     autoCreatePaymentIfCompleted(updatedOrder, userId);
+
+    // 置换商单完成时自动创建资产
+    autoCreateAssetIfExchange(updatedOrder, userId);
 
     res.json(updatedOrder);
   } catch (error) {

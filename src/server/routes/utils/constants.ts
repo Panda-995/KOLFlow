@@ -10,7 +10,9 @@ export const ORDER_TYPE_MAP: Record<string, string> = {
   '置换': 'product_exchange',
   '置换合作': 'product_exchange',
   '直发': 'direct',
-  '直发合作': 'direct'
+  '直发合作': 'direct',
+  'E卡': 'ecard',
+  'E卡合作': 'ecard'
 };
 
 // 商单状态映射

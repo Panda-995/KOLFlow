@@ -1,6 +1,6 @@
 // 商单类型
 export type OrderStatus = 'in_progress' | 'completed' | 'cancelled';
-export type OrderType = 'paid' | 'product_exchange' | 'direct';
+export type OrderType = 'paid' | 'product_exchange' | 'direct' | 'ecard';
 
 // 商单接口
 export interface Order {
@@ -14,6 +14,8 @@ export interface Order {
   platforms: string[];
   acceptDate: string;
   submitDate: string;
+  productName?: string;
+  productValue?: number;
 }
 
 // 待办接口
@@ -59,6 +61,21 @@ export interface Payment {
   type: 'received' | 'pending' | 'settled' | 'refunded';
   date: string;
   method: string;
+}
+
+// 资产库接口
+export interface Asset {
+  id: string;
+  orderId: string;
+  orderNo: string;
+  brandName: string;
+  productName: string;
+  productValue: number;
+  image?: string;
+  saleStatus: 'keep' | 'sold';
+  soldAmount: number;
+  soldDate?: string;
+  createdAt: string;
 }
 
 // 设置接口

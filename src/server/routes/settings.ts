@@ -31,7 +31,7 @@ router.get('/', (req, res) => {
     settings = db.prepare('SELECT * FROM settings WHERE userId = ?').get(userId);
   }
 
-  res.json({
+  return res.json({
     ...settings,
     orderReminder: Boolean(settings.orderReminder),
     weeklyReport: Boolean(settings.weeklyReport)
@@ -57,7 +57,7 @@ router.put('/', (req, res) => {
 
   const updatedSettings = db.prepare('SELECT * FROM settings WHERE userId = ?').get(userId) as any;
 
-  res.json({
+  return res.json({
     ...updatedSettings,
     orderReminder: Boolean(updatedSettings.orderReminder),
     weeklyReport: Boolean(updatedSettings.weeklyReport)
@@ -97,7 +97,7 @@ router.put('/security', async (req, res) => {
     db.prepare(`UPDATE users SET email = ? WHERE id = ?`).run(email, userId);
   }
 
-  res.json({ success: true });
+  return res.json({ success: true });
 });
 
 // 生成 API Key

@@ -41,10 +41,10 @@ router.get('/:id', (req, res) => {
     if (!brand) {
       return res.status(404).json({ error: '品牌不存在' });
     }
-    res.json(parseBrandContacts(brand));
+    return res.json(parseBrandContacts(brand));
   } catch (error) {
     console.error('获取品牌详情错误:', error instanceof Error ? error.message : error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: '获取品牌详情失败，请稍后重试',
       timestamp: new Date().toISOString()
     });
@@ -85,10 +85,10 @@ router.post('/', (req, res) => {
     logActivity(userId, 'create', 'brand', id, `创建品牌: ${name}`);
 
     const newBrand = db.prepare('SELECT * FROM brands WHERE id = ?').get(id);
-    res.json(parseBrandContacts(newBrand));
+    return res.json(parseBrandContacts(newBrand));
   } catch (error) {
     console.error('创建品牌错误:', error);
-    res.status(500).json({ error: '创建品牌失败，请稍后重试' });
+    return res.status(500).json({ error: '创建品牌失败，请稍后重试' });
   }
 });
 
@@ -125,10 +125,10 @@ router.put('/:id', (req, res) => {
     }
 
     const updatedBrand = db.prepare('SELECT * FROM brands WHERE id = ?').get(id);
-    res.json(parseBrandContacts(updatedBrand));
+    return res.json(parseBrandContacts(updatedBrand));
   } catch (error) {
     console.error('更新品牌错误:', error instanceof Error ? error.message : error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: '更新品牌失败，请稍后重试',
       timestamp: new Date().toISOString()
     });
@@ -163,11 +163,11 @@ router.delete('/:id', (req, res) => {
     });
 
     deleteBrand();
-    
-    res.json({ success: true });
+
+    return res.json({ success: true });
   } catch (error) {
     console.error('删除品牌错误:', error instanceof Error ? error.message : error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: '删除品牌失败，请稍后重试',
       timestamp: new Date().toISOString()
     });

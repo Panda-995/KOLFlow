@@ -8,6 +8,7 @@ import Brands from './pages/Brands';
 import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
 import Logs from './pages/Logs';
+import Assets from './pages/Assets';
 import Login from './pages/Login';
 import { useStore } from './store/useStore';
 import { ToastProvider } from './components/Toast';
@@ -77,6 +78,7 @@ export default function App() {
             <Route path="billing" element={<Billing />} />
             <Route path="todos" element={<Todos />} />
             <Route path="brands" element={<Brands />} />
+            <Route path="assets" element={<Assets />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="logs" element={<Logs />} />
             <Route path="settings" element={<Settings />} />

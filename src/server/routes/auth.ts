@@ -63,10 +63,10 @@ router.post('/register', async (req, res) => {
     logActivity(userId, 'register', 'user', userId, `新用户注册: ${email}`);
 
     const token = generateToken(userId, email);
-    res.json({ success: true, userId, email, token });
+    return res.json({ success: true, userId, email, token });
   } catch (error) {
     console.error('注册错误:', error);
-    res.status(500).json({ error: '注册失败，请稍后重试' });
+    return res.status(500).json({ error: '注册失败，请稍后重试' });
   }
 });
 
@@ -92,10 +92,10 @@ router.post('/login', async (req, res) => {
     logActivity(user.id, 'login', 'user', user.id, `用户登录: ${email}`);
 
     const token = generateToken(user.id, user.email);
-    res.json({ success: true, userId: user.id, email: user.email, token });
+    return res.json({ success: true, userId: user.id, email: user.email, token });
   } catch (error) {
     console.error('登录错误:', error);
-    res.status(500).json({ error: '登录失败，请稍后重试' });
+    return res.status(500).json({ error: '登录失败，请稍后重试' });
   }
 });
 
@@ -109,9 +109,9 @@ router.post('/verify', (req, res) => {
   const decoded = verifyToken(token);
   
   if (decoded) {
-    res.json({ valid: true, userId: decoded.userId, email: decoded.email });
+    return res.json({ valid: true, userId: decoded.userId, email: decoded.email });
   } else {
-    res.status(401).json({ valid: false, error: '令牌无效或已过期' });
+    return res.status(401).json({ valid: false, error: '令牌无效或已过期' });
   }
 });
 

@@ -7,7 +7,7 @@ import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { clsx } from 'clsx';
 
 export default function Layout() {
-  const { fetchOrders, fetchTodos, fetchBrands, fetchPayments, fetchSettings } = useStore();
+  const { fetchOrders, fetchTodos, fetchBrands, fetchPayments, fetchSettings, fetchAssets } = useStore();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -18,7 +18,8 @@ export default function Layout() {
     fetchBrands();
     fetchPayments();
     fetchSettings();
-  }, [fetchOrders, fetchTodos, fetchBrands, fetchPayments, fetchSettings]);
+    fetchAssets();
+  }, [fetchOrders, fetchTodos, fetchBrands, fetchPayments, fetchSettings, fetchAssets]);
 
   // 键盘快捷键（三组合键，避免冲突）
   useKeyboardShortcuts([

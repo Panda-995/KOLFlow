@@ -32,10 +32,10 @@ router.post('/', (req, res) => {
     logActivity(userId, 'comment', 'order', orderId, `添加评论: ${content.substring(0, 50)}...`);
 
     const newComment = db.prepare('SELECT * FROM comments WHERE id = ?').get(id);
-    res.json(newComment);
+    return res.json(newComment);
   } catch (error) {
     console.error('创建评论错误:', error);
-    res.status(500).json({ error: '创建评论失败，请稍后重试' });
+    return res.status(500).json({ error: '创建评论失败，请稍后重试' });
   }
 });
 

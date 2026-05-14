@@ -56,19 +56,21 @@ router.get('/export', (req, res) => {
     const settings = db.prepare('SELECT * FROM settings WHERE userId = ?').get(userId);
     const publishLinks = db.prepare('SELECT * FROM publish_links WHERE userId = ? ORDER BY createdAt DESC').all(userId);
     const comments = db.prepare('SELECT * FROM comments WHERE userId = ? ORDER BY createdAt DESC').all(userId);
+    const assets = db.prepare('SELECT * FROM assets WHERE userId = ? ORDER BY createdAt DESC').all(userId);
 
-    res.json({
+    return res.json({
       orders: orders.map((o: any) => ({ ...o, platforms: safeJsonParse(o.platforms, []) })),
       brands,
       payments,
       todos: todos.map((t: any) => ({ ...t, completed: Boolean(t.completed) })),
       settings,
       publishLinks,
-      comments
+      comments,
+      assets
     });
   } catch (error) {
     console.error('导出数据错误:', error);
-    res.status(500).json({ error: '导出数据失败，请稍后重试' });
+    return res.status(500).json({ error: '导出数据失败，请稍后重试' });
   }
 });
 
@@ -87,12 +89,13 @@ router.post('/clear', (req, res) => {
     db.prepare('DELETE FROM todos WHERE userId = ?').run(userId);
     db.prepare('DELETE FROM brands WHERE userId = ?').run(userId);
     db.prepare('DELETE FROM payments WHERE userId = ?').run(userId);
-    // 重新启用外键约束
+      db.prepare('DELETE FROM assets WHERE userId = ?').run(userId);
+      // 重新启用外键约束
     db.pragma('foreign_keys = ON');
-    res.json({ success: true });
+    return res.json({ success: true });
   } catch (error) {
     console.error('清空数据错误:', error);
-    res.status(500).json({ error: '清空数据失败，请稍后重试' });
+    return res.status(500).json({ error: '清空数据失败，请稍后重试' });
   }
 });
 
@@ -100,7 +103,7 @@ router.post('/clear', (req, res) => {
 router.post('/import', (req, res) => {
   try {
     const userId = getUserId(req);
-    const { orders, brands, payments, todos, settings: importedSettings, publishLinks, comments } = req.body;
+    const { orders, brands, payments, todos, settings: importedSettings, publishLinks, comments, assets } = req.body;
 
     // 使用事务确保数据一致性
     const importData = db.transaction(() => {
@@ -114,6 +117,7 @@ router.post('/import', (req, res) => {
       db.prepare('DELETE FROM todos WHERE userId = ?').run(userId);
       db.prepare('DELETE FROM brands WHERE userId = ?').run(userId);
       db.prepare('DELETE FROM payments WHERE userId = ?').run(userId);
+      db.prepare('DELETE FROM assets WHERE userId = ?').run(userId);
 
       // 导入品牌
       if (Array.isArray(brands)) {
@@ -136,8 +140,8 @@ router.post('/import', (req, res) => {
       // 导入商单
       if (Array.isArray(orders)) {
         const orderStmt = db.prepare(`
-          INSERT INTO orders (id, userId, orderNo, title, type, status, expectedAmount, actualAmount, brandName, platforms, acceptDate, submitDate, createdAt)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO orders (id, userId, orderNo, title, type, status, expectedAmount, actualAmount, brandName, platforms, acceptDate, submitDate, productName, productValue, createdAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         orders.forEach((order: any) => {
           const orderId = order.id || uuidv4();
@@ -146,6 +150,7 @@ router.post('/import', (req, res) => {
             orderId, userId, orderNo, order.title, order.type || 'paid', order.status || 'in_progress',
             order.expectedAmount || 0, order.actualAmount || 0, order.brandName || null,
             JSON.stringify(order.platforms || []), order.acceptDate || null, order.submitDate || null,
+            order.productName || null, order.productValue || 0,
             order.createdAt || new Date().toISOString()
           );
         });
@@ -178,6 +183,22 @@ router.post('/import', (req, res) => {
           paymentStmt.run(
             paymentId, userId, payment.orderNo || null, payment.brand || null, payment.amount || 0,
             payment.type || 'pending', payment.date || null, payment.method || null, payment.createdAt || new Date().toISOString()
+          );
+        });
+      }
+
+      // 导入资产
+      if (Array.isArray(assets)) {
+        const assetStmt = db.prepare(`
+          INSERT INTO assets (id, userId, orderId, orderNo, brandName, productName, productValue, image, saleStatus, soldAmount, soldDate, createdAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        assets.forEach((asset: any) => {
+          const assetId = asset.id || uuidv4();
+          assetStmt.run(
+            assetId, userId, asset.orderId || null, asset.orderNo || null, asset.brandName || null,
+            asset.productName || '未知产品', asset.productValue || 0, asset.image || null,
+            asset.saleStatus || 'keep', asset.soldAmount || 0, asset.soldDate || null, asset.createdAt || new Date().toISOString()
           );
         });
       }
@@ -273,9 +294,9 @@ router.post('/orders', (req, res) => {
         const orderNo = generateOrderNo();
 
         db.prepare(`
-          INSERT INTO orders (id, userId, orderNo, title, type, status, expectedAmount, actualAmount, brandName, platforms, acceptDate, submitDate)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(id, userId, orderNo, mappedRow.title.trim(), mappedRow.type, mappedRow.status, 0, mappedRow.actualAmount, mappedRow.brandName || null, JSON.stringify(mappedRow.platforms), mappedRow.acceptDate || null, mappedRow.submitDate || null);
+          INSERT INTO orders (id, userId, orderNo, title, type, status, expectedAmount, actualAmount, brandName, platforms, acceptDate, submitDate, productName, productValue)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(id, userId, orderNo, mappedRow.title.trim(), mappedRow.type, mappedRow.status, 0, mappedRow.actualAmount, mappedRow.brandName || null, JSON.stringify(mappedRow.platforms), mappedRow.acceptDate || null, mappedRow.submitDate || null, null, 0);
 
         results.success++;
       } catch (error) {
@@ -285,10 +306,10 @@ router.post('/orders', (req, res) => {
     });
 
     logActivity(userId, 'import', 'order', 'batch', `批量导入商单: 成功${results.success}条, 失败${results.failed}条`);
-    res.json(results);
+    return res.json(results);
   } catch (error) {
     console.error('批量导入商单错误:', error instanceof Error ? error.message : error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: '批量导入商单失败，请稍后重试',
       timestamp: new Date().toISOString()
     });
@@ -347,9 +368,9 @@ router.post('/orders/file', requireAuth, upload.single('file'), (req, res) => {
         const orderNo = generateOrderNo();
 
         db.prepare(`
-          INSERT INTO orders (id, userId, orderNo, title, type, status, expectedAmount, actualAmount, brandName, platforms, acceptDate, submitDate)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(id, userId, orderNo, mappedRow.title.trim(), mappedRow.type, mappedRow.status, 0, mappedRow.actualAmount, mappedRow.brandName || null, JSON.stringify(mappedRow.platforms), mappedRow.acceptDate || null, mappedRow.submitDate || null);
+          INSERT INTO orders (id, userId, orderNo, title, type, status, expectedAmount, actualAmount, brandName, platforms, acceptDate, submitDate, productName, productValue)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(id, userId, orderNo, mappedRow.title.trim(), mappedRow.type, mappedRow.status, 0, mappedRow.actualAmount, mappedRow.brandName || null, JSON.stringify(mappedRow.platforms), mappedRow.acceptDate || null, mappedRow.submitDate || null, null, 0);
 
         results.success++;
       } catch (error) {
@@ -359,10 +380,10 @@ router.post('/orders/file', requireAuth, upload.single('file'), (req, res) => {
     });
 
     logActivity(userId, 'import_file', 'order', 'batch', `文件导入商单: 成功${results.success}条, 失败${results.failed}条`);
-    res.json(results);
+    return res.json(results);
   } catch (error) {
     if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
-    res.status(500).json({ error: '文件解析失败，请检查文件格式' });
+    return res.status(500).json({ error: '文件解析失败，请检查文件格式' });
   }
 });
 

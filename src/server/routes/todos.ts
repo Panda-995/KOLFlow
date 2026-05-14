@@ -17,10 +17,10 @@ router.get('/', (req, res) => {
       WHERE t.userId = ?
       ORDER BY t.createdAt DESC
     `).all(userId);
-    res.json(todos.map((t: any) => ({ ...t, completed: Boolean(t.completed) })));
+    return res.json(todos.map((t: any) => ({ ...t, completed: Boolean(t.completed) })));
   } catch (error) {
     console.error('获取待办列表错误:', error instanceof Error ? error.message : error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: '获取待办列表失败，请稍后重试',
       timestamp: new Date().toISOString()
     });
@@ -45,10 +45,10 @@ router.post('/', (req, res) => {
 
     const newTodo = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as any;
     newTodo.completed = Boolean(newTodo.completed);
-    res.json(newTodo);
+    return res.json(newTodo);
   } catch (error) {
     console.error('创建待办错误:', error);
-    res.status(500).json({ error: '创建待办失败，请稍后重试' });
+    return res.status(500).json({ error: '创建待办失败，请稍后重试' });
   }
 });
 
@@ -96,10 +96,10 @@ router.put('/:id/update', (req, res) => {
 
     const updated = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as any;
     updated.completed = Boolean(updated.completed);
-    res.json(updated);
+    return res.json(updated);
   } catch (error) {
     console.error('更新待办错误:', error instanceof Error ? error.message : error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: '更新待办失败，请稍后重试',
       timestamp: new Date().toISOString()
     });
@@ -139,13 +139,13 @@ router.put('/:id/toggle', (req, res) => {
 
       const updatedTodo = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as any;
       updatedTodo.completed = Boolean(updatedTodo.completed);
-      res.json(updatedTodo);
+      return res.json(updatedTodo);
     } else {
-      res.status(404).json({ error: '未找到待办事项' });
+      return res.status(404).json({ error: '未找到待办事项' });
     }
   } catch (error) {
     console.error('切换待办状态错误:', error instanceof Error ? error.message : error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: '切换待办状态失败，请稍后重试',
       timestamp: new Date().toISOString()
     });
@@ -162,10 +162,10 @@ router.delete('/:id', (req, res) => {
       return res.status(404).json({ error: '待办事项不存在' });
     }
     db.prepare('DELETE FROM todos WHERE id = ? AND userId = ?').run(id, userId);
-    res.json({ success: true });
+    return res.json({ success: true });
   } catch (error) {
     console.error('删除待办错误:', error instanceof Error ? error.message : error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: '删除待办失败，请稍后重试',
       timestamp: new Date().toISOString()
     });

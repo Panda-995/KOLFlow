@@ -36,8 +36,15 @@ router.get('/:type', (req, res) => {
 
   const totalOrders = orders.length;
   const completedOrders = orders.filter(o => o.status === 'completed').length;
-  const totalIncome = payments.filter(p => p.type === 'settled').reduce((sum, p) => sum + p.amount, 0);
+  const paymentIncome = payments.filter(p => p.type === 'settled').reduce((sum, p) => sum + p.amount, 0);
   const pendingIncome = payments.filter(p => p.type === 'pending').reduce((sum, p) => sum + p.amount, 0);
+
+  const soldAssets = db.prepare(`
+    SELECT * FROM assets
+    WHERE userId = ? AND saleStatus = 'sold' AND soldDate >= ? AND soldDate <= ?
+  `).all(userId, startDateStr, endDateStr) as any[];
+  const assetIncome = soldAssets.reduce((sum, a) => sum + (a.soldAmount || 0), 0);
+  const totalIncome = paymentIncome + assetIncome;
 
   const brandStats: Record<string, { orders: number; income: number }> = {};
   orders.forEach(o => {
@@ -49,6 +56,15 @@ router.get('/:type', (req, res) => {
       if (o.status === 'completed') {
         brandStats[o.brandName].income += o.actualAmount;
       }
+    }
+  });
+
+  soldAssets.forEach(a => {
+    if (a.brandName && a.soldAmount > 0) {
+      if (!brandStats[a.brandName]) {
+        brandStats[a.brandName] = { orders: 0, income: 0 };
+      }
+      brandStats[a.brandName].income += a.soldAmount;
     }
   });
 

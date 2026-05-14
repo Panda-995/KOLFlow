@@ -60,10 +60,10 @@ router.get('/orders', async (req, res) => {
   try {
     const userId = getUserId(req);
     const orders = getOrdersByUserId(userId);
-    res.json(orders);
+    return res.json(orders);
   } catch (error) {
     console.error('externalApi GET /orders失败:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: '获取商单失败',
       timestamp: new Date().toISOString()
     });
@@ -85,10 +85,10 @@ router.post('/orders', (req, res) => {
       submitDate
     });
 
-    res.json(newOrder);
+    return res.json(newOrder);
   } catch (error) {
     const message = error instanceof Error ? error.message : '创建商单失败';
-    res.status(400).json({ error: message });
+    return res.status(400).json({ error: message });
   }
 });
 
@@ -111,10 +111,10 @@ router.put('/orders/:id', (req, res) => {
 
     autoCreatePaymentIfCompleted(updatedOrder, userId);
 
-    res.json(updatedOrder);
+    return res.json(updatedOrder);
   } catch (error) {
     const message = error instanceof Error ? error.message : '更新商单失败';
-    res.status(400).json({ error: message });
+    return res.status(400).json({ error: message });
   }
 });
 
@@ -124,10 +124,10 @@ router.delete('/orders/:id', (req, res) => {
     const { id } = req.params;
 
     const result = deleteOrderWithRelated(userId, id);
-    res.json(result);
+    return res.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : '删除商单失败';
-    res.status(400).json({ error: message });
+    return res.status(400).json({ error: message });
   }
 });
 
@@ -137,10 +137,10 @@ router.get('/todos', async (req, res) => {
   try {
     const userId = req.userId;
     const todos = db.prepare('SELECT * FROM todos WHERE userId = ? ORDER BY createdAt DESC').all(userId);
-    res.json(todos.map((t: any) => ({ ...t, completed: Boolean(t.completed) })));
+    return res.json(todos.map((t: any) => ({ ...t, completed: Boolean(t.completed) })));
   } catch (error) {
     console.error('externalApi GET /todos失败:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: '获取待办失败',
       timestamp: new Date().toISOString()
     });
@@ -159,10 +159,10 @@ router.post('/todos', async (req, res) => {
 
     const newTodo = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as any;
     newTodo.completed = Boolean(newTodo.completed);
-    res.json(newTodo);
+    return res.json(newTodo);
   } catch (error) {
     console.error('externalApi POST /todos失败:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: '创建待办失败',
       timestamp: new Date().toISOString()
     });
@@ -193,10 +193,10 @@ router.put('/todos/:id', async (req, res) => {
 
     const updatedTodo = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as any;
     updatedTodo.completed = Boolean(updatedTodo.completed);
-    res.json(updatedTodo);
+    return res.json(updatedTodo);
   } catch (error) {
     console.error('externalApi PUT /todos/:id失败:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: '更新待办失败',
       timestamp: new Date().toISOString()
     });
@@ -209,10 +209,10 @@ router.get('/payments', async (req, res) => {
   try {
     const userId = req.userId;
     const payments = db.prepare('SELECT * FROM payments WHERE userId = ? ORDER BY createdAt DESC').all(userId);
-    res.json(payments);
+    return res.json(payments);
   } catch (error) {
     console.error('externalApi GET /payments失败:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: '获取款项失败',
       timestamp: new Date().toISOString()
     });
@@ -231,10 +231,10 @@ router.post('/payments', async (req, res) => {
     `).run(id, userId, orderNo || null, brand || '', amount || 0, type || 'pending', date || '', method || '');
 
     const newPayment = db.prepare('SELECT * FROM payments WHERE id = ?').get(id) as any;
-    res.json(newPayment);
+    return res.json(newPayment);
   } catch (error) {
     console.error('externalApi POST /payments失败:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: '创建款项失败',
       timestamp: new Date().toISOString()
     });
@@ -258,10 +258,10 @@ router.put('/payments/:id', async (req, res) => {
     `).run(orderNo || existing.orderNo, brand || existing.brand, amount || existing.amount, type || existing.type, date || existing.date, method || existing.method, id);
 
     const updated = db.prepare('SELECT * FROM payments WHERE id = ?').get(id) as any;
-    res.json(updated);
+    return res.json(updated);
   } catch (error) {
     console.error('externalApi PUT /payments/:id失败:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: '更新款项失败',
       timestamp: new Date().toISOString()
     });
@@ -273,10 +273,10 @@ router.delete('/payments/:id', async (req, res) => {
     const userId = req.userId;
     const { id } = req.params;
     db.prepare('DELETE FROM payments WHERE id = ? AND userId = ?').run(id, userId);
-    res.json({ success: true });
+    return res.json({ success: true });
   } catch (error) {
     console.error('externalApi DELETE /payments/:id失败:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: '删除款项失败',
       timestamp: new Date().toISOString()
     });
@@ -289,10 +289,10 @@ router.get('/brands', async (req, res) => {
   try {
     const userId = req.userId;
     const brands = db.prepare('SELECT * FROM brands WHERE userId = ? ORDER BY createdAt DESC').all(userId);
-    res.json(brands);
+    return res.json(brands);
   } catch (error) {
     console.error('externalApi GET /brands失败:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: '获取品牌失败',
       timestamp: new Date().toISOString()
     });
@@ -316,10 +316,10 @@ router.post('/brands', async (req, res) => {
 
     const newBrand = db.prepare('SELECT * FROM brands WHERE id = ?').get(id) as any;
     newBrand.contacts = newBrand.contacts ? JSON.parse(newBrand.contacts) : [];
-    res.json(newBrand);
+    return res.json(newBrand);
   } catch (error) {
     console.error('externalApi POST /brands失败:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: '创建品牌失败',
       timestamp: new Date().toISOString()
     });
@@ -355,10 +355,10 @@ router.put('/brands/:id', async (req, res) => {
 
     const updated = db.prepare('SELECT * FROM brands WHERE id = ?').get(id) as any;
     updated.contacts = updated.contacts ? JSON.parse(updated.contacts) : [];
-    res.json(updated);
+    return res.json(updated);
   } catch (error) {
     console.error('externalApi PUT /brands/:id失败:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: '更新品牌失败',
       timestamp: new Date().toISOString()
     });
@@ -384,10 +384,10 @@ router.delete('/brands/:id', async (req, res) => {
     });
 
     deleteBrand();
-    res.json({ success: true });
+    return res.json({ success: true });
   } catch (error) {
     console.error('externalApi DELETE /brands/:id失败:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: '删除品牌失败',
       timestamp: new Date().toISOString()
     });
@@ -402,16 +402,19 @@ router.get('/statistics', async (req, res) => {
     const orders = db.prepare('SELECT * FROM orders WHERE userId = ?').all(userId) as any[];
     const payments = db.prepare('SELECT * FROM payments WHERE userId = ?').all(userId) as any[];
     const todos = db.prepare('SELECT * FROM todos WHERE userId = ?').all(userId) as any[];
+    const assets = db.prepare("SELECT * FROM assets WHERE userId = ? AND saleStatus = 'sold'").all(userId) as any[];
 
     const totalOrders = orders.length;
     const completedOrders = orders.filter(o => o.status === 'completed').length;
 
-    const totalIncome = payments.filter(p => p.type === 'settled').reduce((sum, p) => sum + p.amount, 0);
+    const paymentIncome = payments.filter(p => p.type === 'settled').reduce((sum, p) => sum + p.amount, 0);
+    const assetIncome = assets.reduce((sum, a) => sum + (a.soldAmount || 0), 0);
+    const totalIncome = paymentIncome + assetIncome;
     const pendingIncome = payments.filter(p => p.type === 'pending').reduce((sum, p) => sum + p.amount, 0);
 
     const pendingTodos = todos.filter(t => !t.completed).length;
 
-    res.json({
+    return res.json({
       orders: {
         total: totalOrders,
         completed: completedOrders,
@@ -428,7 +431,7 @@ router.get('/statistics', async (req, res) => {
     });
   } catch (error) {
     console.error('externalApi GET /statistics失败:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: '获取统计失败',
       timestamp: new Date().toISOString()
     });
@@ -442,10 +445,10 @@ router.get('/publish-links/:orderId', async (req, res) => {
     const userId = req.userId;
     const { orderId } = req.params;
     const links = db.prepare('SELECT * FROM publish_links WHERE orderId = ? AND userId = ? ORDER BY createdAt DESC').all(orderId, userId);
-    res.json(links);
+    return res.json(links);
   } catch (error) {
     console.error('externalApi GET /publish-links/:orderId失败:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: '获取发布链接失败',
       timestamp: new Date().toISOString()
     });
@@ -464,10 +467,10 @@ router.post('/publish-links', async (req, res) => {
     `).run(id, orderId, userId, platform || '其他', url);
 
     const newLink = db.prepare('SELECT * FROM publish_links WHERE id = ?').get(id);
-    res.json(newLink);
+    return res.json(newLink);
   } catch (error) {
     console.error('externalApi POST /publish-links失败:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: '创建发布链接失败',
       timestamp: new Date().toISOString()
     });
@@ -479,10 +482,10 @@ router.delete('/publish-links/:id', async (req, res) => {
     const userId = req.userId;
     const { id } = req.params;
     db.prepare('DELETE FROM publish_links WHERE id = ? AND userId = ?').run(id, userId);
-    res.json({ success: true });
+    return res.json({ success: true });
   } catch (error) {
     console.error('externalApi DELETE /publish-links/:id失败:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: '删除发布链接失败',
       timestamp: new Date().toISOString()
     });
@@ -498,7 +501,7 @@ router.get('/settings', async (req, res) => {
     if (!settings) {
       return res.json({ displayName: '博主账号', email: '', bio: '' });
     }
-    res.json({
+    return res.json({
       displayName: settings.displayName,
       email: settings.email,
       bio: settings.bio,
@@ -507,7 +510,7 @@ router.get('/settings', async (req, res) => {
     });
   } catch (error) {
     console.error('externalApi GET /settings失败:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: '获取设置失败',
       timestamp: new Date().toISOString()
     });
@@ -521,10 +524,10 @@ router.get('/logs', async (req, res) => {
     const userId = req.userId;
     const limit = parseInt(req.query.limit as string) || 100;
     const logs = db.prepare('SELECT * FROM activity_logs WHERE userId = ? ORDER BY createdAt DESC LIMIT ?').all(userId, limit);
-    res.json(logs);
+    return res.json(logs);
   } catch (error) {
     console.error('externalApi GET /logs失败:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: '获取日志失败',
       timestamp: new Date().toISOString()
     });
@@ -544,7 +547,7 @@ router.get('/export', async (req, res) => {
     const publishLinks = db.prepare('SELECT * FROM publish_links WHERE userId = ? ORDER BY createdAt DESC').all(userId);
     const comments = db.prepare('SELECT * FROM comments WHERE userId = ? ORDER BY createdAt DESC').all(userId);
 
-    res.json({
+    return res.json({
       orders: orders.map(o => ({ ...o, platforms: safeJsonParse(o.platforms, []) })),
       brands,
       payments,
@@ -559,7 +562,7 @@ router.get('/export', async (req, res) => {
     });
   } catch (error) {
     console.error('externalApi GET /export失败:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: '导出数据失败',
       timestamp: new Date().toISOString()
     });

@@ -55,6 +55,8 @@ db.exec(`
     deadline TEXT,
     acceptDate TEXT,
     submitDate TEXT,
+    productName TEXT,
+    productValue REAL DEFAULT 0,
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (userId) REFERENCES users(id)
   );
@@ -79,6 +81,22 @@ db.exec(`
     type TEXT DEFAULT 'pending',
     date TEXT,
     method TEXT,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (userId) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS assets (
+    id TEXT PRIMARY KEY,
+    userId TEXT NOT NULL,
+    orderId TEXT NOT NULL,
+    orderNo TEXT,
+    brandName TEXT,
+    productName TEXT NOT NULL,
+    productValue REAL DEFAULT 0,
+    image TEXT,
+    saleStatus TEXT DEFAULT 'keep',
+    soldAmount REAL DEFAULT 0,
+    soldDate TEXT,
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (userId) REFERENCES users(id)
   );
@@ -262,6 +280,27 @@ if (!brandColumnNames.includes('contacts')) {
     };
     updateStmt.run(JSON.stringify([contactEntry]), brand.id);
   }
+}
+
+// Ensure orders has productName and productValue columns
+if (!orderColumnNames.includes('productName')) {
+  db.exec('ALTER TABLE orders ADD COLUMN productName TEXT;');
+}
+if (!orderColumnNames.includes('productValue')) {
+  db.exec('ALTER TABLE orders ADD COLUMN productValue REAL DEFAULT 0;');
+}
+
+// Ensure assets has saleStatus and soldAmount columns
+const assetColumns = db.prepare("PRAGMA table_info(assets)").all() as any[];
+const assetColumnNames = assetColumns.map((c: any) => c.name);
+if (!assetColumnNames.includes('saleStatus')) {
+  db.exec("ALTER TABLE assets ADD COLUMN saleStatus TEXT DEFAULT 'keep';");
+}
+if (!assetColumnNames.includes('soldAmount')) {
+  db.exec('ALTER TABLE assets ADD COLUMN soldAmount REAL DEFAULT 0;');
+}
+if (!assetColumnNames.includes('soldDate')) {
+  db.exec('ALTER TABLE assets ADD COLUMN soldDate TEXT;');
 }
 
 // ========== 性能优化：创建索引 ==========

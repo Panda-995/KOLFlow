@@ -11,10 +11,10 @@ router.get('/', (req, res) => {
   try {
     const userId = getUserId(req);
     const payments = db.prepare('SELECT * FROM payments WHERE userId = ? ORDER BY createdAt DESC').all(userId);
-    res.json(payments);
+    return res.json(payments);
   } catch (error) {
     console.error('获取账单列表错误:', error instanceof Error ? error.message : error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: '获取账单列表失败，请稍后重试',
       timestamp: new Date().toISOString()
     });
@@ -43,10 +43,10 @@ router.post('/', (req, res) => {
     logActivity(userId, 'create', 'payment', id, `创建账单: ${brand} ¥${amount}`);
 
     const newPayment = db.prepare('SELECT * FROM payments WHERE id = ?').get(id);
-    res.json(newPayment);
+    return res.json(newPayment);
   } catch (error) {
     console.error('创建账单错误:', error);
-    res.status(500).json({ error: '创建账单失败，请稍后重试' });
+    return res.status(500).json({ error: '创建账单失败，请稍后重试' });
   }
 });
 
@@ -71,10 +71,10 @@ router.put('/:id/settle', (req, res) => {
     logActivity(userId, 'settle', 'payment', id, `账单结算: ${payment.brand} ¥${payment.amount} (${payment.type} → ${newType})`);
 
     const updatedPayment = db.prepare('SELECT * FROM payments WHERE id = ?').get(id);
-    res.json(updatedPayment);
+    return res.json(updatedPayment);
   } catch (error) {
     console.error('结算账单错误:', error instanceof Error ? error.message : error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: '结算账单失败，请稍后重试',
       timestamp: new Date().toISOString()
     });
@@ -113,10 +113,10 @@ router.put('/:id', (req, res) => {
     logActivity(userId, 'update', 'payment', id, `更新账单: ${newBrand || '未知品牌'} ¥${newAmount}`);
 
     const updatedPayment = db.prepare('SELECT * FROM payments WHERE id = ?').get(id);
-    res.json(updatedPayment);
+    return res.json(updatedPayment);
   } catch (error) {
     console.error('更新账单错误:', error instanceof Error ? error.message : error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: '更新账单失败，请稍后重试',
       timestamp: new Date().toISOString()
     });
@@ -136,10 +136,10 @@ router.delete('/:id', (req, res) => {
 
     logActivity(userId, 'delete', 'payment', id, `删除账单: ${payment.brand} ¥${payment.amount}`);
     db.prepare('DELETE FROM payments WHERE id = ? AND userId = ?').run(id, userId);
-    res.json({ success: true });
+    return res.json({ success: true });
   } catch (error) {
     console.error('删除账单错误:', error instanceof Error ? error.message : error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: '删除账单失败，请稍后重试',
       timestamp: new Date().toISOString()
     });

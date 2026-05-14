@@ -23,7 +23,7 @@ import { useToast } from '../components/Toast';
 import { clsx } from 'clsx';
 
 export default function Brands() {
-  const { brands, addBrand, updateBrand, deleteBrand, orders, payments, todos, fetchBrands, fetchTodos, fetchOrders, fetchPayments } = useStore();
+  const { brands, addBrand, updateBrand, deleteBrand, orders, payments, todos, assets, fetchBrands, fetchTodos, fetchOrders, fetchPayments, fetchAssets } = useStore();
   const { showToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [industryFilter, setIndustryFilter] = useState('all');
@@ -43,7 +43,8 @@ export default function Brands() {
     fetchTodos();
     fetchOrders();
     fetchPayments();
-  }, [fetchBrands, fetchTodos, fetchOrders, fetchPayments]);
+    fetchAssets();
+  }, [fetchBrands, fetchTodos, fetchOrders, fetchPayments, fetchAssets]);
   const [formData, setFormData] = useState({
     name: '',
     industry: '',
@@ -104,6 +105,13 @@ export default function Brands() {
       }
     });
 
+    // 统计已出资产收益
+    assets.forEach(a => {
+      if (a.saleStatus === 'sold' && a.soldAmount > 0 && a.brandName && stats[a.brandName]) {
+        stats[a.brandName].totalIncome += a.soldAmount;
+      }
+    });
+
     // 计算平均客单价
     Object.keys(stats).forEach(name => {
       if (stats[name].totalOrders > 0) {
@@ -112,7 +120,7 @@ export default function Brands() {
     });
 
     return stats;
-  }, [brands, orders, payments]);
+  }, [brands, orders, payments, assets]);
 
   const handleOpenModal = (brand?: Brand) => {
     if (brand) {

@@ -57,10 +57,10 @@ router.get('/:orderId', (req, res) => {
     const userId = getUserId(req);
     const { orderId } = req.params;
     const links = db.prepare('SELECT * FROM publish_links WHERE orderId = ? AND userId = ? ORDER BY createdAt DESC').all(orderId, userId);
-    res.json(links);
+    return res.json(links);
   } catch (error) {
     console.error('获取发布链接错误:', error instanceof Error ? error.message : error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: '获取发布链接失败，请稍后重试',
       timestamp: new Date().toISOString()
     });
@@ -124,10 +124,10 @@ router.post('/', (req, res) => {
     logActivity(userId, 'create', 'publish_link', id, `添加发布链接: ${finalPlatform}`);
 
     const newLink = db.prepare('SELECT * FROM publish_links WHERE id = ?').get(id);
-    res.json(newLink);
+    return res.json(newLink);
   } catch (error) {
     console.error('创建发布链接错误:', error);
-    res.status(500).json({ error: '创建发布链接失败，请稍后重试' });
+    return res.status(500).json({ error: '创建发布链接失败，请稍后重试' });
   }
 });
 
@@ -206,7 +206,7 @@ router.post('/batch', (req, res) => {
       logActivity(userId, 'batch_create', 'publish_link', orderId, `批量添加 ${createdLinks.length} 个发布链接`);
     }
 
-    res.json({ 
+    return res.json({ 
       success: true, 
       created: createdLinks.length, 
       links: createdLinks,
@@ -214,7 +214,7 @@ router.post('/batch', (req, res) => {
     });
   } catch (error) {
     console.error('批量创建发布链接错误:', error);
-    res.status(500).json({ error: '批量创建发布链接失败，请稍后重试' });
+    return res.status(500).json({ error: '批量创建发布链接失败，请稍后重试' });
   }
 });
 
@@ -260,10 +260,10 @@ router.put('/:id', (req, res) => {
     logActivity(userId, 'update', 'publish_link', id, `更新发布链接: ${newPlatform}`);
 
     const updatedLink = db.prepare('SELECT * FROM publish_links WHERE id = ?').get(id);
-    res.json(updatedLink);
+    return res.json(updatedLink);
   } catch (error) {
     console.error('更新发布链接错误:', error instanceof Error ? error.message : error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: '更新发布链接失败，请稍后重试',
       timestamp: new Date().toISOString()
     });
@@ -281,10 +281,10 @@ router.delete('/:id', (req, res) => {
     }
 
     db.prepare('DELETE FROM publish_links WHERE id = ? AND userId = ?').run(id, userId);
-    res.json({ success: true });
+    return res.json({ success: true });
   } catch (error) {
     console.error('删除发布链接错误:', error instanceof Error ? error.message : error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: '删除发布链接失败，请稍后重试',
       timestamp: new Date().toISOString()
     });

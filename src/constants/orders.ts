@@ -8,6 +8,7 @@ export const ORDER_TYPE_MAP = {
   paid: { label: '付费', icon: '💵' },
   product_exchange: { label: '置换', icon: '🎁' },
   direct: { label: '直发', icon: '🚀' },
+  ecard: { label: 'E卡', icon: '💳' },
 };
 
 export const PLATFORM_ICONS: Record<string, string> = {

@@ -36,6 +36,7 @@
 | ✅ Todo & Calendar | ✅ 待办/日历 |
 | 💰 Billing | 💰 账单管理 |
 | 🏢 Brand Management | 🏢 品牌管理 |
+| 🎁 Asset Library | 🎁 资产库 |
 | 📈 Analytics | 📈 数据统计 |
 | 🔐 API Key Management | 🔐 API Key 管理 |
 | 🎨 Themes | 🎨 主题外观 |
@@ -45,8 +46,15 @@
 | Action | 操作 | Effect | 效果 |
 |--------|------|--------|------|
 | Create Order | 创建商单 | Auto-create Todo | 自动创建待办 |
-| Complete Order | 商单完成 | Auto-create Bill | 自动创建账单 |
+| Complete Order (Paid/Direct) | 商单完成（付费/直发） | Auto-create Bill | 自动创建账单 |
+| Complete Order (Exchange) | 商单完成（置换） | Auto-create Asset | 自动创建资产 |
+| Complete Order (E-card) | 商单完成（E卡） | Auto-create Asset with E-card label | 自动创建E卡资产 |
+| Change Type: Paid → Exchange/E-card | 类型变更：付费 → 置换/E卡 | Delete Bill, create Asset if completed | 删除账单，完成时创建资产 |
+| Change Type: Exchange/E-card → Paid | 类型变更：置换/E卡 → 付费 | Delete Asset, create Bill if completed | 删除资产，完成时创建账单 |
+| Change Type: Exchange ↔ E-card | 类型变更：置换 ↔ E卡 | Update Asset name | 更新资产名称 |
+| Delete Order | 删除商单 | Delete related Bill + Asset + Todo | 删除关联账单、资产、待办 |
 | Delete Brand | 删除品牌 | Clear brand info | 品牌信息置空 |
+| Mark Asset as Sold | 资产标记已出 | Update brand income, reflect in dashboard/analytics | 更新品牌收入，计入仪表盘和统计 |
 | Complete All Todos | 待办全部完成 | Mark order complete | 关联商单标记完成 |
 
 ---
@@ -158,6 +166,14 @@ GET /api/external/orders?token=<API_KEY>
 GET /api/external/statistics?token=<API_KEY>
 ```
 
+### Assets API | 资产 API
+
+```bash
+GET    /api/assets              # 获取所有资产
+PUT    /api/assets/:id          # 更新资产（名称、价值、售卖状态、图片）
+DELETE /api/assets/:id          # 删除资产
+```
+
 ---
 
 ## Tech Stack | 技术栈
@@ -174,6 +190,25 @@ GET /api/external/statistics?token=<API_KEY>
 ---
 
 ## 📝 更新日志 | Changelog
+
+### 2026-05-15
+
+- **资产收入统计**: 资产库已出金额全面计入收入统计，仪表盘和统计页面的总收入、月度趋势、品牌排行均包含资产已出收入
+- **资产总价值优化**: 资产库总价值计算改为自留资产按原价值、已出资产按实际售出金额分别统计
+- **数据联动完善**: 资产标记为"已出"后自动更新品牌总收入，确保品牌维度的收入数据完整
+- **品牌页修复**: 修复品牌统计未监听资产数据变化导致收入不实时更新的问题
+- **统计页修复**: 修复平均客单价计算包含资产收入导致虚高的问题，修复全年模式环比对比错误
+- **资产删除修复**: 删除已出资产时自动扣减品牌收入，保持数据一致性
+
+### 2026-05-14
+
+- **资产库**: 新增资产库模块，管理置换合作和E卡合作获得的产品资产
+- **售卖状态追踪**: 资产支持标记"自留"或"已出"，已出可填写已出金额
+- **E卡合作类型**: 商单新增E卡合作类型，按面值管理，完成时自动计入资产库
+- **置换产品管理**: 置换类型商单支持填写产品名称和产品价值
+- **类型变更数据同步**: 商单类型变更时自动同步关联数据（账单/资产），确保数据一致性
+- **E卡资产展示**: 资产库中E卡与置换产品差异化展示，E卡使用京东E卡专属图片
+- **导入导出兼容**: 全面兼容老版本数据导入导出，新增字段均有默认值
 
 ### 2026-05-12
 
@@ -205,8 +240,8 @@ GET /api/external/statistics?token=<API_KEY>
 
 ### 更早版本
 
-- **核心功能**: 仪表盘、商单管理、待办日历、账单管理、品牌管理、数据统计
-- **数据联动**: 创建商单自动生成待办、商单完成自动创建账单、删除品牌自动清理关联数据
+- **核心功能**: 仪表盘、商单管理、待办日历、账单管理、品牌管理、资产库、数据统计
+- **数据联动**: 创建商单自动生成待办、商单完成自动创建账单/资产、类型变更双向同步、删除品牌自动清理关联数据
 - **API 系统**: 内部 RESTful API + 外部 API Key 鉴权体系
 - **主题外观**: 支持亮色/暗色主题切换
 - **剪贴板功能**: 修复复制到剪贴板兼容性问题

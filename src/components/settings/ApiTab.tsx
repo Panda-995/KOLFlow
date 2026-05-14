@@ -49,7 +49,7 @@ export function ApiTab({
   apiKeyConfirm,
   setApiKeyConfirm,
   confirmGenerateApiKey,
-  copyCurlExample, 
+  copyCurlExample: _copyCurlExample, 
   copyFullConfig, 
   copyToClipboard 
 }: ApiTabProps) {

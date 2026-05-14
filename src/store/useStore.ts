@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import type { Order, OrderStatus, OrderType, Todo, Brand, Payment, Settings, ActivityLog, Comment, PublishLink } from '../types';
+import type { Order, OrderStatus, OrderType, Todo, Brand, Payment, Settings, ActivityLog, Comment, PublishLink, Asset } from '../types';
 
-export type { Order, OrderStatus, OrderType, Todo, Brand, Payment, Settings, ActivityLog, Comment, PublishLink };
+export type { Order, OrderStatus, OrderType, Todo, Brand, Payment, Settings, ActivityLog, Comment, PublishLink, Asset };
 
 const getToken = (): string | null => {
   return localStorage.getItem('token');
@@ -79,6 +79,7 @@ interface AppState {
   activityLogs: ActivityLog[];
   comments: Comment[];
   publishLinks: PublishLink[];
+  assets: Asset[];
   darkMode: boolean;
 
   setAuthenticated: (value: boolean) => void;
@@ -130,6 +131,10 @@ interface AppState {
   updatePublishLink: (id: string, platform: string, url: string) => Promise<void>;
   deletePublishLink: (id: string) => Promise<void>;
 
+  fetchAssets: () => Promise<void>;
+  updateAsset: (id: string, asset: Partial<Asset>) => Promise<void>;
+  deleteAsset: (id: string) => Promise<void>;
+
   toggleDarkMode: () => void;
   setDarkMode: (value: boolean) => void;
   showToast: (message: string, type: 'success' | 'error' | 'info') => void;
@@ -152,6 +157,7 @@ export const useStore = create<AppState>((set, get) => ({
   activityLogs: [],
   comments: [],
   publishLinks: [],
+  assets: [],
   darkMode: localStorage.getItem('darkMode') === 'true',
 
   dismissNotification: (id) => set((state) => {
@@ -338,8 +344,10 @@ export const useStore = create<AppState>((set, get) => ({
       if (updatedOrder.status === 'completed') {
         invalidateCache('todos');
         invalidateCache('payments');
+        invalidateCache('assets');
         await get().fetchTodos();
         await get().fetchPayments();
+        await get().fetchAssets();
       }
 
       set((state) => ({ orders: state.orders.map(o => o.id === id ? updatedOrder : o) }));
@@ -367,8 +375,10 @@ export const useStore = create<AppState>((set, get) => ({
       if (updatedOrder.status === 'completed') {
         invalidateCache('todos');
         invalidateCache('payments');
+        invalidateCache('assets');
         await get().fetchTodos();
         await get().fetchPayments();
+        await get().fetchAssets();
       }
 
       set((state) => ({ orders: state.orders.map(o => o.id === id ? updatedOrder : o) }));
@@ -389,10 +399,12 @@ export const useStore = create<AppState>((set, get) => ({
       invalidateCache('orders');
       invalidateCache('todos');
       invalidateCache('payments');
+      invalidateCache('assets');
       set((state) => {
         const filtered = state.orders.filter(o => o.id !== id);
         get().fetchTodos();
         get().fetchPayments();
+        get().fetchAssets();
         return { orders: filtered };
       });
       get().showToast('商单删除成功', 'success');
@@ -715,7 +727,7 @@ export const useStore = create<AppState>((set, get) => ({
         throw new Error('清空数据失败');
       }
       invalidateAllCache();
-      set({ orders: [], todos: [], brands: [], payments: [], activityLogs: [], comments: [], publishLinks: [] });
+      set({ orders: [], todos: [], brands: [], payments: [], assets: [], activityLogs: [], comments: [], publishLinks: [] });
       get().showToast('数据已清空', 'success');
     } catch (error) {
       console.error('clearData失败:', error instanceof Error ? error.message : error);
@@ -743,6 +755,7 @@ export const useStore = create<AppState>((set, get) => ({
       if (imported.todos) set({ todos: imported.todos });
       if (imported.brands) set({ brands: imported.brands });
       if (imported.payments) set({ payments: imported.payments });
+      if (imported.assets) set({ assets: imported.assets });
       if (imported.settings) set({ settings: imported.settings });
       invalidateAllCache();
       get().showToast('数据导入成功', 'success');
@@ -918,6 +931,44 @@ export const useStore = create<AppState>((set, get) => ({
     } catch (error) {
       console.error('deletePublishLink失败:', error instanceof Error ? error.message : error);
       get().showToast('删除发布链接失败', 'error');
+      throw error;
+    }
+  },
+  fetchAssets: async () => {
+    try {
+      const res = await createAuthFetch()('/api/assets');
+      if (!res.ok) throw new Error('获取资产列表失败');
+      const data = await res.json();
+      set({ assets: data });
+    } catch (error) {
+      console.error('fetchAssets失败:', error instanceof Error ? error.message : error);
+    }
+  },
+  updateAsset: async (id, asset) => {
+    try {
+      const res = await createAuthFetch()(`/api/assets/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(asset)
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || '更新资产失败');
+      }
+      const updated = await res.json();
+      set((state) => ({ assets: state.assets.map(a => a.id === id ? updated : a) }));
+    } catch (error) {
+      console.error('updateAsset失败:', error instanceof Error ? error.message : error);
+      throw error;
+    }
+  },
+  deleteAsset: async (id) => {
+    try {
+      const res = await createAuthFetch()(`/api/assets/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('删除资产失败');
+      set((state) => ({ assets: state.assets.filter(a => a.id !== id) }));
+    } catch (error) {
+      console.error('deleteAsset失败:', error instanceof Error ? error.message : error);
       throw error;
     }
   },

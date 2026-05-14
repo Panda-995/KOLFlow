@@ -15,21 +15,23 @@ export default function Analytics() {
   const [year, setYear] = useState(new Date().getFullYear().toString());
   const [month, setMonth] = useState('all');
   const [brandFilter, setBrandFilter] = useState('all');
-  const { orders, payments } = useStore();
+  const { orders, payments, assets } = useStore();
 
   const availableYears = useMemo(() => {
     const years = new Set<string>();
     orders.forEach(o => o.acceptDate && years.add(o.acceptDate.substring(0, 4)));
     payments.forEach(p => p.date && years.add(p.date.substring(0, 4)));
+    assets.forEach(a => a.soldDate && years.add(a.soldDate.substring(0, 4)));
     years.add(new Date().getFullYear().toString());
     return Array.from(years).sort().reverse();
-  }, [orders, payments]);
+  }, [orders, payments, assets]);
 
   const brandNames = useMemo(() => {
     const names = new Set<string>();
     orders.forEach(o => o.brandName && names.add(o.brandName));
+    assets.forEach(a => a.brandName && names.add(a.brandName));
     return Array.from(names).sort();
-  }, [orders]);
+  }, [orders, assets]);
 
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
@@ -50,28 +52,51 @@ export default function Analytics() {
   }, [payments, year, month, brandFilter]);
 
   const overviewStats = useMemo(() => {
-    const totalIncome = filteredPayments.reduce((sum, p) => sum + p.amount, 0);
+    const paymentIncome = filteredPayments.reduce((sum, p) => sum + p.amount, 0);
+    const assetIncome = assets
+      .filter(a => {
+        if (a.saleStatus !== 'sold' || !a.soldDate) return false;
+        const matchYear = a.soldDate.startsWith(year);
+        const matchMonth = month === 'all' || a.soldDate.substring(5, 7) === month;
+        const matchBrand = brandFilter === 'all' || a.brandName === brandFilter;
+        return matchYear && matchMonth && matchBrand;
+      })
+      .reduce((sum, a) => sum + a.soldAmount, 0);
+    const totalIncome = paymentIncome + assetIncome;
     const totalOrders = filteredOrders.length;
     const completedOrders = filteredOrders.filter(o => o.status === 'completed').length;
     const inProgressOrders = filteredOrders.filter(o => o.status === 'in_progress').length;
     const cancelledOrders = filteredOrders.filter(o => o.status === 'cancelled').length;
-    const avgOrderValue = totalOrders > 0 ? totalIncome / totalOrders : 0;
+    const avgOrderValue = totalOrders > 0 ? paymentIncome / totalOrders : 0;
     const completionRate = totalOrders > 0 ? (completedOrders / totalOrders * 100).toFixed(1) : '0';
 
     const currentMonth = month === 'all' ? 12 : parseInt(month);
     const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1;
     const prevYear = currentMonth === 1 ? (parseInt(year) - 1).toString() : year;
+    const isFullYear = month === 'all';
 
-    const prevPayments = payments.filter(p =>
-      p.date?.startsWith(prevYear) &&
-      p.date?.substring(5, 7) === prevMonth.toString().padStart(2, '0') &&
-      p.type === 'settled'
-    );
-    const prevIncome = prevPayments.reduce((sum, p) => sum + p.amount, 0);
+    const prevPayments = payments.filter(p => {
+      if (p.type !== 'settled' || !p.date) return false;
+      if (isFullYear) {
+        return p.date.startsWith(prevYear);
+      }
+      return p.date.startsWith(prevYear) && p.date.substring(5, 7) === prevMonth.toString().padStart(2, '0');
+    });
+    const prevPaymentIncome = prevPayments.reduce((sum, p) => sum + p.amount, 0);
+    const prevAssetIncome = assets
+      .filter(a => {
+        if (a.saleStatus !== 'sold' || !a.soldDate) return false;
+        if (isFullYear) {
+          return a.soldDate.startsWith(prevYear);
+        }
+        return a.soldDate.startsWith(prevYear) && a.soldDate.substring(5, 7) === prevMonth.toString().padStart(2, '0');
+      })
+      .reduce((sum, a) => sum + a.soldAmount, 0);
+    const prevIncome = prevPaymentIncome + prevAssetIncome;
     const incomeGrowth = prevIncome > 0 ? ((totalIncome - prevIncome) / prevIncome * 100).toFixed(1) : '0';
 
     return { totalIncome, totalOrders, completedOrders, inProgressOrders, cancelledOrders, avgOrderValue, completionRate, incomeGrowth };
-  }, [filteredOrders, filteredPayments, payments, year, month]);
+  }, [filteredOrders, filteredPayments, payments, assets, year, month, brandFilter]);
 
   const platformData = useMemo(() => {
     const platformCounts: Record<string, number> = {};
@@ -101,14 +126,17 @@ export default function Analytics() {
       const monthStr = (m + 1).toString().padStart(2, '0');
       const monthOrders = orders.filter(o => o.acceptDate?.startsWith(year) && o.acceptDate?.substring(5, 7) === monthStr);
       const monthPayments = payments.filter(p => p.date?.startsWith(year) && p.date?.substring(5, 7) === monthStr && p.type === 'settled');
+      const monthAssetIncome = assets
+        .filter(a => a.saleStatus === 'sold' && a.soldDate?.startsWith(year) && a.soldDate?.substring(5, 7) === monthStr)
+        .reduce((sum, a) => sum + a.soldAmount, 0);
       return {
         name: `${m + 1}月`,
-        收入: monthPayments.reduce((sum, p) => sum + p.amount, 0),
+        收入: monthPayments.reduce((sum, p) => sum + p.amount, 0) + monthAssetIncome,
         商单数: monthOrders.length,
         完成数: monthOrders.filter(o => o.status === 'completed').length
       };
     });
-  }, [orders, payments, year, month]);
+  }, [orders, payments, assets, year, month]);
 
   const brandRanking = useMemo(() => {
     const brandIncome: Record<string, number> = {};
@@ -117,8 +145,17 @@ export default function Analytics() {
         brandIncome[order.brandName] = (brandIncome[order.brandName] || 0) + order.actualAmount;
       }
     });
+    assets.forEach(a => {
+      if (a.saleStatus !== 'sold' || a.soldAmount <= 0 || !a.brandName || !a.soldDate) return;
+      const matchYear = a.soldDate.startsWith(year);
+      const matchMonth = month === 'all' || a.soldDate.substring(5, 7) === month;
+      const matchBrand = brandFilter === 'all' || a.brandName === brandFilter;
+      if (matchYear && matchMonth && matchBrand) {
+        brandIncome[a.brandName] = (brandIncome[a.brandName] || 0) + a.soldAmount;
+      }
+    });
     return Object.entries(brandIncome).map(([name, income]) => ({ name, income })).sort((a, b) => b.income - a.income).slice(0, 5);
-  }, [filteredOrders]);
+  }, [filteredOrders, assets, year, month, brandFilter]);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">

@@ -99,10 +99,29 @@ export default memo(function OrderCard({ order, onDelete, onStatusChange, onEdit
                 <span className="text-xs">💰</span>
               </div>
               <div className="min-w-0">
-                <span className="text-gray-400 text-[10px] block leading-none">金额</span>
-                <span className="font-semibold text-emerald-600 block">{order.actualAmount > 0 ? `¥${order.actualAmount.toLocaleString()}` : '-'}</span>
+                <span className="text-gray-400 text-[10px] block leading-none">
+                  {order.type === 'product_exchange' ? '产品' : order.type === 'ecard' ? '面值' : '金额'}
+                </span>
+                {order.type === 'product_exchange' ? (
+                  <span className="font-medium text-gray-700 block truncate">{order.productName || '-'}</span>
+                ) : order.type === 'ecard' ? (
+                  <span className="font-semibold text-emerald-600 block">¥{(order.productValue || 0).toLocaleString()}</span>
+                ) : (
+                  <span className="font-semibold text-emerald-600 block">{order.actualAmount > 0 ? `¥${order.actualAmount.toLocaleString()}` : '-'}</span>
+                )}
               </div>
             </div>
+            {order.type === 'product_exchange' && (
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-pink-100 to-rose-100 flex items-center justify-center flex-shrink-0">
+                  <span className="text-xs">💎</span>
+                </div>
+                <div className="min-w-0">
+                  <span className="text-gray-400 text-[10px] block leading-none">价值</span>
+                  <span className="font-semibold text-emerald-600 block">¥{(order.productValue || 0).toLocaleString()}</span>
+                </div>
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-100 to-cyan-100 flex items-center justify-center flex-shrink-0">
                 <span className="text-xs">📅</span>

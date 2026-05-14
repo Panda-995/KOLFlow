@@ -49,7 +49,7 @@ export default function Orders() {
       '商单号': order.orderNo,
       '标题': order.title,
       '品牌': order.brandName,
-      '合作类型': order.type === 'paid' ? '付费' : order.type === 'product_exchange' ? '置换' : '直发',
+      '合作类型': order.type === 'paid' ? '付费' : order.type === 'product_exchange' ? '置换' : order.type === 'ecard' ? 'E卡' : '直发',
       '金额': order.actualAmount,
       '平台': order.platforms.join(', '),
       '接单日期': order.acceptDate || '',
@@ -93,7 +93,9 @@ export default function Orders() {
     actualAmount: '',
     platforms: '',
     acceptDate: '',
-    submitDate: ''
+    submitDate: '',
+    productName: '',
+    productValue: ''
   });
 
   const handleOpenModal = (order?: Order) => {
@@ -107,11 +109,13 @@ export default function Orders() {
         actualAmount: order.actualAmount.toString(),
         platforms: order.platforms.join(', '),
         acceptDate: order.acceptDate || '',
-        submitDate: order.submitDate || ''
+        submitDate: order.submitDate || '',
+        productName: order.productName || '',
+        productValue: order.productValue?.toString() || ''
       });
     } else {
       setEditingOrderId(null);
-      setFormData({ title: '', brandName: '', type: 'paid', status: 'in_progress', actualAmount: '', platforms: '', acceptDate: '', submitDate: '' });
+      setFormData({ title: '', brandName: '', type: 'paid', status: 'in_progress', actualAmount: '', platforms: '', acceptDate: '', submitDate: '', productName: '', productValue: '' });
     }
     setIsModalOpen(true);
   };
@@ -141,6 +145,7 @@ export default function Orders() {
       const orderData = {
         ...formData,
         actualAmount: Number(formData.actualAmount) || 0,
+        productValue: Number(formData.productValue) || 0,
         platforms: formData.platforms.split(',').map(s => s.trim()).filter(Boolean)
       };
 
@@ -154,7 +159,7 @@ export default function Orders() {
 
       setIsModalOpen(false);
       setEditingOrderId(null);
-      setFormData({ title: '', brandName: '', type: 'paid', status: 'in_progress', actualAmount: '', platforms: '', acceptDate: '', submitDate: '' });
+      setFormData({ title: '', brandName: '', type: 'paid', status: 'in_progress', actualAmount: '', platforms: '', acceptDate: '', submitDate: '', productName: '', productValue: '' });
     } catch (error) {
       showToast(error instanceof Error ? error.message : '操作失败', 'error');
     }
@@ -398,6 +403,7 @@ export default function Orders() {
               <select value={formData.type} onChange={e => setFormData({...formData, type: e.target.value as OrderType})} className="w-full px-3 py-2 border border-border rounded-lg outline-none focus:border-accent text-sm">
                 <option value="paid">付费</option>
                 <option value="product_exchange">置换</option>
+                <option value="ecard">E卡</option>
                 <option value="direct">直发</option>
               </select>
             </div>
@@ -411,11 +417,31 @@ export default function Orders() {
                 </select>
               </div>
             )}
+            {formData.type !== 'product_exchange' && formData.type !== 'ecard' && (
             <div className={editingOrderId ? "" : "col-span-2"}>
               <label className="block text-xs font-medium text-gray-700 mb-1">金额 (¥)</label>
               <input type="number" value={formData.actualAmount} onChange={e => setFormData({...formData, actualAmount: e.target.value})} className="w-full px-3 py-2 border border-border rounded-lg outline-none focus:border-accent text-sm" />
             </div>
+          )}
           </div>
+          {formData.type === 'product_exchange' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">产品名称</label>
+                <input type="text" value={formData.productName} onChange={e => setFormData({...formData, productName: e.target.value})} placeholder="如：XX品牌蓝牙耳机" className="w-full px-3 py-2 border border-border rounded-lg outline-none focus:border-accent text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">产品价值 (¥)</label>
+                <input type="number" value={formData.productValue} onChange={e => setFormData({...formData, productValue: e.target.value})} placeholder="产品市场价值" className="w-full px-3 py-2 border border-border rounded-lg outline-none focus:border-accent text-sm" />
+              </div>
+            </div>
+          )}
+          {formData.type === 'ecard' && (
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">面值 (¥)</label>
+              <input type="number" value={formData.productValue} onChange={e => setFormData({...formData, productValue: e.target.value})} placeholder="E卡面值" className="w-full px-3 py-2 border border-border rounded-lg outline-none focus:border-accent text-sm" />
+            </div>
+          )}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">发布平台</label>
             <input type="text" placeholder="小红书, 抖音" value={formData.platforms} onChange={e => setFormData({...formData, platforms: e.target.value})} className="w-full px-3 py-2 border border-border rounded-lg outline-none focus:border-accent text-sm" />
@@ -467,6 +493,24 @@ export default function Orders() {
                 <span className="text-gray-500 text-xs block">金额</span>
                 <span className="font-medium text-success">¥{viewingOrder.actualAmount.toLocaleString()}</span>
               </div>
+              {viewingOrder.type === 'product_exchange' && viewingOrder.productName && (
+                  <>
+                    <div>
+                      <span className="text-gray-500 text-xs block">置换产品</span>
+                      <span className="font-medium">{viewingOrder.productName}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 text-xs block">产品价值</span>
+                      <span className="font-medium text-success">¥{(viewingOrder.productValue || 0).toLocaleString()}</span>
+                    </div>
+                  </>
+                )}
+                {viewingOrder.type === 'ecard' && (
+                  <div>
+                    <span className="text-gray-500 text-xs block">面值</span>
+                    <span className="font-medium text-success">¥{(viewingOrder.productValue || 0).toLocaleString()}</span>
+                  </div>
+                )}
               <div>
                 <span className="text-gray-500 text-xs block">平台</span>
                 <span className="font-medium">{viewingOrder.platforms?.join(', ') || '-'}</span>
