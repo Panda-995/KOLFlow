@@ -1,6 +1,10 @@
 # KOLFlow
 
 <p align="center">
+  <img src="public/github.png" alt="KOLFlow" width="800">
+</p>
+
+<p align="center">
   <strong>达人商单流管理系统</strong><br>
   <sub>KOL Business Collaboration Management System</sub>
 </p>
