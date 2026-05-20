@@ -7,6 +7,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
 import OrderCard from '../components/orders/OrderCard';
 import { ORDER_STATUS_MAP, ORDER_TYPE_MAP, getPlatformIcon } from '../constants/orders';
+import { authFetch } from '../lib/api';
 
 
 const statusMap = ORDER_STATUS_MAP;
@@ -243,10 +244,8 @@ export default function Orders() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/data/orders/file', {
+      const response = await authFetch('/api/data/orders/file', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
         body: formData
       });
 

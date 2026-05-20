@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import express from 'express';
+import express, { ErrorRequestHandler } from 'express';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import apiRoutes from './src/server/api.js';
@@ -36,14 +36,24 @@ const apiLimiter = rateLimit({
 });
 
 // CORS with origin validation
-const allowedOrigins = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(',')
-  : ['http://localhost:3000', 'http://localhost:5173'];
+const configuredCorsOrigins = process.env.CORS_ORIGIN?.split(',').map(origin => origin.trim()).filter(Boolean);
+const allowedOrigins = configuredCorsOrigins?.length
+  ? configuredCorsOrigins
+  : [
+    'http://localhost',
+    'https://localhost',
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'capacitor://localhost',
+    'ionic://localhost',
+  ];
 
 app.use((req, res, next): void => {
   const origin = req.headers.origin;
-  if (origin && allowedOrigins.includes(origin)) {
+  if (origin && (!configuredCorsOrigins?.length || allowedOrigins.includes(origin))) {
     res.header('Access-Control-Allow-Origin', origin);
+  } else if (!origin) {
+    res.header('Access-Control-Allow-Origin', '*');
   }
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
@@ -69,6 +79,17 @@ app.get('/api/health', (_req, res) => {
 
 // API routes
 app.use('/api', apiRoutes);
+
+// Global API error handler. Keep this before static files so production API
+// failures are returned as JSON instead of Express HTML error pages.
+const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+  const status = err.status || (err.message?.includes('未授权') ? 401 : 500);
+  res.status(status).json({
+    error: err.message || '服务器内部错误',
+  });
+};
+
+app.use(errorHandler);
 
 // Static files
 app.use(express.static('dist'));

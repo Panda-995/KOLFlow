@@ -50,13 +50,22 @@ async function startServer() {
     return ips;
   };
   
-  const allowedOrigins = process.env.CORS_ORIGIN
-    ? process.env.CORS_ORIGIN.split(',')
-    : ['http://localhost:3000', 'http://localhost:5173', ...getLocalIPs()];
+  const configuredCorsOrigins = process.env.CORS_ORIGIN?.split(',').map(origin => origin.trim()).filter(Boolean);
+  const allowedOrigins = configuredCorsOrigins?.length
+    ? configuredCorsOrigins
+    : [
+      'http://localhost',
+      'https://localhost',
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'capacitor://localhost',
+      'ionic://localhost',
+      ...getLocalIPs(),
+    ];
 
   app.use((req, res, next): void => {
     const origin = req.headers.origin;
-    if (origin && allowedOrigins.includes(origin)) {
+    if (origin && (!configuredCorsOrigins?.length || allowedOrigins.includes(origin))) {
       res.header('Access-Control-Allow-Origin', origin);
     } else if (!origin) {
       res.header('Access-Control-Allow-Origin', '*');

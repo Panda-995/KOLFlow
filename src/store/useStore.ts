@@ -1,47 +1,12 @@
 import { create } from 'zustand';
 import type { Order, OrderStatus, OrderType, Todo, Brand, Payment, Settings, ActivityLog, Comment, PublishLink, Asset } from '../types';
+import { apiFetch, authFetch, getConnectionHelpMessage } from '../lib/api';
 
 export type { Order, OrderStatus, OrderType, Todo, Brand, Payment, Settings, ActivityLog, Comment, PublishLink, Asset };
 
-const getToken = (): string | null => {
-  return localStorage.getItem('token');
-};
+const createAuthFetch = () => authFetch;
 
-const getBaseUrl = (): string => {
-  return '';
-};
-
-const createAuthFetch = () => {
-  const baseUrl = getBaseUrl();
-  return (url: string, options: RequestInit = {}) => {
-    const token = getToken();
-    const headers: Record<string, string> = {
-      ...options.headers as Record<string, string>,
-    };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    const fullUrl = baseUrl ? `${baseUrl}${url}` : url;
-    return fetch(fullUrl, {
-      ...options,
-      headers,
-    });
-  };
-};
-
-const createFetch = () => {
-  const baseUrl = getBaseUrl();
-  return (url: string, options: RequestInit = {}) => {
-    const fullUrl = baseUrl ? `${baseUrl}${url}` : url;
-    return fetch(fullUrl, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers as Record<string, string>,
-      },
-    });
-  };
-};
+const createFetch = () => apiFetch;
 
 // Simple cache with TTL (60 seconds for better performance)
 const CACHE_TTL = 60 * 1000; // 60 seconds
@@ -199,7 +164,7 @@ export const useStore = create<AppState>((set, get) => ({
       }
       return { success: false, error: data.error };
     } catch (e) {
-      return { success: false, error: '网络错误' };
+      return { success: false, error: getConnectionHelpMessage() };
     }
   },
 
@@ -219,7 +184,7 @@ export const useStore = create<AppState>((set, get) => ({
       }
       return { success: false, error: data.error };
     } catch (e) {
-      return { success: false, error: '网络错误' };
+      return { success: false, error: getConnectionHelpMessage() };
     }
   },
 

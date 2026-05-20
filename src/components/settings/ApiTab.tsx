@@ -1,6 +1,7 @@
 import { Copy, RefreshCw, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { useState } from 'react';
 import type { ApiTabProps } from './types';
+import { getActiveServerUrl } from '../../lib/api';
 
 const API_ENDPOINTS = [
   { category: '商单', endpoints: [
@@ -54,6 +55,7 @@ export function ApiTab({
   copyToClipboard 
 }: ApiTabProps) {
   const [showDocs, setShowDocs] = useState(false);
+  const serverUrl = getActiveServerUrl();
 
   return (
     <div className="card-sketch p-6 bg-white">
@@ -95,11 +97,11 @@ export function ApiTab({
             <input
               type="text"
               readOnly
-              value={typeof window !== 'undefined' ? window.location.origin : ''}
+              value={serverUrl}
               className="w-full px-3 py-2 bg-gray-50 border border-border rounded-lg text-sm font-mono"
             />
           </div>
-          <button onClick={() => copyToClipboard(typeof window !== 'undefined' ? window.location.origin : '')} className="p-2 border border-border rounded-lg text-gray-500 hover:bg-gray-50" title="复制">
+          <button onClick={() => copyToClipboard(serverUrl)} className="p-2 border border-border rounded-lg text-gray-500 hover:bg-gray-50" title="复制">
             <Copy size={16} />
           </button>
         </div>
@@ -113,7 +115,7 @@ export function ApiTab({
             </button>
           </div>
           <code className="text-xs text-gray-500 block">
-            curl "{typeof window !== 'undefined' ? window.location.origin : ''}/api/external/orders?token={settings?.apiKey || 'YOUR_KEY'}"
+            curl "{serverUrl}/api/external/orders?token={settings?.apiKey || 'YOUR_KEY'}"
           </code>
         </div>
 

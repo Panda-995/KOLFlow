@@ -78,20 +78,28 @@ router.get('/export', (req, res) => {
 router.post('/clear', (req, res) => {
   try {
     const userId = getUserId(req);
-    // 禁用外键约束以便安全删除数据
-    db.pragma('foreign_keys = OFF');
-    // 先删除依赖表的数据
-    db.prepare('DELETE FROM comments WHERE userId = ?').run(userId);
-    db.prepare('DELETE FROM publish_links WHERE userId = ?').run(userId);
-    db.prepare('DELETE FROM activity_logs WHERE userId = ?').run(userId);
-    // 再删除主表数据
-    db.prepare('DELETE FROM orders WHERE userId = ?').run(userId);
-    db.prepare('DELETE FROM todos WHERE userId = ?').run(userId);
-    db.prepare('DELETE FROM brands WHERE userId = ?').run(userId);
-    db.prepare('DELETE FROM payments WHERE userId = ?').run(userId);
+
+    const clearUserData = db.transaction(() => {
+      // 先删除依赖表的数据
+      db.prepare('DELETE FROM comments WHERE userId = ?').run(userId);
+      db.prepare('DELETE FROM publish_links WHERE userId = ?').run(userId);
+      db.prepare('DELETE FROM activity_logs WHERE userId = ?').run(userId);
+      // 再删除主表数据
+      db.prepare('DELETE FROM orders WHERE userId = ?').run(userId);
+      db.prepare('DELETE FROM todos WHERE userId = ?').run(userId);
+      db.prepare('DELETE FROM brands WHERE userId = ?').run(userId);
+      db.prepare('DELETE FROM payments WHERE userId = ?').run(userId);
       db.prepare('DELETE FROM assets WHERE userId = ?').run(userId);
-      // 重新启用外键约束
-    db.pragma('foreign_keys = ON');
+    });
+
+    // 禁用外键约束以便安全删除数据；无论事务是否失败都必须恢复。
+    db.pragma('foreign_keys = OFF');
+    try {
+      clearUserData();
+    } finally {
+      db.pragma('foreign_keys = ON');
+    }
+
     return res.json({ success: true });
   } catch (error) {
     console.error('清空数据错误:', error);

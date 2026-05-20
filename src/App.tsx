@@ -13,6 +13,7 @@ import Login from './pages/Login';
 import { useStore } from './store/useStore';
 import { ToastProvider } from './components/Toast';
 import { useEffect, useState } from 'react';
+import { apiFetch, authFetch, getServerBaseUrl, isNativeAppRuntime } from './lib/api';
 
 export default function App() {
   const { isAuthenticated, darkMode, fetchSettings, logout } = useStore();
@@ -25,20 +26,22 @@ export default function App() {
   useEffect(() => {
     const verifyToken = async () => {
       try {
-        const res = await fetch('/api/auth/check-users');
-        const data = await res.json();
-        
         const token = localStorage.getItem('token');
-        if (data.hasUsers === false || !token) {
+        if (!token || (isNativeAppRuntime() && !getServerBaseUrl())) {
           logout();
           setIsVerifying(false);
           return;
         }
 
-        const verifyRes = await fetch('/api/auth/verify', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const res = await apiFetch('/api/auth/check-users');
+        const data = await res.json();
+        if (data.hasUsers === false) {
+          logout();
+          setIsVerifying(false);
+          return;
+        }
+
+        const verifyRes = await authFetch('/api/auth/verify', { method: 'POST' });
         
         if (verifyRes.ok) {
           await fetchSettings();

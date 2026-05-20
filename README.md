@@ -17,6 +17,7 @@
 <p align="center">
   <a href="#features">Features</a> •
   <a href="#getting-started">Getting Started</a> •
+  <a href="#android-app">Android App</a> •
   <a href="#deployment">Deployment</a> •
   <a href="#api-docs">API Docs</a> •
   <a href="#tech-stack">Tech Stack</a> •
@@ -31,6 +32,8 @@
 
 ---
 
+<a id="features"></a>
+
 ## Features | 功能特性
 
 | Feature | 功能 |
@@ -42,8 +45,10 @@
 | 🏢 Brand Management | 🏢 品牌管理 |
 | 🎁 Asset Library | 🎁 资产库 |
 | 📈 Analytics | 📈 数据统计 |
+| 📋 Activity Logs | 📋 操作日志 |
 | 🔐 API Key Management | 🔐 API Key 管理 |
 | 🎨 Themes | 🎨 主题外观 |
+| 📱 Android App | 📱 Android 客户端 |
 
 ### Data Linkage | 数据联动
 
@@ -63,12 +68,17 @@
 
 ---
 
+<a id="getting-started"></a>
+
 ## Getting Started | 快速开始
 
 ### Requirements | 环境要求
 
 - **Node.js >= 20.19.0** or **>= 22.12.0**
 - npm >= 9
+- Android App build only | 仅构建 Android App 需要：
+  - JDK 17+
+  - Android Studio / Android SDK
 
 > **Note**: Due to `@vitejs/plugin-react@5.x`, Node.js version must be >= 20.19.0.
 
@@ -89,6 +99,8 @@ NODE_ENV=production
 PORT=3000
 JWT_SECRET=your-secret-key-here
 INVITE_CODE=your-invite-code
+CORS_ORIGIN=http://localhost:3000
+DATA_DIR=./data
 ```
 
 ### Run | 运行
@@ -99,7 +111,21 @@ npm run dev
 
 # Production | 生产构建
 npm run build
-npm run preview
+NODE_ENV=production npx tsx server.ts
+```
+
+Windows PowerShell production example:
+
+```powershell
+npm run build
+$env:NODE_ENV = "production"
+npx tsx server.ts
+```
+
+The server listens on `0.0.0.0:3000`, so devices on the same LAN can access it through:
+
+```text
+http://<your-computer-lan-ip>:3000
 ```
 
 ### First Use | 首次使用
@@ -109,6 +135,61 @@ npm run preview
 3. Enter email, password, and invite code
 
 ---
+
+<a id="android-app"></a>
+
+## Android App | Android 客户端
+
+KOLFlow provides a Capacitor-based Android app. The mobile app reuses the same backend and most of the same Web UI. On the login screen, the app asks for a server address first, then uses the account/password from that server to sign in.
+
+### Server Address | 服务端地址
+
+Use an address that the phone can actually reach:
+
+| Device | 服务端地址示例 |
+|--------|----------------|
+| Android emulator | `http://10.0.2.2:3000` |
+| Real Android phone on the same LAN | `http://192.168.x.x:3000` |
+
+Do not use `localhost`, `127.0.0.1`, or `0.0.0.0` inside the app. On a real phone, `localhost` means the phone itself, not your computer.
+
+### Build APK | 构建 APK
+
+```bash
+# Build web assets and sync native project
+npm run cap:sync
+
+# Build Android debug APK
+cd android
+./gradlew assembleDebug
+```
+
+Windows PowerShell example:
+
+```powershell
+npm run cap:sync
+cd android
+.\gradlew.bat assembleDebug
+```
+
+If Gradle reports that Java 8 is being used, set `JAVA_HOME` to a JDK 17+ installation before building.
+
+The debug APK will be generated at:
+
+```text
+android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+### Mobile Notes | 移动端说明
+
+- App name: `KOLFlow`
+- App icon source: `public/app.png`
+- HTTP server access is enabled for LAN/private deployment scenarios.
+- Native HTTP is enabled in Capacitor so Android requests and file imports work reliably with a configured backend address.
+
+---
+
+<a id="deployment"></a>
 
 ## Deployment | 部署
 
@@ -145,40 +226,137 @@ docker-compose up -d
 
 ---
 
+<a id="api-docs"></a>
+
 ## API Docs | API 文档
+
+除 `/api/health`、注册、登录和用户检查外，内部业务 API 需要 Bearer Token 认证（`Authorization: Bearer <token>`）。
 
 ### Authentication | 认证
 
 ```bash
-# Register | 注册
-POST /api/auth/register
-Body: { email, password, inviteCode }
-
-# Login | 登录
-POST /api/auth/login
-Body: { email, password }
-
-# Verify Token | 验证 Token
-POST /api/auth/verify
-Headers: Authorization: Bearer <token>
+GET  /api/health               # 健康检查
+GET  /api/auth/check-users     # 检查是否已有用户
+POST /api/auth/register        # 注册  Body: { email, password, inviteCode }
+POST /api/auth/login            # 登录  Body: { email, password }
+POST /api/auth/verify           # 验证 Token
 ```
 
-### External API | 外部 API
+### Orders | 商单
 
 ```bash
-GET /api/external/orders?token=<API_KEY>
-GET /api/external/statistics?token=<API_KEY>
+GET    /api/orders              # 获取全部商单
+POST   /api/orders              # 创建商单（自动创建待办）
+PUT    /api/orders/:id          # 更新商单（自动同步账单/资产/待办）
+DELETE /api/orders/:id          # 删除商单（级联删除关联数据）
 ```
 
-### Assets API | 资产 API
+### Payments | 账单
 
 ```bash
-GET    /api/assets              # 获取所有资产
+GET    /api/payments            # 获取全部账单
+POST   /api/payments            # 创建账单
+PUT    /api/payments/:id        # 更新账单
+DELETE /api/payments/:id        # 删除账单
+```
+
+### Brands | 品牌
+
+```bash
+GET    /api/brands              # 获取全部品牌
+GET    /api/brands/:id          # 获取单个品牌
+POST   /api/brands              # 创建品牌
+PUT    /api/brands/:id          # 更新品牌（支持多联系人）
+DELETE /api/brands/:id          # 删除品牌（清理关联商单品牌信息）
+```
+
+### Assets | 资产
+
+```bash
+GET    /api/assets              # 获取全部资产
+GET    /api/assets/:id          # 获取单个资产
 PUT    /api/assets/:id          # 更新资产（名称、价值、售卖状态、图片）
-DELETE /api/assets/:id          # 删除资产
+DELETE /api/assets/:id          # 删除资产（已出资产自动扣减品牌收入）
+```
+
+### Todos | 待办
+
+```bash
+GET    /api/todos               # 获取全部待办
+POST   /api/todos               # 创建待办
+PUT    /api/todos/:id/update    # 更新待办
+PUT    /api/todos/:id/toggle    # 切换完成状态
+DELETE /api/todos/:id           # 删除待办
+```
+
+### Comments | 评论
+
+```bash
+GET    /api/comments/:orderId   # 获取商单评论
+POST   /api/comments            # 添加评论  Body: { orderId, content }
+DELETE /api/comments/:id        # 删除评论
+```
+
+### Logs | 操作日志
+
+```bash
+GET    /api/logs                # 获取操作日志（最近100条）
+DELETE /api/logs                # 清空操作日志
+```
+
+### Publish Links | 发布链接
+
+```bash
+GET    /api/publish-links/:orderId    # 获取商单发布链接
+POST   /api/publish-links             # 添加发布链接  Body: { orderId, url, platform? }
+POST   /api/publish-links/batch       # 批量添加发布链接
+PUT    /api/publish-links/:id         # 更新发布链接
+DELETE /api/publish-links/:id         # 删除发布链接
+```
+
+### Data Import/Export | 数据导入导出
+
+```bash
+GET    /api/data/export          # 导出当前用户全部数据（JSON）
+POST   /api/data/import          # 导入完整备份数据（JSON）
+POST   /api/data/orders          # JSON 批量导入商单
+POST   /api/data/orders/file     # Excel/CSV 文件导入商单（multipart/form-data）
+POST   /api/data/clear           # 清空当前用户业务数据
+```
+
+### Settings | 设置
+
+```bash
+GET    /api/settings            # 获取用户设置
+PUT    /api/settings            # 更新用户设置（主题、头像、昵称、API Key 等）
+PUT    /api/settings/security   # 更新邮箱/密码
+POST   /api/settings/apikey     # 生成 API Key
+PUT    /api/settings/display    # 更新显示设置
+```
+
+### Reports | 报表
+
+```bash
+GET    /api/report/:type        # 获取指定类型统计报表
+```
+
+### External API | 外部 API（API Key 鉴权）
+
+```bash
+GET    /api/external/orders?token=<API_KEY>          # 获取商单列表
+POST   /api/external/orders?token=<API_KEY>          # 创建商单
+PUT    /api/external/orders/:id?token=<API_KEY>      # 更新商单
+DELETE /api/external/orders/:id?token=<API_KEY>      # 删除商单
+GET    /api/external/todos?token=<API_KEY>           # 获取待办列表
+GET    /api/external/payments?token=<API_KEY>        # 获取账单列表
+GET    /api/external/brands?token=<API_KEY>          # 获取品牌列表
+GET    /api/external/statistics?token=<API_KEY>      # 获取统计数据
+GET    /api/external/export?token=<API_KEY>          # 导出数据
 ```
 
 ---
+
+<a id="tech-stack"></a>
 
 ## Tech Stack | 技术栈
 
@@ -188,12 +366,25 @@ DELETE /api/assets/:id          # 删除资产
 | Backend | 后端 | Express, better-sqlite3 |
 | State | 状态 | Zustand |
 | Charts | 图表 | Recharts |
-| Security | 安全 | bcrypt, JWT, helmet |
+| UI | 组件 | Lucide React, Motion |
+| Data | 数据处理 | xlsx (Excel 导入导出), multer (文件上传) |
+| Security | 安全 | bcrypt, JWT, helmet, express-rate-limit |
+| Mobile | 移动端 | Capacitor (Android) |
 | Deployment | 部署 | Docker, Vercel |
 
 ---
 
 ## 📝 更新日志 | Changelog
+
+### 2026-05-20
+
+- **Android App**: 新增 Capacitor Android 客户端，App 端登录支持填写服务端地址，复用 Web 端账号体系
+- **局域网访问**: 服务端监听 `0.0.0.0:3000`，支持同一局域网手机浏览器和 App 访问
+- **移动端网络修复**: App 内普通接口和文件导入走 Capacitor 原生 HTTP 能力，减少 WebView 网络限制导致的连接失败
+- **App 图标与名称**: Android App 名称为 `KOLFlow`，图标使用 `public/app.png`
+- **数据清空稳定性**: 清空数据改为事务处理，并确保 SQLite 外键约束在异常时恢复
+- **生产错误响应**: 生产服务补充统一 JSON 错误处理中间件，避免 API 异常返回 HTML 错误页
+- **文档更新**: 补充 Android 构建、服务端地址、局域网访问和数据导入导出接口说明
 
 ### 2026-05-15
 
@@ -203,6 +394,8 @@ DELETE /api/assets/:id          # 删除资产
 - **品牌页修复**: 修复品牌统计未监听资产数据变化导致收入不实时更新的问题
 - **统计页修复**: 修复平均客单价计算包含资产收入导致虚高的问题，修复全年模式环比对比错误
 - **资产删除修复**: 删除已出资产时自动扣减品牌收入，保持数据一致性
+- **README 展示图**: 添加 GitHub 项目展示图到 README 置顶位置
+- **文档完善**: 补充操作日志功能说明，API 文档从 3 类扩展到 12 类完整接口，技术栈补充 UI 组件、数据处理、移动端等模块
 
 ### 2026-05-14
 

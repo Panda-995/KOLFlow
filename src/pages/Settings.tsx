@@ -4,6 +4,7 @@ import { useStore } from '../store/useStore';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { MAX_AVATAR_SIZE } from '../constants';
+import { apiFetch, authFetch, getActiveServerUrl } from '../lib/api';
 
 // 导入拆分的 Tab 组件
 import {
@@ -138,10 +139,7 @@ export default function Settings() {
 
   const handleExportData = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch('/api/data/export', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await authFetch('/api/data/export');
       if (!res.ok) {
         showToast('导出失败', 'error');
         return;
@@ -221,10 +219,7 @@ export default function Settings() {
 
       if (direction === 'upload') {
         // 从 API 获取完整数据（包括发布链接）
-        const token = localStorage.getItem('token');
-        const exportRes = await fetch('/api/data/export', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const exportRes = await authFetch('/api/data/export');
         if (!exportRes.ok) {
           throw new Error('获取导出数据失败');
         }
@@ -302,7 +297,7 @@ export default function Settings() {
     }
     setIsTestingApi(true);
     try {
-      const response = await fetch(`/api/external/statistics?token=${settings.apiKey}`);
+      const response = await apiFetch(`/api/external/statistics?token=${settings.apiKey}`);
       if (response.ok) {
         const data = await response.json();
         showToast(`连接成功！共 ${data.orders?.total || 0} 个商单`, 'success');
@@ -318,7 +313,7 @@ export default function Settings() {
 
   // 复制curl示例
   const copyCurlExample = (endpoint: string) => {
-    const baseUrl = window.location.origin;
+    const baseUrl = getActiveServerUrl();
     const key = settings?.apiKey || 'YOUR_API_KEY';
     const curl = `curl "${baseUrl}${endpoint}?token=${key}"`;
     copyToClipboard(curl);
@@ -327,11 +322,12 @@ export default function Settings() {
 
   // 复制完整配置
   const copyFullConfig = () => {
-    const config = `服务器地址: ${window.location.origin}
+    const serverUrl = getActiveServerUrl();
+    const config = `服务器地址: ${serverUrl}
 API Key: ${settings?.apiKey || '尚未生成'}
 
 # 使用示例
-curl "${window.location.origin}/api/external/orders?token=${settings?.apiKey || 'YOUR_KEY'}"`;
+curl "${serverUrl}/api/external/orders?token=${settings?.apiKey || 'YOUR_KEY'}"`;
     copyToClipboard(config);
     showToast('已复制配置信息');
   };

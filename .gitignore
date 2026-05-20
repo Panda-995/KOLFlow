@@ -32,9 +32,12 @@ npm-debug.log*
 *.swp
 *.swo
 
-# Android（已移除）
-android/
-capacitor.config.ts
+# Android / Capacitor
+android/local.properties
+android/.gradle/
+android/app/build/
+android/build/
+android/capacitor-cordova-android-plugins/build/
 
 # 移动端构建产物
 *.apk

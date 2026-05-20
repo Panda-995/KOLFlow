@@ -1,59 +1,148 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { clsx } from 'clsx';
+import { Server } from 'lucide-react';
+import {
+  apiFetch,
+  getConnectionHelpMessage,
+  getNativeServerUrlError,
+  getSavedServerBaseUrl,
+  isNativeAppRuntime,
+  normalizeServerUrl,
+  setServerBaseUrl,
+} from '../lib/api';
 
 type Mode = 'login' | 'register';
 
 export default function Login() {
   const { login, register } = useStore();
+  const showServerUrlField = isNativeAppRuntime();
   const [mode, setMode] = useState<Mode>('login');
+  const [serverUrl, setServerUrl] = useState(() => getSavedServerBaseUrl());
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isTestingServer, setIsTestingServer] = useState(false);
   const [isCheckingUsers, setIsCheckingUsers] = useState(true);
 
-  useEffect(() => {
-    const checkUsers = async () => {
-      try {
-        const res = await fetch('/api/auth/check-users');
-        const data = await res.json();
-        if (data.hasUsers === false) {
-          setMode('register');
-        }
-      } catch (e) {
-        // 忽略错误，保持默认登录界面
-      } finally {
+  const checkUsers = async (nextServerUrl = serverUrl, silent = false): Promise<boolean> => {
+    try {
+      const nativeUrlError = getNativeServerUrlError(nextServerUrl);
+      if (nativeUrlError) {
         setIsCheckingUsers(false);
+        if (!silent) setError(nativeUrlError);
+        return false;
       }
-    };
-    checkUsers();
+
+      const normalized = normalizeServerUrl(nextServerUrl);
+      if (normalized) {
+        setServerBaseUrl(normalized);
+        setServerUrl(normalized);
+      } else if (isNativeAppRuntime()) {
+        setIsCheckingUsers(false);
+        return false;
+      }
+
+      setIsCheckingUsers(true);
+      const res = await apiFetch('/api/auth/check-users');
+      if (!res.ok) {
+        throw new Error('服务端状态检查失败');
+      }
+      const data = await res.json();
+      if (data.hasUsers === false) {
+        setMode('register');
+      }
+      return true;
+    } catch (e) {
+      if (!silent) {
+        setError(e instanceof Error ? e.message : getConnectionHelpMessage(nextServerUrl));
+      }
+      return false;
+    } finally {
+      setIsCheckingUsers(false);
+    }
+  };
+
+  useEffect(() => {
+    const savedServerUrl = getSavedServerBaseUrl();
+    if (showServerUrlField && !savedServerUrl) {
+      setIsCheckingUsers(false);
+      return;
+    }
+    void checkUsers(savedServerUrl, true);
+    // 只在登录页首次加载时检查服务端状态
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setNotice('');
     setIsLoading(true);
 
-    if (mode === 'register') {
-      const res = await register(email, password, inviteCode);
-      if (!res.success) {
-        setError(res.error || '注册失败');
+    try {
+      const nativeUrlError = getNativeServerUrlError(serverUrl);
+      if (nativeUrlError) {
+        setError(nativeUrlError);
+        return;
       }
-    } else {
-      const res = await login(email, password);
-      if (!res.success) {
-        setError(res.error || '登录失败');
-      }
-    }
 
-    setIsLoading(false);
+      const normalized = normalizeServerUrl(serverUrl);
+      setServerBaseUrl(normalized);
+
+      if (mode === 'register') {
+        const res = await register(email, password, inviteCode);
+        if (!res.success) {
+          setError(res.error || '注册失败');
+        }
+      } else {
+        const res = await login(email, password);
+        if (!res.success) {
+          setError(res.error || '登录失败');
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '服务端地址格式不正确');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const switchMode = (newMode: Mode) => {
     setMode(newMode);
     setError('');
+    setNotice('');
+  };
+
+  const handleTestServer = async () => {
+    setError('');
+    setNotice('');
+    setIsTestingServer(true);
+    try {
+      const nativeUrlError = getNativeServerUrlError(serverUrl);
+      if (nativeUrlError) {
+        setError(nativeUrlError);
+        return;
+      }
+
+      const normalized = setServerBaseUrl(serverUrl);
+      setServerUrl(normalized);
+      const res = await apiFetch('/api/health');
+      if (!res.ok) {
+        setError(`服务端返回异常状态：${res.status}`);
+        return;
+      }
+
+      setNotice('服务端连接成功，可以继续登录');
+      await checkUsers(normalized, true);
+    } catch {
+      setError(getConnectionHelpMessage(serverUrl));
+    } finally {
+      setIsTestingServer(false);
+    }
   };
 
   if (isCheckingUsers) {
@@ -122,7 +211,43 @@ export default function Login() {
           </div>
         )}
 
+        {notice && (
+          <div className="bg-success/10 text-success text-sm p-3 rounded-xl mb-6 text-center border border-success/20">
+            {notice}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-5">
+          {showServerUrlField && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">服务端地址</label>
+              <div className="relative">
+                <Server size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  value={serverUrl}
+                  onChange={e => setServerUrl(e.target.value)}
+                  onBlur={() => {
+                    if (serverUrl.trim()) void checkUsers(serverUrl);
+                  }}
+                  className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-panda-black focus:bg-white rounded-xl outline-none transition-all text-sm"
+                  placeholder="http://10.0.2.2:3000 或 http://192.168.x.x:3000"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleTestServer}
+                disabled={isTestingServer}
+                className="mt-2 w-full px-3 py-2 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 rounded-xl text-sm font-medium text-gray-700 transition-colors"
+              >
+                {isTestingServer ? '正在测试连接...' : '测试服务端连接'}
+              </button>
+              <p className="text-xs text-gray-400 mt-1">
+                模拟器用 10.0.2.2，真机用电脑局域网 IP，不能填 localhost。
+              </p>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">账号邮箱</label>
             <input
