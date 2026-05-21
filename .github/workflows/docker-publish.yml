@@ -77,3 +77,39 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  cleanup:
+    needs: [build-amd64, build-arm64]
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Delete old package versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          KEEP_TAGS="latest amd64 arm arm64"
+
+          PACKAGE_VERSIONS=$(gh api -H "Accept: application/vnd.github+json" \
+            "/orgs/${{ github.repository_owner }}/packages/container/${{ env.IMAGE_NAME }}/versions" \
+            --paginate --jq '.[] | {id: .id, tags: [.metadata.container.tags[]]}')
+
+          echo "$PACKAGE_VERSIONS" | jq -c '.' | while read -r version; do
+            ID=$(echo "$version" | jq -r '.id')
+            TAGS=$(echo "$version" | jq -r '.tags[]')
+
+            SHOULD_KEEP=false
+            for keep_tag in $KEEP_TAGS; do
+              if echo "$TAGS" | grep -q "^${keep_tag}$"; then
+                SHOULD_KEEP=true
+                break
+              fi
+            done
+
+            if [ "$SHOULD_KEEP" = false ]; then
+              echo "Deleting untagged version: $ID"
+              gh api --method DELETE \
+                -H "Accept: application/vnd.github+json" \
+                "/orgs/${{ github.repository_owner }}/packages/container/${{ env.IMAGE_NAME }}/versions/$ID" || true
+            fi
+          done
