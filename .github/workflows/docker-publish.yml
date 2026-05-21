@@ -88,10 +88,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          OWNER="${{ github.repository_owner }}"
+          PACKAGE_NAME="${{ env.IMAGE_NAME }}"
+          PACKAGE_NAME="${PACKAGE_NAME#*/}"
+
           KEEP_TAGS="latest amd64 arm arm64"
+          API_BASE="/users/${OWNER}/packages/container/${PACKAGE_NAME}"
 
           PACKAGE_VERSIONS=$(gh api -H "Accept: application/vnd.github+json" \
-            "/orgs/${{ github.repository_owner }}/packages/container/${{ env.IMAGE_NAME }}/versions" \
+            "${API_BASE}/versions" \
             --paginate --jq '.[] | {id: .id, tags: [.metadata.container.tags[]]}')
 
           echo "$PACKAGE_VERSIONS" | jq -c '.' | while read -r version; do
@@ -110,6 +115,6 @@ jobs:
               echo "Deleting untagged version: $ID"
               gh api --method DELETE \
                 -H "Accept: application/vnd.github+json" \
-                "/orgs/${{ github.repository_owner }}/packages/container/${{ env.IMAGE_NAME }}/versions/$ID" || true
+                "${API_BASE}/versions/${ID}" || true
             fi
           done
