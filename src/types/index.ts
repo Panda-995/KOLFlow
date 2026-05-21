@@ -61,6 +61,7 @@ export interface Payment {
   type: 'received' | 'pending' | 'settled' | 'refunded';
   date: string;
   method: string;
+  createdAt?: string;
 }
 
 // 资产库接口

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useStore, Order, OrderType, OrderStatus } from '../store/useStore';
 import { Search, Plus, Trash2, MessageSquare, Send, Upload, FileSpreadsheet, Download, FileDown, Link as LinkIcon, ExternalLink, Copy } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -8,6 +8,7 @@ import { useToast } from '../components/Toast';
 import OrderCard from '../components/orders/OrderCard';
 import { ORDER_STATUS_MAP, ORDER_TYPE_MAP, getPlatformIcon } from '../constants/orders';
 import { authFetch } from '../lib/api';
+import { ALL_MONTHS, ALL_YEARS, getAvailableYears, matchesYearMonth, monthOptions } from '../lib/dateFilter';
 
 
 const statusMap = ORDER_STATUS_MAP;
@@ -18,6 +19,8 @@ export default function Orders() {
   const { showToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [yearFilter, setYearFilter] = useState(ALL_YEARS);
+  const [monthFilter, setMonthFilter] = useState(ALL_MONTHS);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
@@ -121,13 +124,16 @@ export default function Orders() {
     setIsModalOpen(true);
   };
 
+  const availableYears = useMemo(() => getAvailableYears(orders.map(order => order.acceptDate)), [orders]);
+
   const filteredOrders = orders.filter(order => {
     const searchLower = searchTerm.toLowerCase();
     const matchesSearch = order.title.toLowerCase().includes(searchLower) ||
       (order.brandName?.toLowerCase() || '').includes(searchLower) ||
       order.orderNo.toLowerCase().includes(searchLower);
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesAcceptDate = matchesYearMonth(order.acceptDate, yearFilter, monthFilter);
+    return matchesSearch && matchesStatus && matchesAcceptDate;
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -312,8 +318,8 @@ export default function Orders() {
         </div>
       </div>
 
-      <div className="card-sketch p-3 flex items-center justify-between gap-3 bg-white">
-        <div className="flex items-center gap-2 flex-1">
+      <div className="card-sketch p-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-white">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-1">
           <div className="relative flex-1 max-w-xs">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
@@ -324,9 +330,33 @@ export default function Orders() {
               className="w-full pl-8 pr-3 py-1.5 bg-gray-50 border-2 border-panda-black/10 focus:border-panda-black focus:bg-white rounded-lg outline-none transition-all text-xs"
             />
           </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={yearFilter}
+              onChange={e => setYearFilter(e.target.value)}
+              className="h-8 bg-gray-50 border-2 border-panda-black/10 focus:border-panda-black focus:bg-white rounded-lg px-2 text-xs outline-none transition-all"
+              title="按接单年份筛选"
+            >
+              <option value={ALL_YEARS}>全部年份</option>
+              {availableYears.map(year => (
+                <option key={year} value={year}>{year}年</option>
+              ))}
+            </select>
+            <select
+              value={monthFilter}
+              onChange={e => setMonthFilter(e.target.value)}
+              className="h-8 bg-gray-50 border-2 border-panda-black/10 focus:border-panda-black focus:bg-white rounded-lg px-2 text-xs outline-none transition-all"
+              title="按接单月份筛选"
+            >
+              <option value={ALL_MONTHS}>全年</option>
+              {monthOptions.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 overflow-x-auto">
           <button
             onClick={() => setStatusFilter('all')}
             className={clsx(

@@ -17,6 +17,7 @@
 <p align="center">
   <a href="#features">Features</a> •
   <a href="#getting-started">Getting Started</a> •
+  <a href="#tutorial">Tutorial</a> •
   <a href="#android-app">Android App</a> •
   <a href="#deployment">Deployment</a> •
   <a href="#api-docs">API Docs</a> •
@@ -29,6 +30,14 @@
   <img src="https://img.shields.io/badge/React-19-blue.svg" alt="React">
   <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License">
 </p>
+
+---
+
+<a id="tutorial"></a>
+
+## Tutorial | 使用教程
+
+值得买详细教程：[KOLFlow 达人商单管理系统使用教程](https://post.smzdm.com/p/a6zg63m0/)
 
 ---
 
@@ -178,6 +187,31 @@ The debug APK will be generated at:
 
 ```text
 android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+### Release APK | 发布签名包
+
+Release builds require a local signing keystore. Keep the keystore and passwords private, and do not commit them to Git.
+
+```powershell
+# Build web assets and sync native project
+npm run cap:sync
+
+# Build signed release APK
+cd android
+$env:JAVA_HOME="C:\tmp\temurin-jdk17\jdk-17.0.19+10"
+$env:Path="$env:JAVA_HOME\bin;$env:Path"
+.\gradlew.bat assembleRelease `
+  "-Pandroid.injected.signing.store.file=G:/Agent/KOLFlow/android/app/kolflow-release.jks" `
+  "-Pandroid.injected.signing.store.password=<storePassword>" `
+  "-Pandroid.injected.signing.key.alias=kolflow" `
+  "-Pandroid.injected.signing.key.password=<keyPassword>"
+```
+
+The release APK will be generated at:
+
+```text
+android/app/build/outputs/apk/release/app-release.apk
 ```
 
 ### Mobile Notes | 移动端说明
@@ -376,6 +410,14 @@ GET    /api/external/export?token=<API_KEY>          # 导出数据
 
 ## 📝 更新日志 | Changelog
 
+### 2026-05-21
+
+- **年月筛选**: 商单页面新增按年/月查看功能，月份筛选依据接单日期；账单页面新增按年/月查看功能，月份筛选依据账单创建日期
+- **账单统计联动**: 账单页已结算、待结算、总金额和列表会随年份/月度筛选同步变化
+- **Android 构建更新**: 已重新构建 Web 资源并同步到 Android 工程，移动端包包含最新筛选功能
+- **Release 签名包**: 新增本地 Release 签名 APK 构建说明，并将 Android 签名证书类型加入忽略规则，避免误提交私钥文件
+- **README 展示调整**: 将项目使用教程提前到顶部区域，并补充作者公众号与什么值得买主页
+
 ### 2026-05-20
 
 - **Android App**: 新增 Capacitor Android 客户端，App 端登录支持填写服务端地址，复用 Web 端账号体系
@@ -459,16 +501,14 @@ GET    /api/external/export?token=<API_KEY>          # 导出数据
 
 - GitHub: https://github.com/Panda-995
 - Email: 676096193@qq.com
+- 公众号：Panda不是猫
+- 什么值得买主页：https://zhiyou.smzdm.com/member/9256201282/
 
 ---
 
 ## Support | 支持
 
 如果这个项目对你有帮助，欢迎赞赏支持！
-
-### Tutorial | 使用教程
-
-值得买详细教程：[KOLFlow 达人商单管理系统使用教程](https://post.smzdm.com/p/a6zg63m0/)
 
 <table align="center">
   <tr>
