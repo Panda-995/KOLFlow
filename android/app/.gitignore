@@ -1,6 +1,2 @@
 /build/*
 !/build/.npmkeep
-*.jks
-*.keystore
-*.p12
-keystore.properties

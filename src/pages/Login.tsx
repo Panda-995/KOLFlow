@@ -26,7 +26,7 @@ export default function Login() {
   const [notice, setNotice] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isTestingServer, setIsTestingServer] = useState(false);
-  const [isCheckingUsers, setIsCheckingUsers] = useState(true);
+  const [isCheckingUsers, setIsCheckingUsers] = useState(() => !isNativeAppRuntime() || !!getSavedServerBaseUrl());
 
   const checkUsers = async (nextServerUrl = serverUrl, silent = false): Promise<boolean> => {
     try {
@@ -38,20 +38,21 @@ export default function Login() {
       }
 
       const normalized = normalizeServerUrl(nextServerUrl);
-      if (normalized) {
-        setServerBaseUrl(normalized);
-        setServerUrl(normalized);
-      } else if (isNativeAppRuntime()) {
+      if (!normalized && isNativeAppRuntime()) {
         setIsCheckingUsers(false);
         return false;
       }
 
       setIsCheckingUsers(true);
-      const res = await apiFetch('/api/auth/check-users');
+      const res = await apiFetch(normalized ? `${normalized}/api/auth/check-users` : '/api/auth/check-users');
       if (!res.ok) {
         throw new Error('服务端状态检查失败');
       }
       const data = await res.json();
+      if (normalized) {
+        setServerBaseUrl(normalized);
+        setServerUrl(normalized);
+      }
       if (data.hasUsers === false) {
         setMode('register');
       }
@@ -91,6 +92,13 @@ export default function Login() {
       }
 
       const normalized = normalizeServerUrl(serverUrl);
+      if (isNativeAppRuntime()) {
+        const healthRes = await apiFetch(`${normalized}/api/health`);
+        if (!healthRes.ok) {
+          setError(`服务端返回异常状态：${healthRes.status}`);
+          return;
+        }
+      }
       setServerBaseUrl(normalized);
 
       if (mode === 'register') {
@@ -128,14 +136,15 @@ export default function Login() {
         return;
       }
 
-      const normalized = setServerBaseUrl(serverUrl);
-      setServerUrl(normalized);
-      const res = await apiFetch('/api/health');
+      const normalized = normalizeServerUrl(serverUrl);
+      const res = await apiFetch(`${normalized}/api/health`);
       if (!res.ok) {
         setError(`服务端返回异常状态：${res.status}`);
         return;
       }
 
+      setServerBaseUrl(normalized);
+      setServerUrl(normalized);
       setNotice('服务端连接成功，可以继续登录');
       await checkUsers(normalized, true);
     } catch {

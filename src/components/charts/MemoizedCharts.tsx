@@ -38,8 +38,8 @@ export const AreaChartComponent = memo(function AreaChartComponent({
   height = 300
 }: AreaChartComponentProps) {
   return (
-    <div style={{ width: '100%', height }}>
-      <ResponsiveContainer>
+    <div style={{ width: '100%', minWidth: 0, height }}>
+      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
         <AreaChart data={data}>
           <defs>
             <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
@@ -99,8 +99,8 @@ export const LineChartComponent = memo(function LineChartComponent({
   height = 300
 }: LineChartComponentProps) {
   return (
-    <div style={{ width: '100%', height }}>
-      <ResponsiveContainer>
+    <div style={{ width: '100%', minWidth: 0, height }}>
+      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
         <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E0E0E0" />
           <XAxis
@@ -172,8 +172,8 @@ export const PieChartComponent = memo(function PieChartComponent({
   outerRadius = 90
 }: PieChartComponentProps) {
   return (
-    <div style={{ width: '100%', height }}>
-      <ResponsiveContainer>
+    <div style={{ width: '100%', minWidth: 0, height }}>
+      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
         <PieChart>
           <Pie
             data={data}
@@ -218,8 +218,8 @@ export const BarChartComponent = memo(function BarChartComponent({
   layout = 'vertical'
 }: BarChartComponentProps) {
   return (
-    <div style={{ width: '100%', height }}>
-      <ResponsiveContainer>
+    <div style={{ width: '100%', minWidth: 0, height }}>
+      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
         <BarChart data={data} layout={layout}>
           <CartesianGrid strokeDasharray="3 3" horizontal={layout === 'vertical'} />
           {layout === 'vertical' ? (

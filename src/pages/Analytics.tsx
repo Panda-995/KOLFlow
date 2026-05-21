@@ -218,10 +218,10 @@ export default function Analytics() {
 
       {/* 图表区域 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="card-pixel p-6 bg-white">
+        <div className="card-pixel p-6 bg-white min-w-0">
           <h2 className="text-lg font-bold mb-6">月度趋势</h2>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-[300px] w-full min-w-0">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <LineChart data={monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E0E0E0" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#9CA3AF' }} dy={10} />
@@ -236,12 +236,12 @@ export default function Analytics() {
           </div>
         </div>
 
-        <div className="card-pixel p-6 bg-white">
+        <div className="card-pixel p-6 bg-white min-w-0">
           <h2 className="text-lg font-bold mb-6">平台分布</h2>
           {platformData.length > 0 ? (
             <>
-              <div className="h-[240px] w-full flex items-center justify-center">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-[240px] w-full min-w-0 flex items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                   <PieChart>
                     <Pie data={platformData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={5} dataKey="value" stroke="none">
                       {platformData.map((_, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
@@ -267,10 +267,10 @@ export default function Analytics() {
           )}
         </div>
 
-        <div className="card-pixel p-6 bg-white">
+        <div className="card-pixel p-6 bg-white min-w-0">
           <h2 className="text-lg font-bold mb-6">订单状态分布</h2>
-          <div className="h-[200px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-[200px] w-full min-w-0">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <BarChart data={statusData} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                 <XAxis type="number" axisLine={false} tickLine={false} />
