@@ -28,7 +28,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Node.js-20+-green.svg" alt="Node.js">
   <img src="https://img.shields.io/badge/React-19-blue.svg" alt="React">
-  <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License">
+  <img src="https://img.shields.io/badge/License-Custom-orange.svg" alt="License: Custom (个人免费使用，商用需授权)">
 </p>
 
 ---

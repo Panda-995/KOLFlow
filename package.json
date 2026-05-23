@@ -2,6 +2,7 @@
   "name": "kolflow",
   "private": true,
   "version": "1.0.0",
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
     "node": ">=20.19.0 || >=22.12.0"

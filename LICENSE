@@ -1,47 +1,63 @@
-MIT License
+自定义软件许可协议 (Custom Software License)
 
-Copyright (c) 2024-2026 Panda-995 (https://github.com/Panda-995)
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-1. The above copyright notice and this permission notice shall be included in all
-   copies or substantial portions of the Software.
-
-2. The original author attribution and source must be prominently displayed in:
-   - The software interface (footer/about page)
-   - Any documentation or promotional materials
-   - Any derivative works or redistribution
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+版权所有 (c) 2024-2026 Panda-995 (https://github.com/Panda-995)
 
 ---
 
-## 商业使用条款
+## 许可条款
 
-本软件可免费用于商业用途，但必须遵守以下条件：
+### 1. 个人非商业使用 (Personal & Non-Commercial Use)
 
-1. **保留作者信息** - 必须保留并显示版权信息和作者链接
-2. **禁止去除作者标识** - 不得移除、隐藏或修改任何版权声明
-3. **开源衍生项目** - 基于本软件的开源项目必须保持开源，并注明原作者
-4. **闭源使用** - 商业闭源项目使用本软件需经过作者书面授权
+本软件授予个人用户免费的、非排他性的许可，仅限个人非商业目的使用、复制和修改本软件。个人用户可以自由安装、运行本软件用于个人事务管理。
 
-## 中文说明
+### 2. 商业使用 (Commercial Use)
 
-- 本项目采用 MIT 许可证
-- 可免费商用
-- 但必须保留作者信息（Panda-995）
-- 商业闭源使用请联系作者授权
+**商业使用必须事先获得作者的明确书面授权。**
+
+商业使用包括但不限于以下场景：
+- 企业内部部署使用
+- 作为商业产品/服务的一部分
+- 以收费或免费形式提供给第三方使用
+- 任何直接或间接产生商业价值的使用行为
+
+商业授权请通过以下方式联系作者：
+- GitHub: https://github.com/Panda-995
+- Email: 676096193@qq.com
+
+### 3. 版权声明 (Copyright Notice)
+
+**严禁移除、修改或隐藏本软件中的任何版权声明、作者信息和原始出处。**
+
+所有副本、修改版本和衍生作品中，必须保留完整的版权声明和作者信息，并在以下位置显著展示：
+- 软件界面中
+- 相关文档或宣传材料中
+- 任何衍生作品或再分发中包含
+
+### 4. 禁止行为 (Prohibited Actions)
+
+- 禁止移除、修改或隐藏作者信息及版权标识
+- 禁止在未经授权的情况下将本软件用于任何商业场景
+- 禁止将本软件重新打包后以其他名称发布
+- 禁止暗示或声称本软件由他人或他方开发
+
+### 5. 免责声明 (Disclaimer)
+
+本软件按"现状"提供，不提供任何形式的明示或暗示担保。在任何情况下，作者不对因使用本软件而产生的任何直接、间接、附带、特殊或后果性损害承担责任。
+
+---
+
+## 中文摘要
+
+| 使用场景 | 是否需要授权 |
+|---------|------------|
+| 个人免费使用 | 否，直接使用即可 |
+| 商业使用（企业部署、商业产品等） | 是，需联系作者取得授权 |
+| 修改并用于个人用途 | 否，但需保留版权信息 |
+| 删除/修改版权信息 | 禁止 |
+| 以他人名义发布 | 禁止 |
+| 基于本项目衍生新项目 | 需保留原作者信息，商业使用需额外授权 |
+
+---
 
 ## Contact / 联系方式
 
