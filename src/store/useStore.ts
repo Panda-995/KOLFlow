@@ -1,8 +1,8 @@
 import { create } from 'zustand';
-import type { Order, OrderStatus, OrderType, Todo, Brand, Payment, Settings, ActivityLog, Comment, PublishLink, Asset } from '../types';
+import type { Order, OrderStatus, OrderType, Todo, Brand, Payment, Settings, ActivityLog, Comment, PublishLink, PaidPromotion, Asset } from '../types';
 import { apiFetch, authFetch, getConnectionHelpMessage } from '../lib/api';
 
-export type { Order, OrderStatus, OrderType, Todo, Brand, Payment, Settings, ActivityLog, Comment, PublishLink, Asset };
+export type { Order, OrderStatus, OrderType, Todo, Brand, Payment, Settings, ActivityLog, Comment, PublishLink, PaidPromotion, Asset };
 
 const createAuthFetch = () => authFetch;
 
@@ -44,6 +44,7 @@ interface AppState {
   activityLogs: ActivityLog[];
   comments: Comment[];
   publishLinks: PublishLink[];
+  paidPromotions: PaidPromotion[];
   assets: Asset[];
   darkMode: boolean;
 
@@ -96,6 +97,10 @@ interface AppState {
   updatePublishLink: (id: string, platform: string, url: string) => Promise<void>;
   deletePublishLink: (id: string) => Promise<void>;
 
+  fetchPaidPromotions: (orderId?: string) => Promise<void>;
+  addPaidPromotion: (orderId: string, platform: string, amount: number) => Promise<void>;
+  deletePaidPromotion: (id: string) => Promise<void>;
+
   fetchAssets: () => Promise<void>;
   updateAsset: (id: string, asset: Partial<Asset>) => Promise<void>;
   deleteAsset: (id: string) => Promise<void>;
@@ -122,6 +127,7 @@ export const useStore = create<AppState>((set, get) => ({
   activityLogs: [],
   comments: [],
   publishLinks: [],
+  paidPromotions: [],
   assets: [],
   darkMode: localStorage.getItem('darkMode') === 'true',
 
@@ -204,6 +210,7 @@ export const useStore = create<AppState>((set, get) => ({
       activityLogs: [],
       comments: [],
       publishLinks: [],
+      paidPromotions: [],
       dismissedNotifications: []
     });
   },
@@ -692,7 +699,7 @@ export const useStore = create<AppState>((set, get) => ({
         throw new Error('清空数据失败');
       }
       invalidateAllCache();
-      set({ orders: [], todos: [], brands: [], payments: [], assets: [], activityLogs: [], comments: [], publishLinks: [] });
+      set({ orders: [], todos: [], brands: [], payments: [], assets: [], activityLogs: [], comments: [], publishLinks: [], paidPromotions: [] });
       get().showToast('数据已清空', 'success');
     } catch (error) {
       console.error('clearData失败:', error instanceof Error ? error.message : error);
@@ -721,6 +728,7 @@ export const useStore = create<AppState>((set, get) => ({
       if (imported.brands) set({ brands: imported.brands });
       if (imported.payments) set({ payments: imported.payments });
       if (imported.assets) set({ assets: imported.assets });
+      if (imported.paidPromotions) set({ paidPromotions: imported.paidPromotions });
       if (imported.settings) set({ settings: imported.settings });
       invalidateAllCache();
       get().showToast('数据导入成功', 'success');
@@ -896,6 +904,60 @@ export const useStore = create<AppState>((set, get) => ({
     } catch (error) {
       console.error('deletePublishLink失败:', error instanceof Error ? error.message : error);
       get().showToast('删除发布链接失败', 'error');
+      throw error;
+    }
+  },
+  fetchPaidPromotions: async (orderId) => {
+    try {
+      const path = orderId ? `/api/paid-promotions?orderId=${encodeURIComponent(orderId)}` : '/api/paid-promotions';
+      const res = await createAuthFetch()(path);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || '获取付费推广记录失败');
+      }
+      const data = await res.json();
+      set((state) => ({
+        paidPromotions: orderId
+          ? [...state.paidPromotions.filter(record => record.orderId !== orderId), ...data]
+          : data
+      }));
+    } catch (error) {
+      console.error('fetchPaidPromotions失败:', error instanceof Error ? error.message : error);
+      get().showToast('获取付费推广记录失败', 'error');
+      throw error;
+    }
+  },
+  addPaidPromotion: async (orderId, platform, amount) => {
+    try {
+      const res = await createAuthFetch()('/api/paid-promotions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, platform, amount })
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || '添加付费推广记录失败');
+      }
+      const newRecord = await res.json();
+      set((state) => ({ paidPromotions: [newRecord, ...state.paidPromotions] }));
+      get().showToast('付费推广记录已添加', 'success');
+    } catch (error) {
+      console.error('addPaidPromotion失败:', error instanceof Error ? error.message : error);
+      get().showToast('添加付费推广记录失败', 'error');
+      throw error;
+    }
+  },
+  deletePaidPromotion: async (id) => {
+    try {
+      const res = await createAuthFetch()(`/api/paid-promotions/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        throw new Error('删除付费推广记录失败');
+      }
+      set((state) => ({ paidPromotions: state.paidPromotions.filter(record => record.id !== id) }));
+      get().showToast('付费推广记录已删除', 'success');
+    } catch (error) {
+      console.error('deletePaidPromotion失败:', error instanceof Error ? error.message : error);
+      get().showToast('删除付费推广记录失败', 'error');
       throw error;
     }
   },

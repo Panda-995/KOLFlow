@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from 'recharts';
 import { useStore } from '../store/useStore';
-import { TrendingUp, TrendingDown, DollarSign, Package, CheckCircle, Filter } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Package, CheckCircle, Filter, Megaphone } from 'lucide-react';
 import { clsx } from 'clsx';
 
 const COLORS = ['#09090b', '#27272a', '#52525b', '#a1a1aa', '#d4d4d8', '#71717a'];
@@ -15,16 +15,19 @@ export default function Analytics() {
   const [year, setYear] = useState(new Date().getFullYear().toString());
   const [month, setMonth] = useState('all');
   const [brandFilter, setBrandFilter] = useState('all');
-  const { orders, payments, assets } = useStore();
+  const { orders, payments, assets, paidPromotions } = useStore();
+
+  const orderById = useMemo(() => new Map(orders.map(order => [order.id, order])), [orders]);
 
   const availableYears = useMemo(() => {
     const years = new Set<string>();
     orders.forEach(o => o.acceptDate && years.add(o.acceptDate.substring(0, 4)));
     payments.forEach(p => p.date && years.add(p.date.substring(0, 4)));
     assets.forEach(a => a.soldDate && years.add(a.soldDate.substring(0, 4)));
+    paidPromotions.forEach(p => p.createdAt && years.add(p.createdAt.substring(0, 4)));
     years.add(new Date().getFullYear().toString());
     return Array.from(years).sort().reverse();
-  }, [orders, payments, assets]);
+  }, [orders, payments, assets, paidPromotions]);
 
   const brandNames = useMemo(() => {
     const names = new Set<string>();
@@ -51,6 +54,17 @@ export default function Analytics() {
     });
   }, [payments, year, month, brandFilter]);
 
+  const filteredPaidPromotions = useMemo(() => {
+    return paidPromotions.filter(record => {
+      const order = orderById.get(record.orderId);
+      const recordDate = order?.acceptDate || record.createdAt?.substring(0, 10) || '';
+      const matchYear = recordDate.startsWith(year);
+      const matchMonth = month === 'all' || recordDate.substring(5, 7) === month;
+      const matchBrand = brandFilter === 'all' || order?.brandName === brandFilter;
+      return matchYear && matchMonth && matchBrand;
+    });
+  }, [paidPromotions, orderById, year, month, brandFilter]);
+
   const overviewStats = useMemo(() => {
     const paymentIncome = filteredPayments.reduce((sum, p) => sum + p.amount, 0);
     const assetIncome = assets
@@ -63,6 +77,7 @@ export default function Analytics() {
       })
       .reduce((sum, a) => sum + a.soldAmount, 0);
     const totalIncome = paymentIncome + assetIncome;
+    const paidPromotionTotal = filteredPaidPromotions.reduce((sum, record) => sum + record.amount, 0);
     const totalOrders = filteredOrders.length;
     const completedOrders = filteredOrders.filter(o => o.status === 'completed').length;
     const inProgressOrders = filteredOrders.filter(o => o.status === 'in_progress').length;
@@ -95,8 +110,8 @@ export default function Analytics() {
     const prevIncome = prevPaymentIncome + prevAssetIncome;
     const incomeGrowth = prevIncome > 0 ? ((totalIncome - prevIncome) / prevIncome * 100).toFixed(1) : '0';
 
-    return { totalIncome, totalOrders, completedOrders, inProgressOrders, cancelledOrders, avgOrderValue, completionRate, incomeGrowth };
-  }, [filteredOrders, filteredPayments, payments, assets, year, month, brandFilter]);
+    return { totalIncome, paidPromotionTotal, totalOrders, completedOrders, inProgressOrders, cancelledOrders, avgOrderValue, completionRate, incomeGrowth };
+  }, [filteredOrders, filteredPayments, filteredPaidPromotions, payments, assets, year, month, brandFilter]);
 
   const platformData = useMemo(() => {
     const platformCounts: Record<string, number> = {};
@@ -129,14 +144,22 @@ export default function Analytics() {
       const monthAssetIncome = assets
         .filter(a => a.saleStatus === 'sold' && a.soldDate?.startsWith(year) && a.soldDate?.substring(5, 7) === monthStr)
         .reduce((sum, a) => sum + a.soldAmount, 0);
+      const monthPromotionCost = paidPromotions
+        .filter(record => {
+          const order = orderById.get(record.orderId);
+          const recordDate = order?.acceptDate || record.createdAt?.substring(0, 10) || '';
+          return recordDate.startsWith(year) && recordDate.substring(5, 7) === monthStr;
+        })
+        .reduce((sum, record) => sum + record.amount, 0);
       return {
         name: `${m + 1}月`,
         收入: monthPayments.reduce((sum, p) => sum + p.amount, 0) + monthAssetIncome,
+        推广费: monthPromotionCost,
         商单数: monthOrders.length,
         完成数: monthOrders.filter(o => o.status === 'completed').length
       };
     });
-  }, [orders, payments, assets, year, month]);
+  }, [orders, payments, assets, paidPromotions, orderById, year, month]);
 
   const brandRanking = useMemo(() => {
     const brandIncome: Record<string, number> = {};
@@ -178,7 +201,7 @@ export default function Analytics() {
       </div>
 
       {/* 统计概览卡片 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="card-pixel p-5 bg-white">
           <div className="flex items-center justify-between mb-2">
             <span className="text-gray-500 text-sm">总收入</span>
@@ -208,6 +231,14 @@ export default function Analytics() {
         </div>
         <div className="card-pixel p-5 bg-white">
           <div className="flex items-center justify-between mb-2">
+            <span className="text-gray-500 text-sm">付费推广</span>
+            <Megaphone size={18} className="text-danger" />
+          </div>
+          <div className="text-2xl font-bold text-panda-black">¥{overviewStats.paidPromotionTotal.toLocaleString()}</div>
+          <div className="text-xs text-gray-400 mt-1">推广费用总计</div>
+        </div>
+        <div className="card-pixel p-5 bg-white">
+          <div className="flex items-center justify-between mb-2">
             <span className="text-gray-500 text-sm">完成率</span>
             <CheckCircle size={18} className="text-success" />
           </div>
@@ -230,6 +261,7 @@ export default function Analytics() {
                 <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }} />
                 <Legend />
                 <Line yAxisId="left" type="monotone" dataKey="收入" stroke="#09090b" strokeWidth={2} dot={{ fill: '#09090b' }} />
+                <Line yAxisId="left" type="monotone" dataKey="推广费" stroke="#ef4444" strokeWidth={2} dot={{ fill: '#ef4444' }} />
                 <Line yAxisId="right" type="monotone" dataKey="商单数" stroke="#a1a1aa" strokeWidth={2} dot={{ fill: '#a1a1aa' }} />
               </LineChart>
             </ResponsiveContainer>

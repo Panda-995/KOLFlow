@@ -233,6 +233,7 @@ export const deleteOrderWithRelated = (userId: string, orderId: string) => {
   logActivity(userId, 'delete', 'order', orderId, `删除商单: ${order.title} (${order.orderNo})`);
   db.prepare('DELETE FROM payments WHERE orderNo = ? AND userId = ?').run(order.orderNo, userId);
   db.prepare('DELETE FROM assets WHERE orderId = ? AND userId = ?').run(orderId, userId);
+  db.prepare('DELETE FROM paid_promotions WHERE orderId = ? AND userId = ?').run(orderId, userId);
   db.prepare('DELETE FROM orders WHERE id = ? AND userId = ?').run(orderId, userId);
   db.prepare('DELETE FROM todos WHERE orderId = ? AND userId = ?').run(orderId, userId);
   db.prepare('DELETE FROM publish_links WHERE orderId = ? AND userId = ?').run(orderId, userId);

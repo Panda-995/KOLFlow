@@ -46,6 +46,16 @@ router.get('/:type', (req, res) => {
   const assetIncome = soldAssets.reduce((sum, a) => sum + (a.soldAmount || 0), 0);
   const totalIncome = paymentIncome + assetIncome;
 
+  const paidPromotions = db.prepare(`
+    SELECT pp.* FROM paid_promotions pp
+    LEFT JOIN orders o ON pp.orderId = o.id AND pp.userId = o.userId
+    WHERE pp.userId = ?
+      AND COALESCE(o.acceptDate, substr(pp.createdAt, 1, 10)) >= ?
+      AND COALESCE(o.acceptDate, substr(pp.createdAt, 1, 10)) <= ?
+    ORDER BY pp.createdAt DESC
+  `).all(userId, startDateStr, endDateStr) as any[];
+  const paidPromotionTotal = paidPromotions.reduce((sum, record) => sum + (record.amount || 0), 0);
+
   const brandStats: Record<string, { orders: number; income: number }> = {};
   orders.forEach(o => {
     if (o.brandName) {
@@ -70,10 +80,11 @@ router.get('/:type', (req, res) => {
 
   res.json({
     period: { start: startDateStr, end: endDateStr, type },
-    summary: { totalOrders, completedOrders, totalIncome, pendingIncome },
+    summary: { totalOrders, completedOrders, totalIncome, pendingIncome, paidPromotionTotal },
     brandStats,
     orders: orders.map(o => ({ ...o, platforms: safeJsonParse(o.platforms, []) })),
-    payments
+    payments,
+    paidPromotions
   });
 });
 

@@ -120,6 +120,15 @@ export interface PublishLink {
   createdAt: string;
 }
 
+// 付费推广记录接口
+export interface PaidPromotion {
+  id: string;
+  orderId: string;
+  platform: string;
+  amount: number;
+  createdAt: string;
+}
+
 // 用户接口
 export interface User {
   id: string;

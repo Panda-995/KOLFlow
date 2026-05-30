@@ -10,6 +10,7 @@ import commentsRouter from './comments.js';
 import dataRouter from './data.js';
 import reportRouter from './report.js';
 import publishLinksRouter from './publishLinks.js';
+import paidPromotionsRouter from './paidPromotions.js';
 import assetsRouter from './assets.js';
 
 const router = Router();
@@ -25,6 +26,7 @@ router.use('/comments', commentsRouter);
 router.use('/data', dataRouter);
 router.use('/report', reportRouter);
 router.use('/publish-links', publishLinksRouter);
+router.use('/paid-promotions', paidPromotionsRouter);
 router.use('/assets', assetsRouter);
 
 export default router;

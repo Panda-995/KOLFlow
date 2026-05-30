@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useStore, Order, OrderType, OrderStatus } from '../store/useStore';
-import { Search, Plus, Trash2, MessageSquare, Send, Upload, FileSpreadsheet, Download, FileDown, Link as LinkIcon, ExternalLink, Copy } from 'lucide-react';
+import { Search, Plus, Trash2, MessageSquare, Send, Upload, FileSpreadsheet, Download, FileDown, Link as LinkIcon, ExternalLink, Copy, Megaphone } from 'lucide-react';
 import { clsx } from 'clsx';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -15,7 +15,7 @@ const statusMap = ORDER_STATUS_MAP;
 const typeMap = ORDER_TYPE_MAP;
 
 export default function Orders() {
-  const { orders, brands, addOrder, updateOrder, updateOrderStatus, deleteOrder, addBrand, comments, fetchComments, addComment, fetchOrders, publishLinks, fetchPublishLinks, addPublishLink, batchAddPublishLinks, deletePublishLink } = useStore();
+  const { orders, brands, addOrder, updateOrder, updateOrderStatus, deleteOrder, addBrand, comments, fetchComments, addComment, fetchOrders, publishLinks, fetchPublishLinks, addPublishLink, batchAddPublishLinks, deletePublishLink, paidPromotions, fetchPaidPromotions, addPaidPromotion, deletePaidPromotion } = useStore();
   const { showToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -28,6 +28,8 @@ export default function Orders() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [newLinkInput, setNewLinkInput] = useState('');
+  const [promotionPlatform, setPromotionPlatform] = useState('');
+  const [promotionAmount, setPromotionAmount] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 删除确认弹窗状态
@@ -86,8 +88,9 @@ export default function Orders() {
     if (viewingOrder) {
       fetchComments(viewingOrder.id);
       fetchPublishLinks(viewingOrder.id);
+      fetchPaidPromotions(viewingOrder.id);
     }
-  }, [viewingOrder, fetchComments, fetchPublishLinks]);
+  }, [viewingOrder, fetchComments, fetchPublishLinks, fetchPaidPromotions]);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -207,6 +210,36 @@ export default function Orders() {
     showToast('链接已删除');
   };
 
+  const handleAddPaidPromotion = async () => {
+    if (!viewingOrder) return;
+    const platform = promotionPlatform.trim();
+    const amount = Number(promotionAmount);
+
+    if (!platform) {
+      showToast('请填写推广平台', 'warning');
+      return;
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      showToast('请填写有效的推广金额', 'warning');
+      return;
+    }
+
+    try {
+      await addPaidPromotion(viewingOrder.id, platform, amount);
+      setPromotionPlatform('');
+      setPromotionAmount('');
+      showToast('付费推广记录已添加');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '添加付费推广记录失败', 'error');
+    }
+  };
+
+  const handleDeletePaidPromotion = async (id: string) => {
+    await deletePaidPromotion(id);
+    showToast('付费推广记录已删除');
+  };
+
   const handleBatchCopyLinks = async () => {
     if (!viewingOrder) return;
     const links = publishLinks.filter(l => l.orderId === viewingOrder.id);
@@ -294,6 +327,11 @@ export default function Orders() {
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  const viewingOrderLinks = viewingOrder ? publishLinks.filter(link => link.orderId === viewingOrder.id) : [];
+  const viewingOrderPromotions = viewingOrder ? paidPromotions.filter(record => record.orderId === viewingOrder.id) : [];
+  const viewingOrderPromotionTotal = viewingOrderPromotions.reduce((sum, record) => sum + record.amount, 0);
+  const promotionPlatformOptions = Array.from(new Set(viewingOrderLinks.map(link => link.platform).filter(Boolean)));
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -492,7 +530,7 @@ export default function Orders() {
         </form>
       </Modal>
 
-      <Modal isOpen={!!viewingOrder} onClose={() => { setViewingOrder(null); setNewComment(''); setNewLinkInput(''); }} title="商单详情" width="max-w-lg">
+      <Modal isOpen={!!viewingOrder} onClose={() => { setViewingOrder(null); setNewComment(''); setNewLinkInput(''); setPromotionPlatform(''); setPromotionAmount(''); }} title="商单详情" width="max-w-lg">
         {viewingOrder && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
@@ -665,8 +703,103 @@ export default function Orders() {
               <p className="text-[10px] text-gray-400 mt-1">支持多行批量输入，自动识别平台。格式：平台：链接 或直接粘贴链接</p>
             </div>
 
+            {/* 付费推广记录 */}
+            <div className="border-t border-border/50 pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Megaphone size={16} className="text-gray-500" />
+                  <span className="text-sm font-medium text-gray-700">付费推广记录</span>
+                  <span className="text-xs text-gray-400">({viewingOrderPromotions.length})</span>
+                </div>
+                <span className="text-xs font-semibold text-danger bg-danger/10 px-2 py-1 rounded-full">
+                  合计 ¥{viewingOrderPromotionTotal.toLocaleString()}
+                </span>
+              </div>
+
+              <div className="space-y-2 max-h-[180px] overflow-y-auto mb-3">
+                {viewingOrderPromotions.length > 0 ? (
+                  viewingOrderPromotions.map(record => (
+                    <div key={record.id} className="bg-gray-50 rounded-lg p-2.5 flex items-center gap-3 group">
+                      <span className="text-lg">{getPlatformIcon(record.platform)}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium text-gray-600 truncate">{record.platform}</div>
+                        <div className="text-[10px] text-gray-400">{formatCommentDate(record.createdAt)}</div>
+                      </div>
+                      <div className="text-sm font-semibold text-danger">¥{record.amount.toLocaleString()}</div>
+                      <button
+                        onClick={() => handleDeletePaidPromotion(record.id)}
+                        className="p-1.5 text-gray-400 hover:text-danger hover:bg-danger/10 rounded transition-colors opacity-0 group-hover:opacity-100"
+                        title="删除记录"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-gray-400 text-center py-4">暂无付费推广记录</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                {promotionPlatformOptions.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {promotionPlatformOptions.map(platform => (
+                      <button
+                        key={platform}
+                        type="button"
+                        onClick={() => setPromotionPlatform(platform)}
+                        className={clsx(
+                          "text-[10px] px-2.5 py-1 rounded-full border transition-colors",
+                          promotionPlatform === platform
+                            ? "bg-panda-black text-white border-panda-black"
+                            : "bg-white text-gray-600 border-border hover:border-panda-black"
+                        )}
+                      >
+                        {getPlatformIcon(platform)} {platform}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_110px_auto] gap-2">
+                  <div className="min-w-0">
+                    <input
+                      list="paid-promotion-platforms"
+                      value={promotionPlatform}
+                      onChange={e => setPromotionPlatform(e.target.value)}
+                      placeholder="推广平台"
+                      className="w-full px-3 py-2 border border-border rounded-lg outline-none focus:border-accent text-sm"
+                    />
+                    <datalist id="paid-promotion-platforms">
+                      {promotionPlatformOptions.map(platform => (
+                        <option key={platform} value={platform} />
+                      ))}
+                    </datalist>
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={promotionAmount}
+                    onChange={e => setPromotionAmount(e.target.value)}
+                    placeholder="金额"
+                    className="w-full px-3 py-2 border border-border rounded-lg outline-none focus:border-accent text-sm"
+                  />
+                  <button
+                    onClick={handleAddPaidPromotion}
+                    disabled={!promotionPlatform.trim() || !promotionAmount.trim()}
+                    className="btn-sketch py-2 px-3 disabled:opacity-50 justify-center"
+                    title="添加付费推广记录"
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
+                <p className="text-[10px] text-gray-400">可手动输入平台，也可以点选已填写发布链接的平台。</p>
+              </div>
+            </div>
+
             <div className="pt-3 flex justify-end">
-              <button onClick={() => { setViewingOrder(null); setNewComment(''); setNewLinkInput(''); }} className="btn-sketch py-2 px-4 text-sm">关闭</button>
+              <button onClick={() => { setViewingOrder(null); setNewComment(''); setNewLinkInput(''); setPromotionPlatform(''); setPromotionAmount(''); }} className="btn-sketch py-2 px-4 text-sm">关闭</button>
             </div>
           </div>
         )}

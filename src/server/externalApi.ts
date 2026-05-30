@@ -403,6 +403,7 @@ router.get('/statistics', async (req, res) => {
     const payments = db.prepare('SELECT * FROM payments WHERE userId = ?').all(userId) as any[];
     const todos = db.prepare('SELECT * FROM todos WHERE userId = ?').all(userId) as any[];
     const assets = db.prepare("SELECT * FROM assets WHERE userId = ? AND saleStatus = 'sold'").all(userId) as any[];
+    const paidPromotions = db.prepare('SELECT * FROM paid_promotions WHERE userId = ?').all(userId) as any[];
 
     const totalOrders = orders.length;
     const completedOrders = orders.filter(o => o.status === 'completed').length;
@@ -411,6 +412,7 @@ router.get('/statistics', async (req, res) => {
     const assetIncome = assets.reduce((sum, a) => sum + (a.soldAmount || 0), 0);
     const totalIncome = paymentIncome + assetIncome;
     const pendingIncome = payments.filter(p => p.type === 'pending').reduce((sum, p) => sum + p.amount, 0);
+    const paidPromotionTotal = paidPromotions.reduce((sum, record) => sum + (record.amount || 0), 0);
 
     const pendingTodos = todos.filter(t => !t.completed).length;
 
@@ -423,7 +425,8 @@ router.get('/statistics', async (req, res) => {
       },
       income: {
         totalReceived: totalIncome,
-        totalPending: pendingIncome
+        totalPending: pendingIncome,
+        paidPromotionTotal
       },
       todos: {
         pending: pendingTodos
@@ -545,6 +548,7 @@ router.get('/export', async (req, res) => {
     const todos = db.prepare('SELECT * FROM todos WHERE userId = ?').all(userId) as any[];
     const settings = db.prepare('SELECT * FROM settings WHERE userId = ?').get(userId) as any;
     const publishLinks = db.prepare('SELECT * FROM publish_links WHERE userId = ? ORDER BY createdAt DESC').all(userId);
+    const paidPromotions = db.prepare('SELECT * FROM paid_promotions WHERE userId = ? ORDER BY createdAt DESC').all(userId);
     const comments = db.prepare('SELECT * FROM comments WHERE userId = ? ORDER BY createdAt DESC').all(userId);
 
     return res.json({
@@ -558,6 +562,7 @@ router.get('/export', async (req, res) => {
         bio: settings?.bio || ''
       },
       publishLinks,
+      paidPromotions,
       comments
     });
   } catch (error) {

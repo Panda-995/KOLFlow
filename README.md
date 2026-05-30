@@ -55,7 +55,8 @@
 | 🎁 Asset Library | 🎁 资产库 |
 | 📈 Analytics | 📈 数据统计 |
 | 📋 Activity Logs | 📋 操作日志 |
-| 🔐 API Key Management | 🔐 API Key 管理 |
+| � Paid Promotion Tracking | 📢 付费推广追踪 |
+| � API Key Management | 🔐 API Key 管理 |
 | 🎨 Themes | 🎨 主题外观 |
 | 📱 Android App | 📱 Android 客户端 |
 
@@ -323,6 +324,14 @@ PUT    /api/publish-links/:id         # 更新发布链接
 DELETE /api/publish-links/:id         # 删除发布链接
 ```
 
+### Paid Promotions | 付费推广
+
+```bash
+GET    /api/paid-promotions?orderId=:orderId   # 获取商单付费推广记录
+POST   /api/paid-promotions                    # 添加付费推广记录  Body: { orderId, platform, amount }
+DELETE /api/paid-promotions/:id                 # 删除付费推广记录
+```
+
 ### Data Import/Export | 数据导入导出
 
 ```bash
@@ -384,6 +393,16 @@ GET    /api/external/export?token=<API_KEY>          # 导出数据
 ---
 
 ## 📝 更新日志 | Changelog
+
+### 2026-05-23
+
+- **付费推广追踪**: 新增付费推广模块，支持记录每个商单在不同平台的付费推广费用
+- **商单详情页增强**: 商单弹窗详情页新增付费推广记录面板，支持添加/删除推广记录，自动关联平台选项
+- **统计分析扩展**: 仪表盘新增付费推广费用卡片，趋势图增加推广成本折线，月度统计包含推广费用维度
+- **报表 API 增强**: 统计报表接口返回付费推广数据（`paidPromotionTotal`、`paidPromotions`），支持按年月/品牌筛选
+- **导入导出兼容**: 数据导入导出包含付费推广记录，支持完整数据迁移
+- **外部 API 更新**: 外部 API 接口同步支持付费推广数据
+- **数据库扩展**: 新增 `paid_promotions` 表（id, orderId, userId, platform, amount, createdAt）
 
 ### 2026-05-21
 

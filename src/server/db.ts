@@ -72,6 +72,17 @@ db.exec(`
     FOREIGN KEY (userId) REFERENCES users(id)
   );
 
+  CREATE TABLE IF NOT EXISTS paid_promotions (
+    id TEXT PRIMARY KEY,
+    orderId TEXT NOT NULL,
+    userId TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    amount REAL NOT NULL DEFAULT 0,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (orderId) REFERENCES orders(id),
+    FOREIGN KEY (userId) REFERENCES users(id)
+  );
+
   CREATE TABLE IF NOT EXISTS payments (
     id TEXT PRIMARY KEY,
     userId TEXT NOT NULL,
@@ -239,6 +250,23 @@ if (publishLinksColumnNames.length > 0 && !publishLinksColumnNames.includes('use
   db.exec(`ALTER TABLE publish_links ADD COLUMN userId TEXT NOT NULL DEFAULT "${defaultUserId}";`);
 }
 
+// Ensure paid_promotions table exists for older versions
+const paidPromotionsExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='paid_promotions'").get() as any;
+if (!paidPromotionsExists) {
+  db.exec(`
+    CREATE TABLE paid_promotions (
+      id TEXT PRIMARY KEY,
+      orderId TEXT NOT NULL,
+      userId TEXT NOT NULL,
+      platform TEXT NOT NULL,
+      amount REAL NOT NULL DEFAULT 0,
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (orderId) REFERENCES orders(id),
+      FOREIGN KEY (userId) REFERENCES users(id)
+    )
+  `);
+}
+
 // Ensure todos has orderId and brandId
 const todoColumns = db.prepare("PRAGMA table_info(todos)").all() as any[];
 const todoColumnNames = todoColumns.map(c => c.name);
@@ -320,6 +348,8 @@ const createIndexes = () => {
     'CREATE INDEX IF NOT EXISTS idx_activity_logs_userId ON activity_logs(userId)',
     'CREATE INDEX IF NOT EXISTS idx_activity_logs_createdAt ON activity_logs(createdAt)',
     'CREATE INDEX IF NOT EXISTS idx_comments_orderId ON comments(orderId)',
+    'CREATE INDEX IF NOT EXISTS idx_paid_promotions_userId ON paid_promotions(userId)',
+    'CREATE INDEX IF NOT EXISTS idx_paid_promotions_orderId ON paid_promotions(orderId)',
     // 复合索引
     'CREATE INDEX IF NOT EXISTS idx_orders_userId_status ON orders(userId, status)',
     'CREATE INDEX IF NOT EXISTS idx_payments_userId_type ON payments(userId, type)',

@@ -55,6 +55,7 @@ router.get('/export', (req, res) => {
     const todos = db.prepare('SELECT * FROM todos WHERE userId = ? ORDER BY createdAt DESC').all(userId);
     const settings = db.prepare('SELECT * FROM settings WHERE userId = ?').get(userId);
     const publishLinks = db.prepare('SELECT * FROM publish_links WHERE userId = ? ORDER BY createdAt DESC').all(userId);
+    const paidPromotions = db.prepare('SELECT * FROM paid_promotions WHERE userId = ? ORDER BY createdAt DESC').all(userId);
     const comments = db.prepare('SELECT * FROM comments WHERE userId = ? ORDER BY createdAt DESC').all(userId);
     const assets = db.prepare('SELECT * FROM assets WHERE userId = ? ORDER BY createdAt DESC').all(userId);
 
@@ -65,6 +66,7 @@ router.get('/export', (req, res) => {
       todos: todos.map((t: any) => ({ ...t, completed: Boolean(t.completed) })),
       settings,
       publishLinks,
+      paidPromotions,
       comments,
       assets
     });
@@ -82,6 +84,7 @@ router.post('/clear', (req, res) => {
     const clearUserData = db.transaction(() => {
       // 先删除依赖表的数据
       db.prepare('DELETE FROM comments WHERE userId = ?').run(userId);
+      db.prepare('DELETE FROM paid_promotions WHERE userId = ?').run(userId);
       db.prepare('DELETE FROM publish_links WHERE userId = ?').run(userId);
       db.prepare('DELETE FROM activity_logs WHERE userId = ?').run(userId);
       // 再删除主表数据
@@ -111,12 +114,13 @@ router.post('/clear', (req, res) => {
 router.post('/import', (req, res) => {
   try {
     const userId = getUserId(req);
-    const { orders, brands, payments, todos, settings: importedSettings, publishLinks, comments, assets } = req.body;
+    const { orders, brands, payments, todos, settings: importedSettings, publishLinks, paidPromotions, comments, assets } = req.body;
 
     // 使用事务确保数据一致性
     const importData = db.transaction(() => {
       // 先删除依赖表的数据
       db.prepare('DELETE FROM comments WHERE userId = ?').run(userId);
+      db.prepare('DELETE FROM paid_promotions WHERE userId = ?').run(userId);
       db.prepare('DELETE FROM publish_links WHERE userId = ?').run(userId);
       db.prepare('DELETE FROM activity_logs WHERE userId = ?').run(userId);
       
@@ -222,6 +226,26 @@ router.post('/import', (req, res) => {
           linkStmt.run(
             linkId, link.orderId || null, userId, link.platform || '其他', link.url || '',
             link.createdAt || new Date().toISOString()
+          );
+        });
+      }
+
+      // 导入付费推广记录（旧版备份没有 paidPromotions 时自动跳过）
+      if (Array.isArray(paidPromotions)) {
+        const promotionStmt = db.prepare(`
+          INSERT INTO paid_promotions (id, orderId, userId, platform, amount, createdAt)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `);
+        paidPromotions.forEach((promotion: any) => {
+          if (!promotion.orderId) return;
+          const promotionId = promotion.id || uuidv4();
+          promotionStmt.run(
+            promotionId,
+            promotion.orderId,
+            userId,
+            promotion.platform || '其他',
+            Number(promotion.amount) || 0,
+            promotion.createdAt || new Date().toISOString()
           );
         });
       }
