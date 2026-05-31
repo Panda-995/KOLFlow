@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   kolflow:
     image: ghcr.io/panda-995/kolflow:latest
