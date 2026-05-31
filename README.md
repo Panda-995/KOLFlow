@@ -209,6 +209,9 @@ android/app/build/outputs/apk/debug/app-debug.apk
 
 ```bash
 # 拉取并启动（自动选择对应架构）
+docker compose up -d
+
+# 如果使用旧版 Docker Compose
 docker-compose up -d
 
 # 或手动指定镜像
@@ -225,13 +228,29 @@ docker run -d -p 3000:3000 \
 | `latest` | 最新版（多架构） |
 | `arm` | ARM64 架构专用 |
 | `arm64` | ARM64 架构专用 |
-| `linux/amd64` | x86_64 架构 |
+| `amd64` | x86_64 架构专用 |
 
 Set environment variables | 设置环境变量:
 ```bash
 export JWT_SECRET=your-secret-key
 export INVITE_CODE=your-invite-code
-docker-compose up -d
+docker compose up -d
+```
+
+如果拉取镜像提示 `manifest unknown`，先确认镜像名为全小写：
+
+```bash
+docker pull ghcr.io/panda-995/kolflow:latest
+```
+
+若刚推送代码，请等待 GitHub Actions 中 `merge-manifest` 步骤完成；如果使用旧版 Docker、NAS 面板或镜像代理仍无法拉取，可临时指定架构标签：
+
+```bash
+# x86_64 / AMD64 设备
+docker pull ghcr.io/panda-995/kolflow:amd64
+
+# ARM64 设备
+docker pull ghcr.io/panda-995/kolflow:arm64
 ```
 
 ---

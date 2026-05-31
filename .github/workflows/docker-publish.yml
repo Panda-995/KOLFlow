@@ -39,6 +39,8 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
+          provenance: false
+          sbom: false
           tags: |
             ${{ env.IMAGE_FULL }}:amd64
           cache-from: type=gha
@@ -72,6 +74,8 @@ jobs:
           context: .
           platforms: linux/arm64
           push: true
+          provenance: false
+          sbom: false
           tags: |
             ${{ env.IMAGE_FULL }}:arm64
             ${{ env.IMAGE_FULL }}:arm
@@ -100,6 +104,12 @@ jobs:
             -t ${{ env.IMAGE_FULL }}:latest \
             ${{ env.IMAGE_FULL }}:amd64 \
             ${{ env.IMAGE_FULL }}:arm64
+
+      - name: Verify published images
+        run: |
+          docker buildx imagetools inspect ${{ env.IMAGE_FULL }}:latest
+          docker pull --platform linux/amd64 ${{ env.IMAGE_FULL }}:latest
+          docker pull --platform linux/arm64 ${{ env.IMAGE_FULL }}:latest
 
   cleanup:
     needs: [merge-manifest]
