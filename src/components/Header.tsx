@@ -1,4 +1,4 @@
-import { Bell, LogOut, X, Menu, Plus, AlertTriangle, Clock } from 'lucide-react';
+import { Bell, LogOut, X, Menu, Plus, AlertTriangle, Clock, CheckCheck } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useStore } from '../store/useStore';
@@ -11,7 +11,7 @@ interface HeaderProps {
 export default function Header({ onMenuClick }: HeaderProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
-  const { logout, orders, payments, dismissedNotifications, dismissNotification } = useStore();
+  const { logout, orders, payments, dismissedNotifications, dismissNotification, clearNotifications } = useStore();
   const navigate = useNavigate();
 
   const notifications = useMemo(() => {
@@ -79,6 +79,10 @@ export default function Header({ onMenuClick }: HeaderProps) {
     navigate(link);
   };
 
+  const handleClearNotifications = () => {
+    clearNotifications(notifications.map(notif => notif.id));
+  };
+
   return (
     <header className="h-14 md:h-16 bg-bg-primary border-b border-border/50 flex items-center justify-between px-3 md:px-8 sticky top-0 z-10">
       <div className="flex items-center gap-2 md:gap-3">
@@ -114,10 +118,24 @@ export default function Header({ onMenuClick }: HeaderProps) {
           {/* Desktop dropdown */}
           <div className="hidden md:block">
             {showNotifications && (
-              <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-border/50 overflow-hidden z-[100] animate-in fade-in slide-in-from-top-2">
-                <div className="p-3 border-b border-border/50 bg-gray-50/50 flex items-center justify-between">
+              <div
+                className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-border/50 overflow-hidden z-[100] animate-in fade-in slide-in-from-top-2"
+                onMouseDown={e => e.stopPropagation()}
+              >
+                <div className="p-3 border-b border-border/50 bg-gray-50/50 flex items-center justify-between gap-3">
                   <h3 className="text-sm font-semibold text-panda-black">通知中心</h3>
-                  <span className="text-xs text-gray-500">{notifications.length} 条未读</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500">{notifications.length} 条未读</span>
+                    {notifications.length > 0 && (
+                      <button
+                        onClick={handleClearNotifications}
+                        className="p-1.5 text-gray-400 hover:text-panda-black hover:bg-white rounded-lg transition-colors"
+                        title="一键清除通知"
+                      >
+                        <CheckCheck size={14} />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="max-h-96 overflow-y-auto">
                   {notifications.length === 0 ? (
@@ -183,6 +201,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
         <div className="md:hidden fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm animate-in fade-in" onClick={() => setShowNotifications(false)}>
           <div 
             className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[80vh] overflow-hidden animate-in slide-in-from-bottom duration-300"
+            onMouseDown={e => e.stopPropagation()}
             onClick={e => e.stopPropagation()}
           >
             {/* Handle bar */}
@@ -196,12 +215,23 @@ export default function Header({ onMenuClick }: HeaderProps) {
                 <Bell size={20} className="text-panda-black" />
                 <h3 className="text-base font-bold text-panda-black">通知中心</h3>
               </div>
-              <button 
-                onClick={() => setShowNotifications(false)}
-                className="p-2 text-gray-400 hover:text-panda-black hover:bg-gray-100 rounded-full transition-colors"
-              >
-                <X size={20} />
-              </button>
+              <div className="flex items-center gap-1">
+                {notifications.length > 0 && (
+                  <button
+                    onClick={handleClearNotifications}
+                    className="p-2 text-gray-400 hover:text-panda-black hover:bg-gray-100 rounded-full transition-colors"
+                    title="一键清除通知"
+                  >
+                    <CheckCheck size={18} />
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowNotifications(false)}
+                  className="p-2 text-gray-400 hover:text-panda-black hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
             </div>
 
             {/* Content */}

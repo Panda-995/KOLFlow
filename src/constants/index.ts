@@ -28,5 +28,5 @@ export const STATUS_COLORS = {
 };
 
 // Supported file types
-export const SUPPORTED_IMPORT_TYPES = ['.xlsx', '.xls', '.csv'];
+export const SUPPORTED_IMPORT_TYPES = ['.xlsx', '.csv'];
 export const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];

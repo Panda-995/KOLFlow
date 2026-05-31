@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useStore, Payment } from '../store/useStore';
-import { ArrowUpRight, ArrowDownRight, Download, CheckCircle, Clock, Edit2, Trash2 } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Download, CheckCircle, Clock, Edit2, Trash2, Search } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -33,6 +33,8 @@ export default function Billing() {
   const [filterType, setFilterType] = useState<'all' | 'settled' | 'pending'>('all');
   const [yearFilter, setYearFilter] = useState(() => searchParams.get('year') || ALL_YEARS);
   const [monthFilter, setMonthFilter] = useState(() => normalizeMonthParam(monthParam));
+  const [brandFilter, setBrandFilter] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
   const [formData, setFormData] = useState({
     orderNo: '',
     brand: '',
@@ -115,20 +117,42 @@ export default function Billing() {
     [payments],
   );
 
-  const dateScopedPayments = useMemo(() => {
-    return payments.filter(payment => matchesYearMonth(getPaymentCreatedDate(payment), yearFilter, monthFilter));
-  }, [payments, yearFilter, monthFilter]);
+  const brandOptions = useMemo(() => {
+    const names = payments
+      .map(payment => payment.brand)
+      .filter((name): name is string => Boolean(name?.trim()));
+    return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, 'zh-CN'));
+  }, [payments]);
 
-  const totalSettled = dateScopedPayments.filter(p => p.type === 'settled').reduce((acc, p) => acc + p.amount, 0);
-  const totalPending = dateScopedPayments.filter(p => p.type === 'pending').reduce((acc, p) => acc + p.amount, 0);
-  const showMonthChange = yearFilter === ALL_YEARS && monthFilter === ALL_MONTHS && monthChange !== 0;
+  const scopedPayments = useMemo(() => {
+    const searchLower = searchTerm.trim().toLowerCase();
+
+    return payments.filter(payment => {
+      const matchesDate = matchesYearMonth(getPaymentCreatedDate(payment), yearFilter, monthFilter);
+      const matchesBrand = brandFilter === 'all' || payment.brand === brandFilter;
+      const matchesSearch = !searchLower || [
+        payment.brand,
+        payment.orderNo,
+        payment.method,
+        payment.date,
+        getPaymentCreatedDate(payment),
+        String(payment.amount),
+      ].some(value => String(value || '').toLowerCase().includes(searchLower));
+
+      return matchesDate && matchesBrand && matchesSearch;
+    });
+  }, [payments, yearFilter, monthFilter, brandFilter, searchTerm]);
+
+  const totalSettled = scopedPayments.filter(p => p.type === 'settled').reduce((acc, p) => acc + p.amount, 0);
+  const totalPending = scopedPayments.filter(p => p.type === 'pending').reduce((acc, p) => acc + p.amount, 0);
+  const showMonthChange = yearFilter === ALL_YEARS && monthFilter === ALL_MONTHS && brandFilter === 'all' && !searchTerm.trim() && monthChange !== 0;
 
   const filteredPayments = useMemo(() => {
-    return dateScopedPayments.filter(p => {
+    return scopedPayments.filter(p => {
       const matchesType = filterType === 'all' || p.type === filterType;
       return matchesType;
     }).sort((a, b) => new Date(getPaymentCreatedDate(b)).getTime() - new Date(getPaymentCreatedDate(a)).getTime());
-  }, [dateScopedPayments, filterType]);
+  }, [scopedPayments, filterType]);
 
   const handleExport = () => {
     const headers = ['日期', '关联商单', '品牌方', '金额', '状态', '备注'];
@@ -184,12 +208,12 @@ export default function Billing() {
         <div className="card-sketch p-3 md:p-4 bg-white">
           <div className="text-gray-500 text-[10px] md:text-xs font-medium mb-0.5 md:mb-1">待结算</div>
           <div className="text-lg md:text-2xl font-bold font-mono text-warning">¥ {totalPending.toLocaleString()}</div>
-          <div className="text-[10px] md:text-xs text-gray-400 mt-0.5 md:mt-1">{dateScopedPayments.filter(p => p.type === 'pending').length} 笔</div>
+          <div className="text-[10px] md:text-xs text-gray-400 mt-0.5 md:mt-1">{scopedPayments.filter(p => p.type === 'pending').length} 笔</div>
         </div>
         <div className="card-sketch p-3 md:p-4 bg-white">
           <div className="text-gray-500 text-[10px] md:text-xs font-medium mb-0.5 md:mb-1">总金额</div>
           <div className="text-lg md:text-2xl font-bold font-mono">¥ {(totalSettled + totalPending).toLocaleString()}</div>
-          <div className="text-[10px] md:text-xs text-gray-400 mt-0.5 md:mt-1">{dateScopedPayments.length} 笔</div>
+          <div className="text-[10px] md:text-xs text-gray-400 mt-0.5 md:mt-1">{scopedPayments.length} 笔</div>
         </div>
       </div>
 
@@ -200,6 +224,26 @@ export default function Billing() {
             <span className="text-[10px] md:text-xs text-gray-400">按创建日期</span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <div className="relative w-full sm:w-48">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="搜索品牌、商单、备注"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full h-8 pl-8 pr-2 bg-gray-50 border-2 border-panda-black/10 focus:border-panda-black focus:bg-white rounded-lg text-xs outline-none transition-all"
+              />
+            </div>
+            <select
+              value={brandFilter}
+              onChange={e => setBrandFilter(e.target.value)}
+              className="h-8 bg-gray-50 border-2 border-panda-black/10 focus:border-panda-black focus:bg-white rounded-lg px-2 text-xs outline-none transition-all"
+            >
+              <option value="all">全部品牌</option>
+              {brandOptions.map(brand => (
+                <option key={brand} value={brand}>{brand}</option>
+              ))}
+            </select>
             <select
               value={yearFilter}
               onChange={e => setYearFilter(e.target.value)}

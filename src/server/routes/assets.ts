@@ -1,8 +1,31 @@
 import { Router } from 'express';
 import db from '../db.js';
+import { v4 as uuidv4 } from 'uuid';
 import { logActivity, getUserId } from './utils/index.js';
+import { validateAmount } from './utils/helpers.js';
 
 const router = Router();
+
+const generateAssetNo = (): string => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const random = uuidv4().slice(0, 6);
+  return `ASSET-${year}${month}${day}-${random}`;
+};
+
+const getAssetIncome = (asset: { saleStatus?: string | null; soldAmount?: number | null }): number => {
+  if (asset.saleStatus !== 'sold') return 0;
+  return Number(asset.soldAmount) || 0;
+};
+
+const adjustBrandIncome = (userId: string, brandName: string | null | undefined, delta: number) => {
+  if (!brandName || delta === 0) return;
+  const brand = db.prepare('SELECT id FROM brands WHERE name = ? AND userId = ?').get(brandName, userId) as any;
+  if (!brand) return;
+  db.prepare('UPDATE brands SET totalIncome = MAX(0, totalIncome + ?) WHERE id = ?').run(delta, brand.id);
+};
 
 router.get('/', (req, res) => {
   try {
@@ -31,6 +54,55 @@ router.get('/:id', (req, res) => {
     console.error('获取资产详情错误:', error instanceof Error ? error.message : error);
     return res.status(500).json({
       error: '获取资产详情失败',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+router.post('/', (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const { brandName, productName, productValue, image, saleStatus, soldAmount } = req.body;
+
+    if (!productName || productName.trim().length === 0) {
+      return res.status(400).json({ error: '资产名称不能为空' });
+    }
+
+    if (!validateAmount(productValue) || !validateAmount(soldAmount)) {
+      return res.status(400).json({ error: '金额数值无效' });
+    }
+
+    const id = uuidv4();
+    const normalizedSaleStatus = saleStatus === 'sold' ? 'sold' : 'keep';
+    const normalizedSoldAmount = normalizedSaleStatus === 'sold' ? (Number(soldAmount) || 0) : 0;
+    const soldDate = normalizedSaleStatus === 'sold' ? new Date().toISOString().split('T')[0] : null;
+
+    db.prepare(`
+      INSERT INTO assets (id, userId, orderId, orderNo, brandName, productName, productValue, image, saleStatus, soldAmount, soldDate)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      userId,
+      `manual-${id}`,
+      generateAssetNo(),
+      brandName?.trim() || null,
+      productName.trim(),
+      Number(productValue) || 0,
+      image || null,
+      normalizedSaleStatus,
+      normalizedSoldAmount,
+      soldDate
+    );
+
+    adjustBrandIncome(userId, brandName?.trim(), normalizedSoldAmount);
+    logActivity(userId, 'create', 'asset', id, `手动创建资产: ${productName.trim()}`);
+
+    const created = db.prepare('SELECT * FROM assets WHERE id = ? AND userId = ?').get(id, userId);
+    return res.json(created);
+  } catch (error) {
+    console.error('创建资产错误:', error instanceof Error ? error.message : error);
+    return res.status(500).json({
+      error: '创建资产失败',
       timestamp: new Date().toISOString()
     });
   }
@@ -66,16 +138,9 @@ router.put('/:id', (req, res) => {
       UPDATE assets SET productName = ?, productValue = ?, image = ?, saleStatus = ?, soldAmount = ?, soldDate = ? WHERE id = ? AND userId = ?
     `).run(newProductName, newProductValue, newImage, newSaleStatus, newSoldAmount, newSoldDate, id, userId);
 
-    if (saleStatus !== undefined && saleStatus !== existing.saleStatus && existing.brandName) {
-      const brand = db.prepare('SELECT id, totalIncome FROM brands WHERE name = ? AND userId = ?').get(existing.brandName, userId) as any;
-      if (brand) {
-        if (saleStatus === 'sold') {
-          db.prepare('UPDATE brands SET totalIncome = totalIncome + ? WHERE id = ?').run(newSoldAmount, brand.id);
-        } else if (existing.saleStatus === 'sold') {
-          db.prepare('UPDATE brands SET totalIncome = MAX(0, totalIncome - ?) WHERE id = ?').run(existing.soldAmount || 0, brand.id);
-        }
-      }
-    }
+    const oldIncome = getAssetIncome(existing);
+    const newIncome = getAssetIncome({ saleStatus: newSaleStatus, soldAmount: newSoldAmount });
+    adjustBrandIncome(userId, existing.brandName, newIncome - oldIncome);
 
     logActivity(userId, 'update', 'asset', id, `更新资产: ${newProductName}`);
 
@@ -100,12 +165,7 @@ router.delete('/:id', (req, res) => {
       return res.status(404).json({ error: '资产不存在' });
     }
 
-    if (asset.saleStatus === 'sold' && asset.soldAmount > 0 && asset.brandName) {
-      const brand = db.prepare('SELECT id FROM brands WHERE name = ? AND userId = ?').get(asset.brandName, userId) as any;
-      if (brand) {
-        db.prepare('UPDATE brands SET totalIncome = MAX(0, totalIncome - ?) WHERE id = ?').run(asset.soldAmount, brand.id);
-      }
-    }
+    adjustBrandIncome(userId, asset.brandName, -getAssetIncome(asset));
 
     db.prepare('DELETE FROM assets WHERE id = ? AND userId = ?').run(id, userId);
     logActivity(userId, 'delete', 'asset', id, `删除资产: ${asset.productName}`);

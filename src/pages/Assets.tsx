@@ -1,15 +1,33 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useStore, Asset } from '../store/useStore';
-import { Search, Trash2, Upload, Pencil, X, Check, Package } from 'lucide-react';
+import { Search, Trash2, Upload, Pencil, X, Check, Package, Plus } from 'lucide-react';
 import { clsx } from 'clsx';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
+import { ALL_MONTHS, ALL_YEARS, getAvailableYears, matchesYearMonth, monthOptions } from '../lib/dateFilter';
+
+const getAssetFilterDate = (asset: Asset): string => asset.createdAt || asset.soldDate || '';
+
+const createAssetInitialForm = {
+  productName: '',
+  brandName: '',
+  productValue: '',
+  saleStatus: 'keep' as 'keep' | 'sold',
+  soldAmount: ''
+};
+const MANUAL_BRAND_VALUE = '__manual__';
 
 export default function Assets() {
-  const { assets, fetchAssets, updateAsset, deleteAsset } = useStore();
+  const { assets, brands, fetchAssets, fetchBrands, addAsset, updateAsset, deleteAsset } = useStore();
   const { showToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
+  const [brandFilter, setBrandFilter] = useState('all');
+  const [yearFilter, setYearFilter] = useState(ALL_YEARS);
+  const [monthFilter, setMonthFilter] = useState(ALL_MONTHS);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isCustomBrand, setIsCustomBrand] = useState(false);
+  const [createForm, setCreateForm] = useState(createAssetInitialForm);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
   const [editForm, setEditForm] = useState({ productName: '', productValue: '', saleStatus: 'keep' as 'keep' | 'sold', soldAmount: '' });
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
@@ -19,14 +37,33 @@ export default function Assets() {
 
   useEffect(() => {
     fetchAssets();
-  }, [fetchAssets]);
+    fetchBrands();
+  }, [fetchAssets, fetchBrands]);
 
-  const filteredAssets = assets.filter(asset => {
-    const searchLower = searchTerm.toLowerCase();
-    return asset.productName.toLowerCase().includes(searchLower) ||
-      (asset.brandName?.toLowerCase() || '').includes(searchLower) ||
-      asset.orderNo.toLowerCase().includes(searchLower);
-  });
+  const availableYears = useMemo(() => getAvailableYears(assets.map(asset => getAssetFilterDate(asset))), [assets]);
+  const brandOptions = useMemo(() => {
+    const names = [
+      ...assets.map(asset => asset.brandName),
+      ...brands.map(brand => brand.name)
+    ]
+      .filter((name): name is string => Boolean(name?.trim()));
+    return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, 'zh-CN'));
+  }, [assets, brands]);
+
+  const filteredAssets = useMemo(() => {
+    const searchLower = searchTerm.trim().toLowerCase();
+
+    return assets.filter(asset => {
+      const matchesSearch = !searchLower ||
+        asset.productName.toLowerCase().includes(searchLower) ||
+        (asset.brandName?.toLowerCase() || '').includes(searchLower) ||
+        (asset.orderNo || '').toLowerCase().includes(searchLower);
+      const matchesBrand = brandFilter === 'all' || asset.brandName === brandFilter;
+      const matchesDate = matchesYearMonth(getAssetFilterDate(asset), yearFilter, monthFilter);
+
+      return matchesSearch && matchesBrand && matchesDate;
+    });
+  }, [assets, searchTerm, brandFilter, yearFilter, monthFilter]);
 
   const handleEdit = (asset: Asset) => {
     setEditingAsset(asset);
@@ -51,6 +88,41 @@ export default function Assets() {
       setEditingAsset(null);
     } catch {
       showToast('更新失败', 'error');
+    }
+  };
+
+  const openCreateModal = () => {
+    setCreateForm(createAssetInitialForm);
+    setIsCustomBrand(false);
+    setIsCreateModalOpen(true);
+  };
+
+  const closeCreateModal = () => {
+    setCreateForm(createAssetInitialForm);
+    setIsCustomBrand(false);
+    setIsCreateModalOpen(false);
+  };
+
+  const handleCreateAsset = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!createForm.productName.trim()) {
+      showToast('请填写资产名称', 'warning');
+      return;
+    }
+
+    try {
+      await addAsset({
+        productName: createForm.productName.trim(),
+        brandName: createForm.brandName.trim(),
+        productValue: Number(createForm.productValue) || 0,
+        saleStatus: createForm.saleStatus,
+        soldAmount: createForm.saleStatus === 'sold' ? (Number(createForm.soldAmount) || 0) : 0
+      });
+      showToast('资产已创建');
+      closeCreateModal();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '创建失败', 'error');
     }
   };
 
@@ -96,7 +168,7 @@ export default function Assets() {
     }
   };
 
-  const totalValue = assets.reduce((sum, a) => {
+  const totalValue = filteredAssets.reduce((sum, a) => {
     if (a.saleStatus === 'sold') {
       return sum + (a.soldAmount || 0);
     }
@@ -115,19 +187,63 @@ export default function Assets() {
             <span className="text-xs text-gray-500">总价值</span>
             <p className="text-lg font-bold text-success">¥{totalValue.toLocaleString()}</p>
           </div>
+          <button
+            onClick={openCreateModal}
+            className="btn-sketch flex items-center gap-1 text-sm py-1.5 px-3"
+          >
+            <Plus size={14} />
+            新建资产
+          </button>
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-xs">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            placeholder="搜索产品名称、品牌..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 bg-gray-50 border-2 border-panda-black/10 focus:border-panda-black focus:bg-white rounded-lg outline-none transition-all text-xs"
-          />
+      <div className="card-sketch p-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-white">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-1">
+          <div className="relative flex-1 max-w-xs">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="搜索产品名称、品牌、商单号"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 bg-gray-50 border-2 border-panda-black/10 focus:border-panda-black focus:bg-white rounded-lg outline-none transition-all text-xs"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={brandFilter}
+              onChange={e => setBrandFilter(e.target.value)}
+              className="h-8 bg-gray-50 border-2 border-panda-black/10 focus:border-panda-black focus:bg-white rounded-lg px-2 text-xs outline-none transition-all"
+              title="按品牌筛选"
+            >
+              <option value="all">全部品牌</option>
+              {brandOptions.map(brand => (
+                <option key={brand} value={brand}>{brand}</option>
+              ))}
+            </select>
+            <select
+              value={yearFilter}
+              onChange={e => setYearFilter(e.target.value)}
+              className="h-8 bg-gray-50 border-2 border-panda-black/10 focus:border-panda-black focus:bg-white rounded-lg px-2 text-xs outline-none transition-all"
+              title="按资产创建年份筛选"
+            >
+              <option value={ALL_YEARS}>全部年份</option>
+              {availableYears.map(year => (
+                <option key={year} value={year}>{year}年</option>
+              ))}
+            </select>
+            <select
+              value={monthFilter}
+              onChange={e => setMonthFilter(e.target.value)}
+              className="h-8 bg-gray-50 border-2 border-panda-black/10 focus:border-panda-black focus:bg-white rounded-lg px-2 text-xs outline-none transition-all"
+              title="按资产创建月份筛选"
+            >
+              <option value={ALL_MONTHS}>全年</option>
+              {monthOptions.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </div>
         </div>
         <span className="text-xs text-gray-400">{filteredAssets.length} 件资产</span>
       </div>
@@ -138,7 +254,7 @@ export default function Assets() {
             <Package size={28} />
           </div>
           <p className="text-sm">暂无资产</p>
-          <p className="text-xs mt-1">完成置换类型的商单后，产品将自动添加到资产库</p>
+          <p className="text-xs mt-1">完成置换商单会自动添加，也可以手动新建资产</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -254,6 +370,107 @@ export default function Assets() {
           ))}
         </div>
       )}
+
+      <Modal isOpen={isCreateModalOpen} onClose={closeCreateModal} title="新建资产">
+        <form onSubmit={handleCreateAsset} className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">资产名称</label>
+              <input
+                required
+                type="text"
+                value={createForm.productName}
+                onChange={e => setCreateForm({ ...createForm, productName: e.target.value })}
+                className="input-sketch"
+                placeholder="产品名称、E卡等"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">品牌</label>
+              <select
+                value={isCustomBrand ? MANUAL_BRAND_VALUE : createForm.brandName}
+                onChange={e => {
+                  if (e.target.value === MANUAL_BRAND_VALUE) {
+                    setIsCustomBrand(true);
+                    setCreateForm({ ...createForm, brandName: '' });
+                    return;
+                  }
+                  setIsCustomBrand(false);
+                  setCreateForm({ ...createForm, brandName: e.target.value });
+                }}
+                className="input-sketch"
+              >
+                <option value="">不关联品牌</option>
+                {brandOptions.map(brand => (
+                  <option key={brand} value={brand}>{brand}</option>
+                ))}
+                <option value={MANUAL_BRAND_VALUE}>手动输入品牌</option>
+              </select>
+            </div>
+          </div>
+          {isCustomBrand && (
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">品牌名称</label>
+              <input
+                type="text"
+                value={createForm.brandName}
+                onChange={e => setCreateForm({ ...createForm, brandName: e.target.value })}
+                className="input-sketch"
+                placeholder="输入品牌名称"
+              />
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">资产价值 (¥)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={createForm.productValue}
+                onChange={e => setCreateForm({ ...createForm, productValue: e.target.value })}
+                className="input-sketch"
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">状态</label>
+              <select
+                value={createForm.saleStatus}
+                onChange={e => setCreateForm({ ...createForm, saleStatus: e.target.value as 'keep' | 'sold' })}
+                className="input-sketch"
+              >
+                <option value="keep">自留</option>
+                <option value="sold">已出</option>
+              </select>
+            </div>
+          </div>
+          {createForm.saleStatus === 'sold' && (
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">已出金额 (¥)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={createForm.soldAmount}
+                onChange={e => setCreateForm({ ...createForm, soldAmount: e.target.value })}
+                className="input-sketch"
+                placeholder="实际售出金额"
+              />
+            </div>
+          )}
+          <div className="pt-3 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsCreateModalOpen(false)}
+              className="btn-secondary py-2 px-4"
+            >
+              取消
+            </button>
+            <button type="submit" className="btn-sketch py-2 px-4">创建</button>
+          </div>
+        </form>
+      </Modal>
 
       <Modal isOpen={isImageModalOpen} onClose={() => { setIsImageModalOpen(false); setImageAsset(null); }} title="上传产品图片">
         <div className="space-y-4">

@@ -33,6 +33,14 @@ const invalidateAllCache = (): void => {
   Object.keys(cache).forEach(key => delete cache[key]);
 };
 
+const persistDismissedNotifications = (ids: string[]): void => {
+  try {
+    localStorage.setItem('dismissedNotifications', JSON.stringify(ids));
+  } catch (error) {
+    console.warn('保存通知状态失败:', error instanceof Error ? error.message : error);
+  }
+};
+
 interface AppState {
   isAuthenticated: boolean;
   orders: Order[];
@@ -83,6 +91,7 @@ interface AppState {
   clearData: () => Promise<void>;
   setAllData: (data: any) => Promise<void>;
   dismissNotification: (id: string) => void;
+  clearNotifications: (ids: string[]) => void;
 
   fetchActivityLogs: () => Promise<void>;
   clearActivityLogs: () => Promise<void>;
@@ -102,6 +111,7 @@ interface AppState {
   deletePaidPromotion: (id: string) => Promise<void>;
 
   fetchAssets: () => Promise<void>;
+  addAsset: (asset: Partial<Asset>) => Promise<void>;
   updateAsset: (id: string, asset: Partial<Asset>) => Promise<void>;
   deleteAsset: (id: string) => Promise<void>;
 
@@ -132,8 +142,14 @@ export const useStore = create<AppState>((set, get) => ({
   darkMode: localStorage.getItem('darkMode') === 'true',
 
   dismissNotification: (id) => set((state) => {
-    const newDismissed = [...state.dismissedNotifications, id];
-    localStorage.setItem('dismissedNotifications', JSON.stringify(newDismissed));
+    const newDismissed = Array.from(new Set([...state.dismissedNotifications, id]));
+    persistDismissedNotifications(newDismissed);
+    return { dismissedNotifications: newDismissed };
+  }),
+
+  clearNotifications: (ids) => set((state) => {
+    const newDismissed = Array.from(new Set([...state.dismissedNotifications, ...ids]));
+    persistDismissedNotifications(newDismissed);
     return { dismissedNotifications: newDismissed };
   }),
 
@@ -969,6 +985,26 @@ export const useStore = create<AppState>((set, get) => ({
       set({ assets: data });
     } catch (error) {
       console.error('fetchAssets失败:', error instanceof Error ? error.message : error);
+    }
+  },
+  addAsset: async (asset) => {
+    try {
+      const res = await createAuthFetch()('/api/assets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(asset)
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || '创建资产失败');
+      }
+      const created = await res.json();
+      set((state) => ({ assets: [created, ...state.assets] }));
+      get().showToast('资产创建成功', 'success');
+    } catch (error) {
+      console.error('addAsset失败:', error instanceof Error ? error.message : error);
+      get().showToast('创建资产失败，请稍后重试', 'error');
+      throw error;
     }
   },
   updateAsset: async (id, asset) => {

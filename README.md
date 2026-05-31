@@ -87,7 +87,7 @@
 - **Node.js >= 20.19.0** or **>= 22.12.0**
 - npm >= 9
 - Android App build only | 仅构建 Android App 需要：
-  - JDK 17+
+  - JDK 21+
   - Android Studio / Android SDK
 
 > **Note**: Due to `@vitejs/plugin-react@5.x`, Node.js version must be >= 20.19.0.
@@ -182,7 +182,7 @@ cd android
 .\gradlew.bat assembleDebug
 ```
 
-If Gradle reports that Java 8 is being used, set `JAVA_HOME` to a JDK 17+ installation before building.
+If Gradle reports that Java 8 is being used, set `JAVA_HOME` to a JDK 21+ installation before building.
 
 The debug APK will be generated at:
 
@@ -404,7 +404,7 @@ GET    /api/external/export?token=<API_KEY>          # 导出数据
 | State | 状态 | Zustand |
 | Charts | 图表 | Recharts |
 | UI | 组件 | Lucide React, Motion |
-| Data | 数据处理 | xlsx (Excel 导入导出), multer (文件上传) |
+| Data | 数据处理 | read-excel-file / csv-parse (商单文件导入), multer (文件上传) |
 | Security | 安全 | bcrypt, JWT, helmet, express-rate-limit |
 | Mobile | 移动端 | Capacitor (Android) |
 | Deployment | 部署 | Docker, Vercel |
@@ -412,6 +412,21 @@ GET    /api/external/export?token=<API_KEY>          # 导出数据
 ---
 
 ## 📝 更新日志 | Changelog
+
+### 2026-05-31
+
+- **资产库手动新建**: 资产库新增“新建资产”，支持手动录入资产名称、品牌、价值和售卖状态；手动资产会自动生成资产编号并兼容旧版数据结构
+- **资产品牌选择修复**: 新建资产品牌选择改为可见下拉列表，支持选择已有品牌、不关联品牌或手动输入品牌
+- **通知中心增强**: 通知中心新增一键清除全部通知，并修复通知面板点击关闭逻辑导致按钮不稳定的问题
+- **搜索与筛选增强**: 账单、商单、资产库统一增强搜索、品牌筛选和年月筛选；账单按创建日期筛选，商单按接单日期筛选，资产按创建日期筛选
+- **筛选统计联动**: 账单金额统计和资产总价值会随当前搜索、品牌与年月筛选实时联动
+- **数据导入兼容**: 导入旧版备份时兼容 `publishDate/deadline`、字符串平台、旧账单状态和资产旧字段，避免升级后筛选数据缺失
+- **安全依赖修复**: 替换无修复版本的 `xlsx` 解析链路，商单文件导入改为支持 `.xlsx` / `.csv`，并修复旧资产缺少 `orderId` 时无法导入的问题
+- **安全审计验证**: 使用官方 npm registry 执行 `npm audit --audit-level=moderate`，当前依赖审计结果为 `0 vulnerabilities`
+- **Android App 构建**: 已重新同步 Capacitor Android 工程并构建 Debug APK，移动端包含本次资产库、筛选和通知更新
+- **Android 构建升级**: Capacitor 升级到 v8，Android 构建链路升级到 Gradle 8.13 / Android Gradle Plugin 8.13，构建环境改为 JDK 21+
+- **Android 构建验证**: 使用 JDK 21 + Gradle 8.13 完成 Debug APK 构建验证，生成 `android/app/build/outputs/apk/debug/app-debug.apk`
+- **Docker 构建加固**: GitHub Actions Docker 发布增加 manifest/pull 校验并提升旧版 Docker/NAS 拉取兼容性，README 补充 `manifest unknown` 排查说明
 
 ### 2026-05-30
 

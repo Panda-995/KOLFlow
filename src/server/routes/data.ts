@@ -4,7 +4,8 @@ import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
-import * as XLSX from 'xlsx';
+import { readSheet } from 'read-excel-file/node';
+import { parse as parseCsv } from 'csv-parse/sync';
 import { logActivity, getUserId } from './utils/index.js';
 import { EXCEL_FIELD_MAP, ORDER_TYPE_MAP, ORDER_STATUS_MAP } from './utils/constants.js';
 import { generateOrderNo, safeJsonParse } from './utils/helpers.js';
@@ -16,24 +17,64 @@ const upload = multer({
     fileSize: 10 * 1024 * 1024, // 10MB 限制
   },
   fileFilter: (_req, file, cb) => {
-    // 只允许 Excel 文件
-    const allowedTypes = [
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'text/csv',
-      'application/csv'
-    ];
-    const allowedExt = ['.xls', '.xlsx', '.csv'];
+    // 只允许当前安全解析链路支持的文件格式。
+    const allowedExt = ['.xlsx', '.csv'];
     const ext = path.extname(file.originalname).toLowerCase();
 
-    if (allowedTypes.includes(file.mimetype) || allowedExt.includes(ext)) {
+    if (allowedExt.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('只允许上传 Excel 文件 (.xls, .xlsx, .csv)'));
+      cb(new Error('只允许上传 .xlsx 或 .csv 文件'));
     }
   }
 });
 const router = Router();
+
+type ImportRow = Record<string, unknown>;
+
+const normalizeCellValue = (value: unknown): unknown => {
+  if (value instanceof Date) {
+    return value.toISOString().split('T')[0];
+  }
+  return value ?? '';
+};
+
+const rowsToObjects = (rows: unknown[][]): ImportRow[] => {
+  const headerIndex = rows.findIndex(row => row.some(cell => String(cell ?? '').trim()));
+  if (headerIndex === -1) return [];
+
+  const headers = rows[headerIndex].map(cell => String(cell ?? '').trim());
+
+  return rows.slice(headerIndex + 1)
+    .map(row => {
+      const item: ImportRow = {};
+      headers.forEach((header, index) => {
+        if (header) item[header] = normalizeCellValue(row[index]);
+      });
+      return item;
+    })
+    .filter(row => Object.values(row).some(value => String(value ?? '').trim()));
+};
+
+const parseUploadedOrderFile = async (file: Express.Multer.File): Promise<ImportRow[]> => {
+  const ext = path.extname(file.originalname).toLowerCase();
+
+  if (ext === '.csv') {
+    return parseCsv(fs.readFileSync(file.path), {
+      bom: true,
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+    }) as ImportRow[];
+  }
+
+  if (ext === '.xlsx') {
+    const rows = await readSheet(file.path);
+    return rowsToObjects(rows);
+  }
+
+  throw new Error('不支持的文件格式');
+};
 
 const requireAuth = (req: any, res: any, next: any) => {
   try {
@@ -42,6 +83,34 @@ const requireAuth = (req: any, res: any, next: any) => {
   } catch {
     res.status(401).json({ error: '未授权访问，请先登录' });
   }
+};
+
+const normalizeStringArray = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.map(item => String(item).trim()).filter(Boolean);
+  }
+
+  if (typeof value !== 'string') {
+    return [];
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const parsed = safeJsonParse<unknown>(trimmed, null);
+  if (Array.isArray(parsed)) {
+    return parsed.map(item => String(item).trim()).filter(Boolean);
+  }
+
+  return trimmed.split(/[,，、\n]/).map(item => item.trim()).filter(Boolean);
+};
+
+const normalizePaymentType = (type: unknown): string => {
+  if (type === 'settled' || type === 'pending') return type;
+  if (type === 'received') return 'settled';
+  return 'pending';
 };
 
 // 导出数据
@@ -158,11 +227,16 @@ router.post('/import', (req, res) => {
         orders.forEach((order: any) => {
           const orderId = order.id || uuidv4();
           const orderNo = order.orderNo || generateOrderNo();
+          const platforms = normalizeStringArray(order.platforms ?? order.platform);
+          const actualAmount = Number(order.actualAmount ?? order.amount ?? order.expectedAmount ?? 0) || 0;
+          const expectedAmount = Number(order.expectedAmount ?? order.actualAmount ?? order.amount ?? 0) || 0;
+          const acceptDate = order.acceptDate || order.publishDate || null;
+          const submitDate = order.submitDate || order.deadline || null;
           orderStmt.run(
-            orderId, userId, orderNo, order.title, order.type || 'paid', order.status || 'in_progress',
-            order.expectedAmount || 0, order.actualAmount || 0, order.brandName || null,
-            JSON.stringify(order.platforms || []), order.acceptDate || null, order.submitDate || null,
-            order.productName || null, order.productValue || 0,
+            orderId, userId, orderNo, order.title || order.name || '未命名商单', order.type || 'paid', order.status || 'in_progress',
+            expectedAmount, actualAmount, order.brandName || order.brand || null,
+            JSON.stringify(platforms), acceptDate, submitDate,
+            order.productName || null, Number(order.productValue ?? 0) || 0,
             order.createdAt || new Date().toISOString()
           );
         });
@@ -192,9 +266,11 @@ router.post('/import', (req, res) => {
         `);
         payments.forEach((payment: any) => {
           const paymentId = payment.id || uuidv4();
+          const amount = Number(payment.amount ?? payment.actualAmount ?? 0) || 0;
+          const createdDate = typeof payment.createdAt === 'string' ? payment.createdAt.substring(0, 10) : null;
           paymentStmt.run(
-            paymentId, userId, payment.orderNo || null, payment.brand || null, payment.amount || 0,
-            payment.type || 'pending', payment.date || null, payment.method || null, payment.createdAt || new Date().toISOString()
+            paymentId, userId, payment.orderNo || null, payment.brand || payment.brandName || null, amount,
+            normalizePaymentType(payment.type), payment.date || createdDate, payment.method || payment.remark || null, payment.createdAt || payment.date || new Date().toISOString()
           );
         });
       }
@@ -207,9 +283,10 @@ router.post('/import', (req, res) => {
         `);
         assets.forEach((asset: any) => {
           const assetId = asset.id || uuidv4();
+          const assetOrderId = asset.orderId || `imported-${assetId}`;
           assetStmt.run(
-            assetId, userId, asset.orderId || null, asset.orderNo || null, asset.brandName || null,
-            asset.productName || '未知产品', asset.productValue || 0, asset.image || null,
+            assetId, userId, assetOrderId, asset.orderNo || null, asset.brandName || asset.brand || null,
+            asset.productName || asset.name || '未知产品', Number(asset.productValue ?? asset.value ?? 0) || 0, asset.image || null,
             asset.saleStatus || 'keep', asset.soldAmount || 0, asset.soldDate || null, asset.createdAt || new Date().toISOString()
           );
         });
@@ -348,7 +425,7 @@ router.post('/orders', (req, res) => {
   }
 });
 
-router.post('/orders/file', requireAuth, upload.single('file'), (req, res) => {
+router.post('/orders/file', requireAuth, upload.single('file'), async (req, res) => {
   const userId = getUserId(req);
   const file = req.file;
 
@@ -357,12 +434,7 @@ router.post('/orders/file', requireAuth, upload.single('file'), (req, res) => {
   }
 
   try {
-    const workbook = XLSX.readFile(file.path);
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
-    const data = XLSX.utils.sheet_to_json(worksheet);
-
-    fs.unlinkSync(file.path);
+    const data = await parseUploadedOrderFile(file);
 
     if (data.length === 0) {
       return res.status(400).json({ error: '文件内容为空' });
@@ -414,8 +486,10 @@ router.post('/orders/file', requireAuth, upload.single('file'), (req, res) => {
     logActivity(userId, 'import_file', 'order', 'batch', `文件导入商单: 成功${results.success}条, 失败${results.failed}条`);
     return res.json(results);
   } catch (error) {
-    if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+    console.error('文件导入商单错误:', error instanceof Error ? error.message : error);
     return res.status(500).json({ error: '文件解析失败，请检查文件格式' });
+  } finally {
+    if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
   }
 });
 

@@ -21,6 +21,7 @@ export default function Orders() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [yearFilter, setYearFilter] = useState(ALL_YEARS);
   const [monthFilter, setMonthFilter] = useState(ALL_MONTHS);
+  const [brandFilter, setBrandFilter] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
@@ -128,15 +129,23 @@ export default function Orders() {
   };
 
   const availableYears = useMemo(() => getAvailableYears(orders.map(order => order.acceptDate)), [orders]);
+  const brandOptions = useMemo(() => {
+    const names = orders
+      .map(order => order.brandName)
+      .filter((name): name is string => Boolean(name?.trim()));
+    return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, 'zh-CN'));
+  }, [orders]);
 
   const filteredOrders = orders.filter(order => {
     const searchLower = searchTerm.toLowerCase();
     const matchesSearch = order.title.toLowerCase().includes(searchLower) ||
       (order.brandName?.toLowerCase() || '').includes(searchLower) ||
-      order.orderNo.toLowerCase().includes(searchLower);
+      order.orderNo.toLowerCase().includes(searchLower) ||
+      (order.platforms || []).some(platform => platform.toLowerCase().includes(searchLower));
+    const matchesBrand = brandFilter === 'all' || order.brandName === brandFilter;
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
     const matchesAcceptDate = matchesYearMonth(order.acceptDate, yearFilter, monthFilter);
-    return matchesSearch && matchesStatus && matchesAcceptDate;
+    return matchesSearch && matchesBrand && matchesStatus && matchesAcceptDate;
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -271,10 +280,10 @@ export default function Orders() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const validTypes = ['.xlsx', '.xls', '.csv'];
+    const validTypes = ['.xlsx', '.csv'];
     const fileExt = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
     if (!validTypes.includes(fileExt)) {
-      showToast('请上传 Excel 或 CSV 文件', 'error');
+      showToast('请上传 .xlsx 或 .csv 文件', 'error');
       return;
     }
 
@@ -369,6 +378,17 @@ export default function Orders() {
             />
           </div>
           <div className="flex items-center gap-2">
+            <select
+              value={brandFilter}
+              onChange={e => setBrandFilter(e.target.value)}
+              className="h-8 bg-gray-50 border-2 border-panda-black/10 focus:border-panda-black focus:bg-white rounded-lg px-2 text-xs outline-none transition-all"
+              title="按品牌筛选"
+            >
+              <option value="all">全部品牌</option>
+              {brandOptions.map(brand => (
+                <option key={brand} value={brand}>{brand}</option>
+              ))}
+            </select>
             <select
               value={yearFilter}
               onChange={e => setYearFilter(e.target.value)}
@@ -811,7 +831,7 @@ export default function Orders() {
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-700">
             <p className="font-medium mb-2">导入说明：</p>
             <ul className="list-disc list-inside space-y-1 text-xs">
-              <li>支持 Excel (.xlsx, .xls) 和 CSV 格式</li>
+              <li>支持 Excel (.xlsx) 和 CSV 格式</li>
               <li>第一行为标题行，必须包含"标题"列</li>
               <li>合作类型：付费、置换、直发</li>
               <li>状态：进行中、已完成、已取消</li>
@@ -832,7 +852,7 @@ export default function Orders() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".xlsx,.xls,.csv"
+              accept=".xlsx,.csv"
               onChange={handleFileImport}
               className="hidden"
               id="file-import"
@@ -842,7 +862,7 @@ export default function Orders() {
               <p className="text-sm text-gray-600 mb-1">
                 {importing ? '正在导入...' : '点击选择文件或拖拽文件到此处'}
               </p>
-              <p className="text-xs text-gray-400">支持 .xlsx, .xls, .csv 格式</p>
+              <p className="text-xs text-gray-400">支持 .xlsx, .csv 格式</p>
             </label>
           </div>
 
