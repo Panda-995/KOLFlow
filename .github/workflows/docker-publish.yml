@@ -6,9 +6,8 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: panda-995/kolflow
-  IMAGE_FULL: ghcr.io/panda-995/kolflow
+  GHCR_IMAGE: ghcr.io/panda-995/kolflow
+  DOCKERHUB_IMAGE: panda995/kolflow
 
 jobs:
   build-amd64:
@@ -26,12 +25,18 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Container Registry
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
       - name: Build and push AMD64 image
         uses: docker/build-push-action@v6
@@ -42,7 +47,8 @@ jobs:
           provenance: false
           sbom: false
           tags: |
-            ${{ env.IMAGE_FULL }}:amd64
+            ${{ env.GHCR_IMAGE }}:amd64
+            ${{ env.DOCKERHUB_IMAGE }}:amd64
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -61,12 +67,18 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Container Registry
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
       - name: Build and push ARM64 image
         uses: docker/build-push-action@v6
@@ -77,8 +89,10 @@ jobs:
           provenance: false
           sbom: false
           tags: |
-            ${{ env.IMAGE_FULL }}:arm64
-            ${{ env.IMAGE_FULL }}:arm
+            ${{ env.GHCR_IMAGE }}:arm64
+            ${{ env.GHCR_IMAGE }}:arm
+            ${{ env.DOCKERHUB_IMAGE }}:arm64
+            ${{ env.DOCKERHUB_IMAGE }}:arm
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -91,25 +105,40 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Container Registry
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create and push multi-arch manifest
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Create and push multi-arch manifest (GHCR)
         run: |
           docker buildx imagetools create \
-            -t ${{ env.IMAGE_FULL }}:latest \
-            ${{ env.IMAGE_FULL }}:amd64 \
-            ${{ env.IMAGE_FULL }}:arm64
+            -t ${{ env.GHCR_IMAGE }}:latest \
+            ${{ env.GHCR_IMAGE }}:amd64 \
+            ${{ env.GHCR_IMAGE }}:arm64
 
-      - name: Verify published images
+      - name: Create and push multi-arch manifest (Docker Hub)
         run: |
-          docker buildx imagetools inspect ${{ env.IMAGE_FULL }}:latest
-          docker pull --platform linux/amd64 ${{ env.IMAGE_FULL }}:latest
-          docker pull --platform linux/arm64 ${{ env.IMAGE_FULL }}:latest
+          docker buildx imagetools create \
+            -t ${{ env.DOCKERHUB_IMAGE }}:latest \
+            ${{ env.DOCKERHUB_IMAGE }}:amd64 \
+            ${{ env.DOCKERHUB_IMAGE }}:arm64
+
+      - name: Verify published images (GHCR)
+        run: |
+          docker buildx imagetools inspect ${{ env.GHCR_IMAGE }}:latest
+
+      - name: Verify published images (Docker Hub)
+        run: |
+          docker buildx imagetools inspect ${{ env.DOCKERHUB_IMAGE }}:latest
 
   cleanup:
     needs: [merge-manifest]
@@ -122,8 +151,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           OWNER="${{ github.repository_owner }}"
-          PACKAGE_NAME="${{ env.IMAGE_NAME }}"
-          PACKAGE_NAME="${PACKAGE_NAME#*/}"
+          PACKAGE_NAME="kolflow"
 
           KEEP_TAGS="latest amd64 arm arm64"
           API_BASE="/users/${OWNER}/packages/container/${PACKAGE_NAME}"
