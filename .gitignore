@@ -54,5 +54,8 @@ android/capacitor-cordova-android-plugins/build/
 !.github/workflows/
 !.github/workflows/*
 
+# 绿联应用打包
+ugreen/
+
 # Docker
 .dockerignore
