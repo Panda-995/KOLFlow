@@ -57,7 +57,6 @@ export interface SecurityTabProps {
   setSecurityData: React.Dispatch<React.SetStateAction<SecurityFormData>>;
   isSaving: boolean;
   handleSecuritySave: () => void;
-  showToast: (message: string, type?: 'success' | 'error' | 'warning') => void;
 }
 
 // BackupTab Props

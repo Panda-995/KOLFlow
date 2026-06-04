@@ -8,8 +8,7 @@ import {
   getOrdersByUserId,
   createOrderWithTodo,
   updateOrderWithSync,
-  deleteOrderWithRelated,
-  autoCreatePaymentIfCompleted
+  deleteOrderWithRelated
 } from './services/orderService.js';
 
 const router = Router();
@@ -73,7 +72,7 @@ router.get('/orders', async (req, res) => {
 router.post('/orders', (req, res) => {
   try {
     const userId = getUserId(req);
-    const { title, type, actualAmount, brandName, platforms, acceptDate, submitDate } = req.body;
+    const { title, type, actualAmount, brandName, platforms, acceptDate, submitDate, productName, productValue } = req.body;
 
     const newOrder = createOrderWithTodo(userId, {
       title,
@@ -82,7 +81,9 @@ router.post('/orders', (req, res) => {
       brandName,
       platforms,
       acceptDate,
-      submitDate
+      submitDate,
+      productName,
+      productValue
     });
 
     return res.json(newOrder);
@@ -96,7 +97,7 @@ router.put('/orders/:id', (req, res) => {
   try {
     const userId = getUserId(req);
     const { id } = req.params;
-    const { status, title, type, actualAmount, brandName, platforms, acceptDate, submitDate } = req.body;
+    const { status, title, type, actualAmount, brandName, platforms, acceptDate, submitDate, productName, productValue } = req.body;
 
     const updatedOrder = updateOrderWithSync(userId, id, {
       status,
@@ -106,10 +107,10 @@ router.put('/orders/:id', (req, res) => {
       brandName,
       platforms,
       acceptDate,
-      submitDate
+      submitDate,
+      productName,
+      productValue
     });
-
-    autoCreatePaymentIfCompleted(updatedOrder, userId);
 
     return res.json(updatedOrder);
   } catch (error) {
@@ -135,7 +136,7 @@ router.delete('/orders/:id', (req, res) => {
 
 router.get('/todos', async (req, res) => {
   try {
-    const userId = req.userId;
+    const userId = getUserId(req);
     const todos = db.prepare('SELECT * FROM todos WHERE userId = ? ORDER BY createdAt DESC').all(userId);
     return res.json(todos.map((t: any) => ({ ...t, completed: Boolean(t.completed) })));
   } catch (error) {
@@ -149,7 +150,7 @@ router.get('/todos', async (req, res) => {
 
 router.post('/todos', async (req, res) => {
   try {
-    const userId = req.userId;
+    const userId = getUserId(req);
     const { content, priority, dueDate, orderId, brandId, category } = req.body;
     const id = uuidv4();
     db.prepare(`
@@ -255,7 +256,15 @@ router.put('/payments/:id', async (req, res) => {
     db.prepare(`
       UPDATE payments SET orderNo = ?, brand = ?, amount = ?, type = ?, date = ?, method = ?
       WHERE id = ?
-    `).run(orderNo || existing.orderNo, brand || existing.brand, amount || existing.amount, type || existing.type, date || existing.date, method || existing.method, id);
+    `).run(
+      orderNo !== undefined ? orderNo : existing.orderNo,
+      brand !== undefined ? brand : existing.brand,
+      amount !== undefined ? amount : existing.amount,
+      type !== undefined ? type : existing.type,
+      date !== undefined ? date : existing.date,
+      method !== undefined ? method : existing.method,
+      id
+    );
 
     const updated = db.prepare('SELECT * FROM payments WHERE id = ?').get(id) as any;
     return res.json(updated);
@@ -379,7 +388,8 @@ router.delete('/brands/:id', async (req, res) => {
     const deleteBrand = db.transaction(() => {
       db.prepare('UPDATE orders SET brandName = NULL WHERE brandName = ? AND userId = ?').run(brand.name, userId);
       db.prepare('UPDATE todos SET category = NULL, brandId = NULL WHERE (brandId = ? OR category = ?) AND userId = ?').run(id, brand.name, userId);
-      db.prepare('UPDATE payments SET brand = ? WHERE brand = ? AND userId = ?').run(`已删除品牌(${brand.name})`, brand.name, userId);
+      db.prepare('UPDATE payments SET brand = NULL WHERE brand = ? AND userId = ?').run(brand.name, userId);
+      db.prepare('UPDATE assets SET brandName = NULL WHERE brandName = ? AND userId = ?').run(brand.name, userId);
       db.prepare('DELETE FROM brands WHERE id = ? AND userId = ?').run(id, userId);
     });
 
@@ -550,6 +560,7 @@ router.get('/export', async (req, res) => {
     const publishLinks = db.prepare('SELECT * FROM publish_links WHERE userId = ? ORDER BY createdAt DESC').all(userId);
     const paidPromotions = db.prepare('SELECT * FROM paid_promotions WHERE userId = ? ORDER BY createdAt DESC').all(userId);
     const comments = db.prepare('SELECT * FROM comments WHERE userId = ? ORDER BY createdAt DESC').all(userId);
+    const assets = db.prepare('SELECT * FROM assets WHERE userId = ? ORDER BY createdAt DESC').all(userId);
 
     return res.json({
       orders: orders.map(o => ({ ...o, platforms: safeJsonParse(o.platforms, []) })),
@@ -563,7 +574,8 @@ router.get('/export', async (req, res) => {
       },
       publishLinks,
       paidPromotions,
-      comments
+      comments,
+      assets
     });
   } catch (error) {
     console.error('externalApi GET /export失败:', error);

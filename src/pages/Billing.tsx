@@ -22,6 +22,10 @@ const normalizeMonthParam = (value: string | null): string => {
   return ALL_MONTHS;
 };
 
+const isSettledPaymentInMonth = (payment: Payment, year: number, monthIndex: number): boolean => {
+  return payment.type === 'settled' && matchesYearMonth(payment.date, String(year), String(monthIndex + 1).padStart(2, '0'));
+};
+
 export default function Billing() {
   const { payments, addPayment, settlePayment, updatePayment, deletePayment } = useStore();
   const { showToast } = useToast();
@@ -99,13 +103,14 @@ export default function Billing() {
 
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
+  const lastMonthDate = new Date(currentYear, currentMonth - 1, 1);
 
   const thisMonthSettled = payments
-    .filter(p => p.type === 'settled' && new Date(p.date).getMonth() === currentMonth && new Date(p.date).getFullYear() === currentYear)
+    .filter(p => isSettledPaymentInMonth(p, currentYear, currentMonth))
     .reduce((acc, p) => acc + p.amount, 0);
 
   const lastMonthSettled = payments
-    .filter(p => p.type === 'settled' && new Date(p.date).getMonth() === (currentMonth === 0 ? 11 : currentMonth - 1) && new Date(p.date).getFullYear() === (currentMonth === 0 ? currentYear - 1 : currentYear))
+    .filter(p => isSettledPaymentInMonth(p, lastMonthDate.getFullYear(), lastMonthDate.getMonth()))
     .reduce((acc, p) => acc + p.amount, 0);
 
   const monthChange = lastMonthSettled === 0
@@ -176,6 +181,7 @@ export default function Billing() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (

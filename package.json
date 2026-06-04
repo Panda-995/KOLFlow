@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build",
+    "build:server": "tsc -p tsconfig.server.json",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
@@ -44,7 +45,7 @@
     "multer": "^2.1.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-router-dom": "^7.13.1",
+    "react-router-dom": "^7.16.0",
     "read-excel-file": "^9.0.10",
     "recharts": "^3.8.0",
     "tailwind-merge": "^3.5.0",

@@ -163,9 +163,9 @@ export default function Analytics() {
 
   const brandRanking = useMemo(() => {
     const brandIncome: Record<string, number> = {};
-    filteredOrders.forEach(order => {
-      if (order.brandName && order.status === 'completed') {
-        brandIncome[order.brandName] = (brandIncome[order.brandName] || 0) + order.actualAmount;
+    filteredPayments.forEach(payment => {
+      if (payment.brand) {
+        brandIncome[payment.brand] = (brandIncome[payment.brand] || 0) + payment.amount;
       }
     });
     assets.forEach(a => {
@@ -178,7 +178,7 @@ export default function Analytics() {
       }
     });
     return Object.entries(brandIncome).map(([name, income]) => ({ name, income })).sort((a, b) => b.income - a.income).slice(0, 5);
-  }, [filteredOrders, assets, year, month, brandFilter]);
+  }, [filteredPayments, assets, year, month, brandFilter]);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">

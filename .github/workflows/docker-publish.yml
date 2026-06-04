@@ -10,11 +10,19 @@ env:
   DOCKERHUB_IMAGE: panda995/kolflow
 
 jobs:
-  build-amd64:
+  build:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            suffix: amd64
+          - platform: linux/arm64
+            suffix: arm64
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -32,72 +40,42 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_TOKEN }}
-
-      - name: Build and push AMD64 image
+      - name: Build and push GHCR image
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64
+          platforms: ${{ matrix.platform }}
           push: true
           provenance: false
           sbom: false
           tags: |
-            ${{ env.GHCR_IMAGE }}:amd64
-            ${{ env.DOCKERHUB_IMAGE }}:amd64
+            ${{ env.GHCR_IMAGE }}:${{ matrix.suffix }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  build-arm64:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Log in to Docker Hub
+        if: ${{ secrets.DOCKER_HUB_USERNAME != '' && secrets.DOCKER_HUB_TOKEN != '' }}
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-      - name: Build and push ARM64 image
+      - name: Build and push Docker Hub image
+        if: ${{ secrets.DOCKER_HUB_USERNAME != '' && secrets.DOCKER_HUB_TOKEN != '' }}
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/arm64
+          platforms: ${{ matrix.platform }}
           push: true
           provenance: false
           sbom: false
           tags: |
-            ${{ env.GHCR_IMAGE }}:arm64
-            ${{ env.GHCR_IMAGE }}:arm
-            ${{ env.DOCKERHUB_IMAGE }}:arm64
-            ${{ env.DOCKERHUB_IMAGE }}:arm
+            ${{ env.DOCKERHUB_IMAGE }}:${{ matrix.suffix }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
   merge-manifest:
-    needs: [build-amd64, build-arm64]
+    needs: [build]
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -111,12 +89,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
       - name: Create and push multi-arch manifest (GHCR)
         run: |
@@ -125,20 +97,27 @@ jobs:
             ${{ env.GHCR_IMAGE }}:amd64 \
             ${{ env.GHCR_IMAGE }}:arm64
 
+      - name: Verify published image (GHCR)
+        run: docker buildx imagetools inspect ${{ env.GHCR_IMAGE }}:latest
+
+      - name: Log in to Docker Hub
+        if: ${{ secrets.DOCKER_HUB_USERNAME != '' && secrets.DOCKER_HUB_TOKEN != '' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
       - name: Create and push multi-arch manifest (Docker Hub)
+        if: ${{ secrets.DOCKER_HUB_USERNAME != '' && secrets.DOCKER_HUB_TOKEN != '' }}
         run: |
           docker buildx imagetools create \
             -t ${{ env.DOCKERHUB_IMAGE }}:latest \
             ${{ env.DOCKERHUB_IMAGE }}:amd64 \
             ${{ env.DOCKERHUB_IMAGE }}:arm64
 
-      - name: Verify published images (GHCR)
-        run: |
-          docker buildx imagetools inspect ${{ env.GHCR_IMAGE }}:latest
-
-      - name: Verify published images (Docker Hub)
-        run: |
-          docker buildx imagetools inspect ${{ env.DOCKERHUB_IMAGE }}:latest
+      - name: Verify published image (Docker Hub)
+        if: ${{ secrets.DOCKER_HUB_USERNAME != '' && secrets.DOCKER_HUB_TOKEN != '' }}
+        run: docker buildx imagetools inspect ${{ env.DOCKERHUB_IMAGE }}:latest
 
   cleanup:
     needs: [merge-manifest]
@@ -146,23 +125,21 @@ jobs:
     permissions:
       packages: write
     steps:
-      - name: Delete old package versions
+      - name: Delete old GHCR package versions
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           OWNER="${{ github.repository_owner }}"
           PACKAGE_NAME="kolflow"
-
-          KEEP_TAGS="latest amd64 arm arm64"
+          KEEP_TAGS="latest amd64 arm64"
           API_BASE="/users/${OWNER}/packages/container/${PACKAGE_NAME}"
 
-          PACKAGE_VERSIONS=$(gh api -H "Accept: application/vnd.github+json" \
+          gh api -H "Accept: application/vnd.github+json" \
             "${API_BASE}/versions" \
-            --paginate --jq '.[] | {id: .id, tags: [.metadata.container.tags[]]}')
-
-          echo "$PACKAGE_VERSIONS" | jq -c '.' | while read -r version; do
+            --paginate --jq '.[] | {id: .id, tags: [.metadata.container.tags[]]}' |
+          jq -c '.' | while read -r version; do
             ID=$(echo "$version" | jq -r '.id')
-            TAGS=$(echo "$version" | jq -r '.tags[]')
+            TAGS=$(echo "$version" | jq -r '.tags[]?')
 
             SHOULD_KEEP=false
             for keep_tag in $KEEP_TAGS; do
@@ -173,7 +150,7 @@ jobs:
             done
 
             if [ "$SHOULD_KEEP" = false ]; then
-              echo "Deleting untagged version: $ID"
+              echo "Deleting old version: $ID"
               gh api --method DELETE \
                 -H "Accept: application/vnd.github+json" \
                 "${API_BASE}/versions/${ID}" || true

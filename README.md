@@ -62,19 +62,20 @@
 
 ### Data Linkage | 数据联动
 
+KOLFlow 以商单详情作为主数据。商单会向下同步待办、账单和资产；账单、资产、待办也可以独立存在和独立修改，它们的编辑或删除不会反向修改或删除商单。
+
 | Action | 操作 | Effect | 效果 |
 |--------|------|--------|------|
 | Create Order | 创建商单 | Auto-create Todo | 自动创建待办 |
-| Complete Order (Paid/Direct) | 商单完成（付费/直发） | Auto-create Bill | 自动创建账单 |
-| Complete Order (Exchange) | 商单完成（置换） | Auto-create Asset | 自动创建资产 |
-| Complete Order (E-card) | 商单完成（E卡） | Auto-create Asset with E-card label | 自动创建E卡资产 |
-| Change Type: Paid → Exchange/E-card | 类型变更：付费 → 置换/E卡 | Delete Bill, create Asset if completed | 删除账单，完成时创建资产 |
-| Change Type: Exchange/E-card → Paid | 类型变更：置换/E卡 → 付费 | Delete Asset, create Bill if completed | 删除资产，完成时创建账单 |
-| Change Type: Exchange ↔ E-card | 类型变更：置换 ↔ E卡 | Update Asset name | 更新资产名称 |
-| Delete Order | 删除商单 | Delete related Bill + Asset + Todo | 删除关联账单、资产、待办 |
+| Complete Order (Paid/Direct) | 商单完成（付费/直发） | Create or update Bill | 创建或更新关联账单 |
+| Complete Order (Exchange/E-card) | 商单完成（置换/E卡） | Create or update Asset | 创建或更新关联资产 |
+| Edit completed Order | 修改已完成商单 | Sync Bill/Asset from order fields | 按商单详情同步账单/资产的品牌、金额、商品信息 |
+| Change Order type/status | 修改商单类型/状态 | Rebuild matching derived data | 按商单状态和类型重建对应下游数据 |
+| Delete Order | 删除商单 | Delete related generated data | 删除关联账单、资产、待办、发布链接、评论和推广记录 |
 | Delete Brand | 删除品牌 | Clear brand info | 品牌信息置空 |
 | Mark Asset as Sold | 资产标记已出 | Update brand income, reflect in dashboard/analytics | 更新品牌收入，计入仪表盘和统计 |
-| Complete All Todos | 待办全部完成 | Mark order complete | 关联商单标记完成 |
+| Edit/Delete Bill, Asset, Todo | 编辑/删除账单、资产、待办 | Do not change Order | 不反向修改或删除商单 |
+| Import old backup | 导入旧版备份 | Backfill missing derived data | 按商单自动补齐旧数据缺失的账单、资产和待办 |
 
 ---
 
@@ -109,7 +110,7 @@ NODE_ENV=production
 PORT=3000
 JWT_SECRET=your-secret-key-here
 INVITE_CODE=your-invite-code
-CORS_ORIGIN=http://localhost:3000
+CORS_ORIGIN=*
 DATA_DIR=./data
 ```
 
@@ -121,15 +122,17 @@ npm run dev
 
 # Production | 生产构建
 npm run build
-NODE_ENV=production npx tsx server.ts
+npm run build:server
+NODE_ENV=production node build/server.js
 ```
 
 Windows PowerShell production example:
 
 ```powershell
 npm run build
+npm run build:server
 $env:NODE_ENV = "production"
-npx tsx server.ts
+node build/server.js
 ```
 
 The server listens on `0.0.0.0:3000`, so devices on the same LAN can access it through:
@@ -184,6 +187,14 @@ cd android
 
 If Gradle reports that Java 8 is being used, set `JAVA_HOME` to a JDK 21+ installation before building.
 
+Example with Temurin JDK 21 on Windows:
+
+```powershell
+$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-21.0.11.10-hotspot"
+$env:Path = "$env:JAVA_HOME\bin;$env:Path"
+.\gradlew.bat assembleDebug
+```
+
 The debug APK will be generated at:
 
 ```text
@@ -226,7 +237,6 @@ docker run -d -p 3000:3000 \
 | Tag | 说明 |
 |-----|------|
 | `latest` | 最新版（多架构） |
-| `arm` | ARM64 架构专用 |
 | `arm64` | ARM64 架构专用 |
 | `amd64` | x86_64 架构专用 |
 
@@ -234,10 +244,12 @@ Set environment variables | 设置环境变量:
 ```bash
 export JWT_SECRET=your-secret-key
 export INVITE_CODE=your-invite-code
+# 默认允许 HTTP/HTTPS 域名、局域网和 App 访问；如需收紧可改为逗号分隔域名
+export CORS_ORIGIN=*
 docker compose up -d
 ```
 
-如果拉取镜像提示 `manifest unknown`，先确认镜像名为全小写：
+GitHub Actions 会优先发布 GHCR 镜像；Docker Hub 只有配置了 `DOCKER_HUB_USERNAME` 和 `DOCKER_HUB_TOKEN` secrets 时才会同步发布。如果拉取镜像提示 `manifest unknown`，先确认镜像名为全小写：
 
 ```bash
 docker pull ghcr.io/panda-995/kolflow:latest
@@ -366,7 +378,7 @@ POST   /api/data/clear           # 清空当前用户业务数据
 ```bash
 GET    /api/settings            # 获取用户设置
 PUT    /api/settings            # 更新用户设置（主题、头像、昵称、API Key 等）
-PUT    /api/settings/security   # 更新邮箱/密码
+PUT    /api/settings/security   # 更新邮箱/密码（修改密码必须提供 oldPassword）
 POST   /api/settings/apikey     # 生成 API Key
 PUT    /api/settings/display    # 更新显示设置
 ```
@@ -388,8 +400,10 @@ GET    /api/external/todos?token=<API_KEY>           # 获取待办列表
 GET    /api/external/payments?token=<API_KEY>        # 获取账单列表
 GET    /api/external/brands?token=<API_KEY>          # 获取品牌列表
 GET    /api/external/statistics?token=<API_KEY>      # 获取统计数据
-GET    /api/external/export?token=<API_KEY>          # 导出数据
+GET    /api/external/export?token=<API_KEY>          # 导出数据（包含商单、账单、品牌、资产、推广记录等）
 ```
+
+External order create/update supports `productName` and `productValue`. When an Exchange/E-card order is marked as completed through the external API, KOLFlow will create the related Asset automatically.
 
 ---
 
@@ -412,6 +426,29 @@ GET    /api/external/export?token=<API_KEY>          # 导出数据
 ---
 
 ## 📝 更新日志 | Changelog
+
+### 2026-06-05
+
+- **单向数据联动规则**: 明确以商单详情为主数据，商单变更会同步关联待办、账单和资产；账单、资产、待办可独立存在，编辑或删除不会反向修改或删除商单
+- **商单派生数据修复**: 已完成商单修改品牌、金额、商品名称或商品价值时，会按商单详情同步关联账单/资产；类型或状态变更会按当前商单重新整理对应下游数据
+- **商单 API 兼容修复**: 内部创建/更新商单接口补齐 `status` 和 `expectedAmount` 字段传递，接口直接创建已完成商单时也会正确触发账单或资产同步
+- **旧版导入兼容增强**: 旧备份缺少账单、资产或待办时，导入后会按商单自动补齐；表格/JSON 商单导入统一字段映射和数据补齐逻辑
+- **安全与稳定性修复**: 修复账号安全接口未登录访问可能导致服务端崩溃的问题；账单结算不再覆盖备注字段；API Key 生成失败会正确抛出错误
+- **统计口径统一**: 品牌收入排行和报告收入统一按已结算账单与已售资产计算，不再直接使用已完成商单金额作为收入
+- **访问与 Docker 部署优化**: CORS 默认支持 HTTP/HTTPS 域名、局域网和 Android App 访问；Docker GitHub Actions 优先发布 GHCR，Docker Hub 改为配置 secrets 后可选同步
+- **前端细节修复**: 导出文件释放 Blob URL，复制功能优先使用 Clipboard API，日历周起始日统一为周一，品牌新增失败会正确反馈
+- **验证记录**: 已通过 TypeScript 检查、前端构建、服务端构建、依赖审计和临时生产实例 API 流程测试
+
+### 2026-06-04
+
+- **安全依赖修复**: 升级 `react-router-dom` / `react-router` 到 `7.16.0`，官方 npm registry 审计结果为 `0 vulnerabilities`
+- **密码修改加固**: 服务端强制要求修改密码时提供并校验 `oldPassword`，避免绕过前端直接改密
+- **旧数据导入兼容**: 导入发布链接、评论、付费推广记录时会校验并映射有效商单 ID，旧备份缺少关联商单时自动跳过无效记录，避免整次导入失败
+- **外部 API 同步增强**: 外部商单接口支持 `productName` / `productValue`，完成置换/E卡商单时自动创建资产；外部导出接口新增 `assets`
+- **字段清空修复**: 商单更新支持清空品牌、接单日期、提交日期、平台列表，并支持金额更新为 `0`；外部账单接口同样支持金额清零与字段清空
+- **资产事务修复**: 资产新建、更新、删除与品牌收入调整改为事务处理，降低资产状态和品牌收入不一致风险
+- **月报范围修复**: 月报统计范围改为本月 1 日至当天，并使用本地日期格式，避免时区导致日期偏移
+- **Android 安全与构建**: Android 关闭自动备份，减少本地敏感存储被系统备份带走的风险；已执行 `npm run cap:sync` 并重新构建 Debug APK
 
 ### 2026-05-31
 

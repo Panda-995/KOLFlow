@@ -12,15 +12,17 @@ import reportRouter from './report.js';
 import publishLinksRouter from './publishLinks.js';
 import paidPromotionsRouter from './paidPromotions.js';
 import assetsRouter from './assets.js';
+import { authMiddleware } from './utils/index.js';
 
 const router = Router();
 
+router.use('/auth', authRouter);
+router.use(authMiddleware);
 router.use('/orders', ordersRouter);
 router.use('/todos', todosRouter);
 router.use('/brands', brandsRouter);
 router.use('/payments', paymentsRouter);
 router.use('/settings', settingsRouter);
-router.use('/auth', authRouter);
 router.use('/logs', logsRouter);
 router.use('/comments', commentsRouter);
 router.use('/data', dataRouter);

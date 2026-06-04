@@ -77,27 +77,31 @@ router.post('/', (req, res) => {
     const normalizedSoldAmount = normalizedSaleStatus === 'sold' ? (Number(soldAmount) || 0) : 0;
     const soldDate = normalizedSaleStatus === 'sold' ? new Date().toISOString().split('T')[0] : null;
 
-    db.prepare(`
-      INSERT INTO assets (id, userId, orderId, orderNo, brandName, productName, productValue, image, saleStatus, soldAmount, soldDate)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id,
-      userId,
-      `manual-${id}`,
-      generateAssetNo(),
-      brandName?.trim() || null,
-      productName.trim(),
-      Number(productValue) || 0,
-      image || null,
-      normalizedSaleStatus,
-      normalizedSoldAmount,
-      soldDate
-    );
+    const createAsset = db.transaction(() => {
+      db.prepare(`
+        INSERT INTO assets (id, userId, orderId, orderNo, brandName, productName, productValue, image, saleStatus, soldAmount, soldDate)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id,
+        userId,
+        `manual-${id}`,
+        generateAssetNo(),
+        brandName?.trim() || null,
+        productName.trim(),
+        Number(productValue) || 0,
+        image || null,
+        normalizedSaleStatus,
+        normalizedSoldAmount,
+        soldDate
+      );
 
-    adjustBrandIncome(userId, brandName?.trim(), normalizedSoldAmount);
-    logActivity(userId, 'create', 'asset', id, `手动创建资产: ${productName.trim()}`);
+      adjustBrandIncome(userId, brandName?.trim(), normalizedSoldAmount);
+      logActivity(userId, 'create', 'asset', id, `手动创建资产: ${productName.trim()}`);
 
-    const created = db.prepare('SELECT * FROM assets WHERE id = ? AND userId = ?').get(id, userId);
+      return db.prepare('SELECT * FROM assets WHERE id = ? AND userId = ?').get(id, userId);
+    });
+
+    const created = createAsset();
     return res.json(created);
   } catch (error) {
     console.error('创建资产错误:', error instanceof Error ? error.message : error);
@@ -134,17 +138,21 @@ router.put('/:id', (req, res) => {
       }
     }
 
-    db.prepare(`
-      UPDATE assets SET productName = ?, productValue = ?, image = ?, saleStatus = ?, soldAmount = ?, soldDate = ? WHERE id = ? AND userId = ?
-    `).run(newProductName, newProductValue, newImage, newSaleStatus, newSoldAmount, newSoldDate, id, userId);
+    const updateAsset = db.transaction(() => {
+      db.prepare(`
+        UPDATE assets SET productName = ?, productValue = ?, image = ?, saleStatus = ?, soldAmount = ?, soldDate = ? WHERE id = ? AND userId = ?
+      `).run(newProductName, newProductValue, newImage, newSaleStatus, newSoldAmount, newSoldDate, id, userId);
 
-    const oldIncome = getAssetIncome(existing);
-    const newIncome = getAssetIncome({ saleStatus: newSaleStatus, soldAmount: newSoldAmount });
-    adjustBrandIncome(userId, existing.brandName, newIncome - oldIncome);
+      const oldIncome = getAssetIncome(existing);
+      const newIncome = getAssetIncome({ saleStatus: newSaleStatus, soldAmount: newSoldAmount });
+      adjustBrandIncome(userId, existing.brandName, newIncome - oldIncome);
 
-    logActivity(userId, 'update', 'asset', id, `更新资产: ${newProductName}`);
+      logActivity(userId, 'update', 'asset', id, `更新资产: ${newProductName}`);
 
-    const updated = db.prepare('SELECT * FROM assets WHERE id = ?').get(id);
+      return db.prepare('SELECT * FROM assets WHERE id = ? AND userId = ?').get(id, userId);
+    });
+
+    const updated = updateAsset();
     return res.json(updated);
   } catch (error) {
     console.error('更新资产错误:', error instanceof Error ? error.message : error);
@@ -165,10 +173,13 @@ router.delete('/:id', (req, res) => {
       return res.status(404).json({ error: '资产不存在' });
     }
 
-    adjustBrandIncome(userId, asset.brandName, -getAssetIncome(asset));
+    const deleteAsset = db.transaction(() => {
+      adjustBrandIncome(userId, asset.brandName, -getAssetIncome(asset));
+      db.prepare('DELETE FROM assets WHERE id = ? AND userId = ?').run(id, userId);
+      logActivity(userId, 'delete', 'asset', id, `删除资产: ${asset.productName}`);
+    });
 
-    db.prepare('DELETE FROM assets WHERE id = ? AND userId = ?').run(id, userId);
-    logActivity(userId, 'delete', 'asset', id, `删除资产: ${asset.productName}`);
+    deleteAsset();
 
     return res.json({ success: true });
   } catch (error) {

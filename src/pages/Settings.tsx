@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Save, User, Bell, Shield, Database, Key, Palette, Cloud, Info, LogOut } from 'lucide-react';
+import { useCallback, useState, useEffect, useRef } from 'react';
+import { Save, User, Bell, Shield, Database, Key, Palette, Cloud, Info, LogOut, RefreshCw } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -22,10 +22,15 @@ import {
   type WebdavConfig,
 } from '../components/settings';
 
+const WEBDAV_CONFIG_KEY = 'webdavConfig';
+const WEBDAV_PASSWORD_KEY = 'webdavPassword';
+
 export default function Settings() {
-  const { settings, updateSettings, updateSecurity, clearData, logout, setAllData } = useStore();
+  const { settings, updateSettings, updateSecurity, clearData, logout, setAllData, fetchSettings } = useStore();
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState('profile');
+  const [settingsLoading, setSettingsLoading] = useState(!settings);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
   const [currentTheme, setCurrentTheme] = useState(() => {
     return localStorage.getItem('theme') || 'panda';
   });
@@ -56,6 +61,7 @@ export default function Settings() {
   });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const webdavSyncInProgressRef = useRef(false);
 
   const [clearDataConfirm, setClearDataConfirm] = useState(false);
   const [webdavRestoreConfirm, setWebdavRestoreConfirm] = useState(false);
@@ -68,14 +74,26 @@ export default function Settings() {
 
   // 加载 WebDAV 配置
   useEffect(() => {
-    const savedConfig = localStorage.getItem('webdavConfig');
+    const savedConfig = localStorage.getItem(WEBDAV_CONFIG_KEY);
     if (savedConfig) {
-      setWebdavConfig(JSON.parse(savedConfig));
+      const parsed = JSON.parse(savedConfig) as WebdavConfig;
+      const sessionPassword = sessionStorage.getItem(WEBDAV_PASSWORD_KEY);
+      if (parsed.password) {
+        sessionStorage.setItem(WEBDAV_PASSWORD_KEY, parsed.password);
+        const safeConfig = { ...parsed, password: '' };
+        localStorage.setItem(WEBDAV_CONFIG_KEY, JSON.stringify({ ...safeConfig, password: '' }));
+      }
+      setWebdavConfig({
+        ...parsed,
+        password: sessionPassword || parsed.password || '',
+      });
     }
   }, []);
 
   useEffect(() => {
     if (settings) {
+      setSettingsLoading(false);
+      setSettingsError(null);
       setFormData({
         displayName: settings.displayName || '',
         email: settings.email || '',
@@ -88,6 +106,44 @@ export default function Settings() {
       setSecurityData(prev => ({ ...prev, email: settings.email || '' }));
     }
   }, [settings]);
+
+  useEffect(() => {
+    if (settings) return;
+    let cancelled = false;
+    const loadSettings = async () => {
+      setSettingsLoading(true);
+      setSettingsError(null);
+      try {
+        await fetchSettings();
+      } catch (error) {
+        if (!cancelled) {
+          setSettingsError(error instanceof Error ? error.message : '设置加载失败');
+        }
+      } finally {
+        if (!cancelled) {
+          setSettingsLoading(false);
+        }
+      }
+    };
+
+    loadSettings();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchSettings, settings]);
+
+  const handleRetryLoadSettings = async () => {
+    setSettingsLoading(true);
+    setSettingsError(null);
+    try {
+      await fetchSettings();
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : '设置加载失败');
+      showToast('设置加载失败，请稍后重试', 'error');
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -154,6 +210,7 @@ export default function Settings() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      URL.revokeObjectURL(url);
       showToast('数据导出成功');
     } catch (e) {
       showToast('导出失败', 'error');
@@ -200,16 +257,32 @@ export default function Settings() {
       showToast('请填写完整的 WebDAV 认证信息', 'warning');
       return;
     }
-    localStorage.setItem('webdavConfig', JSON.stringify(webdavConfig));
+    const { password, ...safeConfig } = webdavConfig;
+    localStorage.setItem(WEBDAV_CONFIG_KEY, JSON.stringify({ ...safeConfig, password: '' }));
+    if (password) {
+      sessionStorage.setItem(WEBDAV_PASSWORD_KEY, password);
+    } else {
+      sessionStorage.removeItem(WEBDAV_PASSWORD_KEY);
+    }
     showToast('WebDAV 配置已保存');
   };
 
-  const handleWebdavSync = async (direction: 'upload' | 'download') => {
+  const handleWebdavSync = useCallback(async (
+    direction: 'upload' | 'download',
+    options: { silent?: boolean } = {},
+  ): Promise<boolean> => {
     if (!webdavConfig.url || !webdavConfig.username || !webdavConfig.password) {
-      showToast('请先配置 WebDAV 连接信息', 'warning');
-      return;
+      if (!options.silent) {
+        showToast('请先配置 WebDAV 连接信息', 'warning');
+      }
+      return false;
     }
 
+    if (webdavSyncInProgressRef.current) {
+      return false;
+    }
+
+    webdavSyncInProgressRef.current = true;
     setIsSyncing(true);
     try {
       const auth = btoa(`${webdavConfig.username}:${webdavConfig.password}`);
@@ -240,7 +313,10 @@ export default function Settings() {
           const now = new Date().toISOString();
           localStorage.setItem('lastWebdavSync', now);
           setLastSyncTime(now);
-          showToast('数据已同步到 WebDAV');
+          if (!options.silent) {
+            showToast('数据已同步到 WebDAV');
+          }
+          return true;
         } else {
           throw new Error(`上传失败: ${response.status}`);
         }
@@ -258,19 +334,59 @@ export default function Settings() {
           // 存储 remoteData 以便后续确认
           (window as any)._webdavRestoreData = remoteData;
           setWebdavRestoreConfirm(true);
+          return true;
         } else if (response.status === 404) {
           showToast('WebDAV 上暂无备份文件', 'warning');
+          return false;
         } else {
           throw new Error(`下载失败: ${response.status}`);
         }
       }
     } catch (error: any) {
       console.error('WebDAV sync error:', error);
-      showToast(`同步失败: ${error.message || '网络错误'}`, 'error');
+      if (!options.silent) {
+        showToast(`同步失败: ${error.message || '网络错误'}`, 'error');
+      }
+      return false;
     } finally {
+      webdavSyncInProgressRef.current = false;
       setIsSyncing(false);
     }
-  };
+  }, [showToast, webdavConfig.password, webdavConfig.url, webdavConfig.username]);
+
+  useEffect(() => {
+    const intervalHours = Number(webdavConfig.syncInterval);
+    const hasWebdavConfig = Boolean(webdavConfig.url && webdavConfig.username && webdavConfig.password);
+    if (!hasWebdavConfig || !Number.isFinite(intervalHours) || intervalHours <= 0) {
+      return;
+    }
+
+    const intervalMs = intervalHours * 60 * 60 * 1000;
+    const checkMs = Math.min(intervalMs, 60 * 60 * 1000);
+    const shouldUpload = () => {
+      const savedLastSync = localStorage.getItem('lastWebdavSync');
+      if (!savedLastSync) return true;
+
+      const lastSyncMs = new Date(savedLastSync).getTime();
+      return Number.isNaN(lastSyncMs) || Date.now() - lastSyncMs >= intervalMs;
+    };
+    const runAutoUpload = () => {
+      if (document.visibilityState === 'hidden') return;
+      if (shouldUpload()) {
+        void handleWebdavSync('upload', { silent: true });
+      }
+    };
+
+    runAutoUpload();
+    const timer = window.setInterval(runAutoUpload, checkMs);
+    return () => window.clearInterval(timer);
+  }, [
+    handleWebdavSync,
+    webdavConfig.password,
+    webdavConfig.syncInterval,
+    webdavConfig.url,
+    webdavConfig.username,
+  ]);
 
   const handleGenerateApiKey = async () => {
     setApiKeyConfirm(true);
@@ -351,22 +467,11 @@ curl "${serverUrl}/api/external/orders?token=${settings?.apiKey || 'YOUR_KEY'}"`
 
   const copyToClipboard = async (text: string) => {
     try {
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      textarea.style.position = 'fixed';
-      textarea.style.left = '-9999px';
-      textarea.style.top = '-9999px';
-      textarea.setAttribute('readonly', '');
-      document.body.appendChild(textarea);
-      textarea.select();
-      textarea.setSelectionRange(0, 99999);
-      const success = document.execCommand('copy');
-      document.body.removeChild(textarea);
-      if (success) {
-        showToast('已复制到剪贴板');
-      } else {
-        showToast('复制失败，请手动复制', 'error');
+      if (!navigator.clipboard?.writeText) {
+        throw new Error('Clipboard API unavailable');
       }
+      await navigator.clipboard.writeText(text);
+      showToast('已复制到剪贴板');
     } catch (error) {
       console.error('Copy error:', error);
       showToast('复制失败，请手动复制', 'error');
@@ -398,7 +503,45 @@ curl "${serverUrl}/api/external/orders?token=${settings?.apiKey || 'YOUR_KEY'}"`
     }
   }, []);
 
-  if (!settings) return null;
+  if (!settings) {
+    return (
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-4xl mx-auto">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-panda-black">系统设置</h1>
+          <button
+            onClick={() => logout()}
+            className="flex items-center gap-2 text-danger hover:bg-danger/10 px-4 py-2 rounded-xl transition-colors font-medium"
+          >
+            <LogOut size={18} />
+            退出
+          </button>
+        </div>
+        <div className="card-pixel p-8 flex flex-col items-center justify-center text-center min-h-[260px]">
+          {settingsLoading ? (
+            <>
+              <div className="w-10 h-10 border-2 border-panda-black border-t-transparent rounded-full animate-spin mb-4" />
+              <p className="text-sm text-gray-500">正在加载设置...</p>
+            </>
+          ) : (
+            <>
+              <div className="w-12 h-12 rounded-full bg-danger/10 text-danger flex items-center justify-center mb-4">
+                <Info size={22} />
+              </div>
+              <p className="font-medium text-panda-black mb-2">设置加载失败</p>
+              <p className="text-sm text-gray-500 mb-4">{settingsError || '请检查服务端连接或重新登录。'}</p>
+              <button
+                onClick={handleRetryLoadSettings}
+                className="btn-sketch flex items-center gap-2"
+              >
+                <RefreshCw size={16} />
+                重新加载
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-4xl mx-auto">
@@ -508,7 +651,6 @@ curl "${serverUrl}/api/external/orders?token=${settings?.apiKey || 'YOUR_KEY'}"`
               setSecurityData={setSecurityData}
               isSaving={isSaving}
               handleSecuritySave={handleSecuritySave}
-              showToast={showToast}
             />
           )}
 

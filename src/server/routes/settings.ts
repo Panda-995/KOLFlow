@@ -66,38 +66,58 @@ router.put('/', (req, res) => {
 
 // 安全设置
 router.put('/security', async (req, res) => {
-  const userId = getUserId(req);
-  const { email, password, oldPassword } = req.body;
+  try {
+    const userId = getUserId(req);
+    const { email, password, oldPassword } = req.body;
+    const newEmail = typeof email === 'string' ? email.trim() : '';
 
-  if (email && !validateEmail(email)) {
-    return res.status(400).json({ error: '请输入有效的邮箱地址' });
-  }
-
-  if (password) {
-    const passwordValidation = validatePassword(password);
-    if (!passwordValidation.valid) {
-      return res.status(400).json({ error: passwordValidation.message });
+    if (!newEmail || !validateEmail(newEmail)) {
+      return res.status(400).json({ error: '请输入有效的邮箱地址' });
     }
 
-    const currentUser = db.prepare('SELECT password FROM users WHERE id = ?').get(userId) as any;
-    if (currentUser && oldPassword) {
+    const currentUser = db.prepare('SELECT email, password FROM users WHERE id = ?').get(userId) as any;
+    if (!currentUser) {
+      return res.status(404).json({ error: '用户不存在' });
+    }
+
+    const isChangingPassword = typeof password === 'string' && password.length > 0;
+    if (isChangingPassword) {
+      const passwordValidation = validatePassword(password);
+      if (!passwordValidation.valid) {
+        return res.status(400).json({ error: passwordValidation.message });
+      }
+
+      if (!oldPassword || typeof oldPassword !== 'string') {
+        return res.status(400).json({ error: '修改密码需要输入原密码' });
+      }
+
       const isValidOldPassword = await verifyPassword(oldPassword, currentUser.password);
       if (!isValidOldPassword) {
         return res.status(400).json({ error: '原密码错误' });
       }
     }
 
-    const hashedPassword = await hashPassword(password);
-    db.prepare(`UPDATE settings SET email = ? WHERE userId = ?`).run(email, userId);
-    db.prepare(`UPDATE users SET email = ?, password = ? WHERE id = ?`).run(email, hashedPassword, userId);
+    const hashedPassword = isChangingPassword ? await hashPassword(password) : null;
+    const updateSecurity = db.transaction(() => {
+      db.prepare('UPDATE settings SET email = ? WHERE userId = ?').run(newEmail, userId);
+      if (hashedPassword) {
+        db.prepare('UPDATE users SET email = ?, password = ? WHERE id = ?').run(newEmail, hashedPassword, userId);
+        logActivity(userId, 'update_security', 'user', userId, '更新安全设置');
+      } else {
+        db.prepare('UPDATE users SET email = ? WHERE id = ?').run(newEmail, userId);
+      }
+    });
 
-    logActivity(userId, 'update_security', 'user', userId, '更新安全设置');
-  } else {
-    db.prepare(`UPDATE settings SET email = ? WHERE userId = ?`).run(email, userId);
-    db.prepare(`UPDATE users SET email = ? WHERE id = ?`).run(email, userId);
+    updateSecurity();
+    return res.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '更新安全设置失败';
+    const status = message.includes('UNIQUE') ? 400 : (message.includes('未授权') ? 401 : 500);
+    return res.status(status).json({
+      error: status === 400 ? '该邮箱已被其他账号使用' : message,
+      timestamp: new Date().toISOString(),
+    });
   }
-
-  return res.json({ success: true });
 });
 
 // 生成 API Key

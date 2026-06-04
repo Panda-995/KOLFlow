@@ -156,7 +156,8 @@ router.delete('/:id', (req, res) => {
       db.prepare('UPDATE todos SET category = NULL, brandId = NULL WHERE (brandId = ? OR category = ?) AND userId = ?').run(id, brand.name, userId);
       
       // 更新payments的品牌引用
-      db.prepare('UPDATE payments SET brand = ? WHERE brand = ? AND userId = ?').run(`已删除品牌(${brand.name})`, brand.name, userId);
+      db.prepare('UPDATE payments SET brand = NULL WHERE brand = ? AND userId = ?').run(brand.name, userId);
+      db.prepare('UPDATE assets SET brandName = NULL WHERE brandName = ? AND userId = ?').run(brand.name, userId);
       
       // 删除品牌
       db.prepare('DELETE FROM brands WHERE id = ? AND userId = ?').run(id, userId);

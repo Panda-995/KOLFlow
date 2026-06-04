@@ -100,7 +100,7 @@ export default function Brands() {
 
     // 统计收益 - 从已结算的支付记录中计算
     payments.forEach(p => {
-      if ((p.type === 'settled' || p.type === 'received') && p.brand && stats[p.brand]) {
+      if (p.type === 'settled' && p.brand && stats[p.brand]) {
         stats[p.brand].totalIncome += p.amount;
       }
     });

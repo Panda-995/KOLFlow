@@ -63,10 +63,9 @@ router.put('/:id/settle', (req, res) => {
 
     const newType = payment.type === 'pending' ? 'settled' : 'pending';
     const newDate = newType === 'settled' ? new Date().toISOString().split('T')[0] : payment.date;
-    const newMethod = newType === 'settled' ? '已结算' : payment.method;
 
-    db.prepare('UPDATE payments SET type = ?, date = ?, method = ? WHERE id = ? AND userId = ?')
-      .run(newType, newDate, newMethod, id, userId);
+    db.prepare('UPDATE payments SET type = ?, date = ? WHERE id = ? AND userId = ?')
+      .run(newType, newDate, id, userId);
 
     logActivity(userId, 'settle', 'payment', id, `账单结算: ${payment.brand} ¥${payment.amount} (${payment.type} → ${newType})`);
 

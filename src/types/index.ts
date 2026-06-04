@@ -58,7 +58,7 @@ export interface Payment {
   orderNo: string;
   brand: string;
   amount: number;
-  type: 'received' | 'pending' | 'settled' | 'refunded';
+  type: 'pending' | 'settled';
   date: string;
   method: string;
   createdAt?: string;

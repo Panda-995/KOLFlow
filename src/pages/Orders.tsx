@@ -15,7 +15,7 @@ const statusMap = ORDER_STATUS_MAP;
 const typeMap = ORDER_TYPE_MAP;
 
 export default function Orders() {
-  const { orders, brands, addOrder, updateOrder, updateOrderStatus, deleteOrder, addBrand, comments, fetchComments, addComment, fetchOrders, publishLinks, fetchPublishLinks, addPublishLink, batchAddPublishLinks, deletePublishLink, paidPromotions, fetchPaidPromotions, addPaidPromotion, deletePaidPromotion } = useStore();
+  const { orders, brands, addOrder, updateOrder, updateOrderStatus, deleteOrder, addBrand, comments, fetchComments, addComment, deleteComment, fetchOrders, publishLinks, fetchPublishLinks, addPublishLink, batchAddPublishLinks, deletePublishLink, paidPromotions, fetchPaidPromotions, addPaidPromotion, deletePaidPromotion } = useStore();
   const { showToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -215,8 +215,12 @@ export default function Orders() {
   };
 
   const handleDeletePublishLink = async (id: string) => {
-    await deletePublishLink(id);
-    showToast('链接已删除');
+    try {
+      await deletePublishLink(id);
+      showToast('链接已删除');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '删除链接失败', 'error');
+    }
   };
 
   const handleAddPaidPromotion = async () => {
@@ -245,8 +249,21 @@ export default function Orders() {
   };
 
   const handleDeletePaidPromotion = async (id: string) => {
-    await deletePaidPromotion(id);
-    showToast('付费推广记录已删除');
+    try {
+      await deletePaidPromotion(id);
+      showToast('付费推广记录已删除');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '删除付费推广记录失败', 'error');
+    }
+  };
+
+  const handleDeleteComment = async (id: string) => {
+    try {
+      await deleteComment(id);
+      showToast('沟通记录已删除');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '删除沟通记录失败', 'error');
+    }
   };
 
   const handleBatchCopyLinks = async () => {
@@ -257,20 +274,14 @@ export default function Orders() {
       return;
     }
     const text = links.map(l => `${l.platform}: ${l.url}`).join('\n');
-    
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.style.position = 'fixed';
-    textarea.style.left = '-9999px';
-    textarea.style.top = '-9999px';
-    document.body.appendChild(textarea);
-    textarea.select();
-    const success = document.execCommand('copy');
-    document.body.removeChild(textarea);
-    
-    if (success) {
+
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error('Clipboard API unavailable');
+      }
+      await navigator.clipboard.writeText(text);
       showToast(`已复制 ${links.length} 个链接`);
-    } else {
+    } catch (error) {
       showToast('复制失败', 'error');
     }
   };
@@ -615,9 +626,18 @@ export default function Orders() {
               <div className="space-y-2 max-h-[200px] overflow-y-auto mb-3">
                 {comments.filter(c => c.orderId === viewingOrder.id).length > 0 ? (
                   comments.filter(c => c.orderId === viewingOrder.id).map(comment => (
-                    <div key={comment.id} className="bg-gray-50 rounded-lg p-2.5">
-                      <p className="text-sm text-gray-700">{comment.content}</p>
-                      <span className="text-[10px] text-gray-400 mt-1 block">{formatCommentDate(comment.createdAt)}</span>
+                    <div key={comment.id} className="bg-gray-50 rounded-lg p-2.5 flex items-start gap-2 group">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-700 break-words">{comment.content}</p>
+                        <span className="text-[10px] text-gray-400 mt-1 block">{formatCommentDate(comment.createdAt)}</span>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteComment(comment.id)}
+                        className="p-1.5 text-gray-400 hover:text-danger hover:bg-danger/10 rounded transition-colors opacity-0 group-hover:opacity-100"
+                        title="删除沟通记录"
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   ))
                 ) : (

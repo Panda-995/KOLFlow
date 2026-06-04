@@ -61,7 +61,7 @@ interface AppState {
   register: (email: string, password: string, inviteCode: string) => Promise<{success: boolean, error?: string, isNew?: boolean}>;
   logout: () => void;
   updateSecurity: (email: string, password: string, oldPassword?: string) => Promise<{success: boolean, error?: string}>;
-  generateApiKey: () => Promise<string | undefined>;
+  generateApiKey: () => Promise<string>;
 
   fetchOrders: () => Promise<void>;
   addOrder: (order: Partial<Order>) => Promise<void>;
@@ -259,15 +259,16 @@ export const useStore = create<AppState>((set, get) => ({
         throw new Error(data.error || '生成 API Key 失败');
       }
       const data = await res.json();
-      if (data.apiKey) {
-        set((state) => ({
-          settings: state.settings ? { ...state.settings, apiKey: data.apiKey } : null
-        }));
-        return data.apiKey;
+      if (!data.apiKey) {
+        throw new Error('API Key 生成失败');
       }
-      return undefined;
+      set((state) => ({
+        settings: state.settings ? { ...state.settings, apiKey: data.apiKey } : null
+      }));
+      return data.apiKey;
     } catch (e) {
-      return undefined;
+      console.error('generateApiKey失败:', e instanceof Error ? e.message : e);
+      throw e;
     }
   },
 
@@ -308,7 +309,14 @@ export const useStore = create<AppState>((set, get) => ({
       const previousOrders = get().orders;
       set({ orders: [newOrder, ...previousOrders] });
       get().showToast('商单创建成功', 'success');
-      await get().fetchTodos();
+      invalidateCache('todos');
+      invalidateCache('payments');
+      invalidateCache('assets');
+      await Promise.all([
+        get().fetchTodos(),
+        get().fetchPayments(),
+        get().fetchAssets(),
+      ]);
     } catch (error) {
       console.error('addOrder失败:', error instanceof Error ? error.message : error);
       get().showToast('创建商单失败，请稍后重试', 'error');
@@ -329,14 +337,14 @@ export const useStore = create<AppState>((set, get) => ({
       const updatedOrder = await res.json();
 
       invalidateCache('orders');
-      if (updatedOrder.status === 'completed') {
-        invalidateCache('todos');
-        invalidateCache('payments');
-        invalidateCache('assets');
-        await get().fetchTodos();
-        await get().fetchPayments();
-        await get().fetchAssets();
-      }
+      invalidateCache('todos');
+      invalidateCache('payments');
+      invalidateCache('assets');
+      await Promise.all([
+        get().fetchTodos(),
+        get().fetchPayments(),
+        get().fetchAssets(),
+      ]);
 
       set((state) => ({ orders: state.orders.map(o => o.id === id ? updatedOrder : o) }));
       get().showToast('商单更新成功', 'success');
@@ -360,14 +368,14 @@ export const useStore = create<AppState>((set, get) => ({
       const updatedOrder = await res.json();
 
       invalidateCache('orders');
-      if (updatedOrder.status === 'completed') {
-        invalidateCache('todos');
-        invalidateCache('payments');
-        invalidateCache('assets');
-        await get().fetchTodos();
-        await get().fetchPayments();
-        await get().fetchAssets();
-      }
+      invalidateCache('todos');
+      invalidateCache('payments');
+      invalidateCache('assets');
+      await Promise.all([
+        get().fetchTodos(),
+        get().fetchPayments(),
+        get().fetchAssets(),
+      ]);
 
       set((state) => ({ orders: state.orders.map(o => o.id === id ? updatedOrder : o) }));
       get().showToast('商单状态更新成功', 'success');
@@ -388,13 +396,12 @@ export const useStore = create<AppState>((set, get) => ({
       invalidateCache('todos');
       invalidateCache('payments');
       invalidateCache('assets');
-      set((state) => {
-        const filtered = state.orders.filter(o => o.id !== id);
-        get().fetchTodos();
-        get().fetchPayments();
-        get().fetchAssets();
-        return { orders: filtered };
-      });
+      set((state) => ({ orders: state.orders.filter(o => o.id !== id) }));
+      await Promise.all([
+        get().fetchTodos(),
+        get().fetchPayments(),
+        get().fetchAssets(),
+      ]);
       get().showToast('商单删除成功', 'success');
     } catch (error) {
       console.error('deleteOrder失败:', error instanceof Error ? error.message : error);
@@ -419,7 +426,7 @@ export const useStore = create<AppState>((set, get) => ({
       setCache('todos', data);
       set({ todos: data });
     } catch (error) {
-      console.error('fetchTodos失败:');
+      console.error('fetchTodos失败:', error instanceof Error ? error.message : error);
       throw error;
     }
   },
@@ -493,7 +500,7 @@ export const useStore = create<AppState>((set, get) => ({
       setCache('brands', data);
       set({ brands: data });
     } catch (error) {
-      console.error('fetchBrands失败:');
+      console.error('fetchBrands失败:', error instanceof Error ? error.message : error);
       throw error;
     }
   },
@@ -515,6 +522,7 @@ export const useStore = create<AppState>((set, get) => ({
     } catch (error) {
       console.error('addBrand失败:', error instanceof Error ? error.message : error);
       get().showToast('创建品牌失败，请稍后重试', 'error');
+      throw error;
     }
   },
   updateBrand: async (id, brand) => {
@@ -571,7 +579,7 @@ export const useStore = create<AppState>((set, get) => ({
       setCache('payments', data);
       set({ payments: data });
     } catch (error) {
-      console.error('fetchPayments失败:');
+      console.error('fetchPayments失败:', error instanceof Error ? error.message : error);
       throw error;
     }
   },
@@ -830,6 +838,7 @@ export const useStore = create<AppState>((set, get) => ({
     } catch (error) {
       console.error('deleteComment失败:', error instanceof Error ? error.message : error);
       get().showToast('删除评论失败', 'error');
+      throw error;
     }
   },
 
@@ -985,6 +994,7 @@ export const useStore = create<AppState>((set, get) => ({
       set({ assets: data });
     } catch (error) {
       console.error('fetchAssets失败:', error instanceof Error ? error.message : error);
+      throw error;
     }
   },
   addAsset: async (asset) => {

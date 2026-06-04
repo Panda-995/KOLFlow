@@ -5,6 +5,13 @@ import { safeJsonParse } from './utils/helpers.js';
 
 const router = Router();
 
+const formatLocalDate = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 // 获取报告
 router.get('/:type', (req, res) => {
   const userId = getUserId(req);
@@ -15,12 +22,11 @@ router.get('/:type', (req, res) => {
   if (type === 'weekly') {
     startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   } else {
-    // 月度报告：使用月初作为起始点，避免日期偏移问题
-    startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
   }
 
-  const startDateStr = startDate.toISOString().split('T')[0];
-  const endDateStr = now.toISOString().split('T')[0];
+  const startDateStr = formatLocalDate(startDate);
+  const endDateStr = formatLocalDate(now);
 
   const orders = db.prepare(`
     SELECT * FROM orders
@@ -63,10 +69,15 @@ router.get('/:type', (req, res) => {
         brandStats[o.brandName] = { orders: 0, income: 0 };
       }
       brandStats[o.brandName].orders++;
-      if (o.status === 'completed') {
-        brandStats[o.brandName].income += o.actualAmount;
-      }
     }
+  });
+
+  payments.forEach(p => {
+    if (p.type !== 'settled' || !p.brand) return;
+    if (!brandStats[p.brand]) {
+      brandStats[p.brand] = { orders: 0, income: 0 };
+    }
+    brandStats[p.brand].income += p.amount;
   });
 
   soldAssets.forEach(a => {

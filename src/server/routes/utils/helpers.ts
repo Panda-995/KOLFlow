@@ -21,7 +21,7 @@ export const generateOrderNo = (): string => {
   const hour = String(now.getHours()).padStart(2, '0');
   const minute = String(now.getMinutes()).padStart(2, '0');
   const second = String(now.getSeconds()).padStart(2, '0');
-  const random = crypto.randomBytes(3).toString('hex');
+  const random = crypto.randomBytes(6).toString('hex');
   return `ORD-${year}${month}${day}-${hour}${minute}${second}-${random}`;
 };
 

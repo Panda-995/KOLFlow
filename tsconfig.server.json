@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": false,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": false,
+    "outDir": "build",
+    "rootDir": "."
+  },
+  "include": [
+    "server.ts",
+    "src/server/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    "android"
+  ]
+}

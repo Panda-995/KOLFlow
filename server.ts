@@ -1,6 +1,5 @@
 import 'dotenv/config';
 import express, { ErrorRequestHandler } from 'express';
-import { createServer as createViteServer } from 'vite';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import apiRoutes from './src/server/api.js';
@@ -51,26 +50,37 @@ async function startServer() {
     return ips;
   };
   
-  const configuredCorsOrigins = process.env.CORS_ORIGIN?.split(',').map(origin => origin.trim()).filter(Boolean);
-  const allowedOrigins = configuredCorsOrigins?.length
-    ? configuredCorsOrigins
-    : [
-      'http://localhost',
-      'https://localhost',
-      'http://localhost:3000',
-      'http://localhost:5173',
-      'capacitor://localhost',
-      'ionic://localhost',
-      ...getLocalIPs(),
-    ];
+  const configuredCorsOrigins = process.env.CORS_ORIGIN?.split(',').map(origin => origin.trim()).filter(Boolean) || [];
+  const defaultAllowedOrigins = [
+    'http://localhost',
+    'https://localhost',
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'capacitor://localhost',
+    'ionic://localhost',
+    ...getLocalIPs(),
+  ];
+  const allowedOrigins = Array.from(new Set([...defaultAllowedOrigins, ...configuredCorsOrigins]));
+  const allowAnyOrigin = configuredCorsOrigins.length === 0 || configuredCorsOrigins.includes('*');
+  const isOriginAllowed = (origin: string): boolean => {
+    if (allowAnyOrigin) return true;
+    if (allowedOrigins.includes(origin)) return true;
+    try {
+      const parsed = new URL(origin);
+      return ['http:', 'https:', 'capacitor:', 'ionic:'].includes(parsed.protocol);
+    } catch {
+      return false;
+    }
+  };
 
   app.use((req, res, next): void => {
     const origin = req.headers.origin;
-    if (origin && (!configuredCorsOrigins?.length || allowedOrigins.includes(origin))) {
+    if (origin && isOriginAllowed(origin)) {
       res.header('Access-Control-Allow-Origin', origin);
     } else if (!origin) {
       res.header('Access-Control-Allow-Origin', '*');
     }
+    res.header('Vary', 'Origin');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
     if (req.method === 'OPTIONS') {
@@ -116,6 +126,7 @@ app.get('/api/health', (_req, res) => {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',

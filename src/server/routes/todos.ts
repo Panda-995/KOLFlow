@@ -2,7 +2,6 @@ import { Router } from 'express';
 import db from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { getUserId } from './utils/index.js';
-import { autoCreatePaymentIfCompleted } from '../services/orderService.js';
 
 const router = Router();
 
@@ -75,25 +74,6 @@ router.put('/:id/update', (req, res) => {
       WHERE id = ?
     `).run(newContent, newPriority, newCategory, newCompleted, newDueDate, newBrandId, id);
 
-    // 同步商单状态 - 只有当订单的所有待办都完成时才将订单设为完成
-    if (existing.orderId) {
-      if (newCompleted === 1) {
-        const allTodos = db.prepare('SELECT id, completed FROM todos WHERE orderId = ? AND userId = ?').all(existing.orderId, userId) as any[];
-        const allCompleted = allTodos.every(t => t.completed === 1);
-        if (allCompleted && allTodos.length > 0) {
-          db.prepare('UPDATE orders SET status = ? WHERE id = ? AND userId = ?').run('completed', existing.orderId, userId);
-          // 商单完成时自动创建账单
-          const order = db.prepare('SELECT * FROM orders WHERE id = ? AND userId = ?').get(existing.orderId, userId) as any;
-          autoCreatePaymentIfCompleted(order, userId);
-        }
-      } else if (newCompleted === 0) {
-        const order = db.prepare('SELECT status FROM orders WHERE id = ? AND userId = ?').get(existing.orderId, userId) as any;
-        if (order && order.status === 'completed') {
-          db.prepare('UPDATE orders SET status = ? WHERE id = ? AND userId = ?').run('in_progress', existing.orderId, userId);
-        }
-      }
-    }
-
     const updated = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as any;
     updated.completed = Boolean(updated.completed);
     return res.json(updated);
@@ -115,27 +95,6 @@ router.put('/:id/toggle', (req, res) => {
     if (todo) {
       const newStatus = todo.completed ? 0 : 1;
       db.prepare('UPDATE todos SET completed = ? WHERE id = ? AND userId = ?').run(newStatus, id, userId);
-
-      // 同步商单状态 - 只有当订单的所有待办都完成时才将订单设为完成
-      if (todo.orderId) {
-        if (newStatus === 1) {
-          // 查询所有待办，并考虑当前todo的新状态
-          const allTodos = db.prepare('SELECT id, completed FROM todos WHERE orderId = ? AND userId = ?').all(todo.orderId, userId) as any[];
-          // 使用新状态来判断当前todo是否完成
-          const allCompleted = allTodos.every(t => t.id === id ? newStatus === 1 : t.completed === 1);
-          if (allCompleted && allTodos.length > 0) {
-            db.prepare('UPDATE orders SET status = ? WHERE id = ? AND userId = ?').run('completed', todo.orderId, userId);
-            // 商单完成时自动创建账单
-            const order = db.prepare('SELECT * FROM orders WHERE id = ? AND userId = ?').get(todo.orderId, userId) as any;
-            autoCreatePaymentIfCompleted(order, userId);
-          }
-        } else {
-          const order = db.prepare('SELECT status FROM orders WHERE id = ? AND userId = ?').get(todo.orderId, userId) as any;
-          if (order && order.status === 'completed') {
-            db.prepare('UPDATE orders SET status = ? WHERE id = ? AND userId = ?').run('in_progress', todo.orderId, userId);
-          }
-        }
-      }
 
       const updatedTodo = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as any;
       updatedTodo.completed = Boolean(updatedTodo.completed);

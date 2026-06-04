@@ -33,11 +33,25 @@ export default function Assets() {
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [imageAsset, setImageAsset] = useState<Asset | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; asset: Asset | null }>({ isOpen: false, asset: null });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetchAssets();
-    fetchBrands();
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        await Promise.all([fetchAssets(), fetchBrands()]);
+      } catch (e) {
+        if (!cancelled) setError('加载资产数据失败，请刷新重试');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
   }, [fetchAssets, fetchBrands]);
 
   const availableYears = useMemo(() => getAvailableYears(assets.map(asset => getAssetFilterDate(asset))), [assets]);
@@ -248,7 +262,25 @@ export default function Assets() {
         <span className="text-xs text-gray-400">{filteredAssets.length} 件资产</span>
       </div>
 
-      {filteredAssets.length === 0 ? (
+      {loading ? (
+        <div className="py-16 flex flex-col items-center justify-center text-gray-400">
+          <div className="w-8 h-8 border-2 border-gray-300 border-t-panda-black rounded-full animate-spin mb-3" />
+          <p className="text-sm">正在加载资产数据...</p>
+        </div>
+      ) : error ? (
+        <div className="py-16 flex flex-col items-center justify-center text-gray-400 card-pixel p-8">
+          <div className="w-16 h-16 border-2 border-red-200 rounded-full flex items-center justify-center mb-3 bg-red-50">
+            <Package size={28} className="text-red-400" />
+          </div>
+          <p className="text-sm text-red-500">{error}</p>
+          <button
+            onClick={() => { setLoading(true); setError(null); Promise.all([fetchAssets(), fetchBrands()]).then(() => setLoading(false)).catch(() => { setError('加载资产数据失败，请刷新重试'); setLoading(false); }); }}
+            className="mt-3 text-xs text-panda-black underline hover:no-underline"
+          >
+            点击重试
+          </button>
+        </div>
+      ) : filteredAssets.length === 0 ? (
         <div className="py-16 flex flex-col items-center justify-center text-gray-400 card-pixel p-8">
           <div className="w-16 h-16 border-2 border-dashed border-gray-300 rounded-full flex items-center justify-center mb-3">
             <Package size={28} />

@@ -13,7 +13,8 @@ services:
       # ===== 安全配置（生产环境必须设置） =====
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET必须配置}
       - INVITE_CODE=${INVITE_CODE:-panda995}
-      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000}
+      # 默认允许 HTTP/HTTPS 域名、局域网和 App 访问；需要收紧时可改为逗号分隔域名列表
+      - CORS_ORIGIN=${CORS_ORIGIN:-*}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
