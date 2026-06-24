@@ -55,7 +55,12 @@ android/capacitor-cordova-android-plugins/build/
 !.github/workflows/*
 
 # 绿联应用打包
-ugreen/
+ugreen/kolflow-app/rootfs_amd64/images/
+ugreen/kolflow-app/rootfs_arm64/images/
+ugreen/kolflow-app/build_dir/
+ugreen/kolflow-app/dist/
+ugreen/**/*.upk
+ugreen/**/*.tar
 
 # Docker
 .dockerignore

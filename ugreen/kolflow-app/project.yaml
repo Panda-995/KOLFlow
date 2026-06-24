@@ -1,0 +1,61 @@
+spec_version: "2.1"
+app_id: com.panda.kolflow
+version: 1.3.0
+support_arch:
+  - amd64
+  - arm64
+supports:
+  - app
+  - pc
+is_docker_app: true
+only_admin: true
+port: 3441
+open_type: inner
+tag_types:
+  - utility
+depend_fw_version: 1.13.0.0000
+depend_docker_version: 1.7.0.0000
+parameters:
+  - key: JWT_SECRET
+    type: password
+    required: true
+    changeable: true
+    min_length: 32
+    max_length: 128
+    i18n:
+      en-US:
+        name: JWT signing secret
+        description: Enter a random secret of 32 to 128 characters for signing login tokens. Keep it safe and unchanged after installation.
+      zh-CN:
+        name: JWT 签名密钥
+        description: 请输入 32 至 128 位随机字符，用于签发登录令牌。安装后请妥善保管，不要随意修改。
+  - key: INVITE_CODE
+    type: password
+    required: true
+    changeable: true
+    min_length: 6
+    max_length: 64
+    i18n:
+      en-US:
+        name: Registration invite code
+        description: Enter a 6 to 64 character invite code. New users must provide this code when registering.
+      zh-CN:
+        name: 注册邀请码
+        description: 请输入 6 至 64 位邀请码，新用户注册 KOLFlow 账号时必须填写此邀请码。
+i18n:
+  en-US:
+    name: KOLFlow
+    description: KOLFlow is a self-hosted business collaboration manager designed for creators and KOLs. It centralizes orders, brands, contacts, billing, assets, todos, publishing links, paid promotion costs, analytics, activity logs, data import and export, and Android access. This package includes privacy consent for authentication and optimized on-demand asset image loading. Licensed under GNU AGPL v3.0. Source, license, and privacy information are available from the official project links.
+    author: 熊猫不是猫QAQ
+    official: https://github.com/Panda-995/KOLFlow
+    help: https://post.smzdm.com/p/a6zg63m0/
+    publisher: 熊猫不是猫QAQ
+    publisher_link: https://github.com/Panda-995
+  zh-CN:
+    name: KOLFlow
+    description: KOLFlow 是面向 KOL、内容创作者与达人团队的自托管商单管理系统，可集中管理商单进度、品牌与联系人、账单结算、置换资产、待办日历、发布链接、付费推广成本、数据统计、操作日志以及数据导入导出，并支持 Android 客户端连接。当前版本加入登录与注册隐私政策确认、资产图片按需加载和自动压缩，适合在绿联 NAS 上长期运行。项目采用 GNU AGPL v3.0 开源，源码、许可协议与隐私政策可通过官方项目链接查看。
+    author: 熊猫不是猫QAQ
+    official: https://github.com/Panda-995/KOLFlow
+    help: https://post.smzdm.com/p/a6zg63m0/
+    publisher: 熊猫不是猫QAQ
+    publisher_link: https://github.com/Panda-995

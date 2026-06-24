@@ -1,0 +1,93 @@
+name: Build UGOS Pro UPK
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: UGOS Pro package build number
+        required: true
+        default: "1"
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare package directories
+        run: |
+          mkdir -p \
+            ugreen/kolflow-app/rootfs_amd64/images \
+            ugreen/kolflow-app/rootfs_arm64/images
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Export amd64 image
+        run: |
+          docker pull --platform linux/amd64 ghcr.io/panda-995/kolflow:amd64
+          docker tag \
+            ghcr.io/panda-995/kolflow:amd64 \
+            ghcr.io/panda-995/kolflow:1.3.0
+          test "$(docker image inspect ghcr.io/panda-995/kolflow:1.3.0 --format '{{.Architecture}}')" = "amd64"
+          docker save \
+            -o ugreen/kolflow-app/rootfs_amd64/images/kolflow-1.3.0-amd64.tar \
+            ghcr.io/panda-995/kolflow:1.3.0
+
+      - name: Export arm64 image
+        run: |
+          docker image rm ghcr.io/panda-995/kolflow:1.3.0
+          docker pull --platform linux/arm64 ghcr.io/panda-995/kolflow:arm64
+          docker tag \
+            ghcr.io/panda-995/kolflow:arm64 \
+            ghcr.io/panda-995/kolflow:1.3.0
+          test "$(docker image inspect ghcr.io/panda-995/kolflow:1.3.0 --format '{{.Architecture}}')" = "arm64"
+          docker save \
+            -o ugreen/kolflow-app/rootfs_arm64/images/kolflow-1.3.0-arm64.tar \
+            ghcr.io/panda-995/kolflow:1.3.0
+
+      - name: Install official ugcli
+        run: |
+          curl -fsSL \
+            https://osswaf.ugnas.com/pro/ugcli/download/ugcli-v1.1.0.13-linux-amd64 \
+            -o /usr/local/bin/ugcli
+          chmod +x /usr/local/bin/ugcli
+          ugcli --version
+
+      - name: Check and package UPK
+        working-directory: ugreen/kolflow-app
+        run: |
+          ugcli check
+          ugcli pack --arch all --build "${{ inputs.build_number }}"
+
+      - name: Generate checksums
+        working-directory: ugreen/kolflow-app
+        run: |
+          find build_dir/pkgs/upk -type f -name '*.upk' -print0 \
+            | sort -z \
+            | xargs -0 sha256sum \
+            > build_dir/pkgs/upk/SHA256SUMS
+
+      - name: Upload UPK packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: kolflow-ugos-pro-1.3.0.${{ inputs.build_number }}
+          path: |
+            ugreen/kolflow-app/build_dir/pkgs/upk/*.upk
+            ugreen/kolflow-app/build_dir/pkgs/upk/SHA256SUMS
+            ugreen/kolflow-app/project.yaml
+            ugreen/kolflow-app/rootfs_common/docker-compose.yaml
+            ugreen/kolflow-app/rootfs_common/icon.png
+            ugreen/README.md
+            ugreen/STORE_LISTING.md
+          if-no-files-found: error
+          retention-days: 30
