@@ -19,7 +19,11 @@ const verifyPassword = async (password: string, hashedPassword: string): Promise
 
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, inviteCode } = req.body;
+    const { email, password, inviteCode, privacyAccepted } = req.body;
+
+    if (privacyAccepted !== true) {
+      return res.status(400).json({ error: '请先阅读并同意隐私政策' });
+    }
 
     if (!email || !password) {
       return res.status(400).json({ error: '邮箱和密码不能为空' });
@@ -72,7 +76,11 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, privacyAccepted } = req.body;
+
+    if (privacyAccepted !== true) {
+      return res.status(400).json({ error: '请先阅读并同意隐私政策' });
+    }
 
     if (!email || !password) {
       return res.status(400).json({ error: '邮箱和密码不能为空' });

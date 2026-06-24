@@ -17,8 +17,9 @@ async function startServer() {
   // Rate limiting for auth routes
   const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5, // 5 attempts
-    message: { error: '登录尝试过多，请稍后再试' },
+    max: 60, // 60 failed attempts
+    skipSuccessfulRequests: true,
+    message: { error: '15 分钟内登录或注册失败次数过多（最多 60 次），请稍后再试' },
     standardHeaders: true,
     legacyHeaders: false,
   });
@@ -26,6 +27,7 @@ async function startServer() {
   const apiLimiter = rateLimit({
     windowMs: 60 * 1000, // 1 minute
     max: 100, // 100 requests
+    skip: req => ['/api/auth/login', '/api/auth/register'].includes(req.originalUrl.split('?')[0]),
     message: { error: '请求过于频繁，请稍后再试' },
     standardHeaders: true,
     legacyHeaders: false,

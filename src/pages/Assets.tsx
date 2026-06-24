@@ -6,8 +6,162 @@ import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
 import { ALL_MONTHS, ALL_YEARS, getAvailableYears, matchesYearMonth, monthOptions } from '../lib/dateFilter';
+import { authFetch } from '../lib/api';
 
 const getAssetFilterDate = (asset: Asset): string => asset.createdAt || asset.soldDate || '';
+const assetImageCache = new Map<string, string>();
+const assetImageRequests = new Map<string, Promise<string | null>>();
+
+const loadAssetImage = async (assetId: string): Promise<string | null> => {
+  const cached = assetImageCache.get(assetId);
+  if (cached) return cached;
+
+  const pending = assetImageRequests.get(assetId);
+  if (pending) return pending;
+
+  const request = (async () => {
+    try {
+      const response = await authFetch(`/api/assets/${assetId}/image`);
+      if (!response.ok) return null;
+      const data = await response.json() as { image?: string };
+      if (!data.image) return null;
+      assetImageCache.set(assetId, data.image);
+      return data.image;
+    } catch {
+      return null;
+    } finally {
+      assetImageRequests.delete(assetId);
+    }
+  })();
+
+  assetImageRequests.set(assetId, request);
+  return request;
+};
+
+const readBlobAsDataUrl = (blob: Blob): Promise<string> => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(reader.result as string);
+  reader.onerror = () => reject(new Error('读取图片失败'));
+  reader.readAsDataURL(blob);
+});
+
+const optimizeAssetImage = async (file: File): Promise<string> => {
+  const supportedTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+  if (!supportedTypes.has(file.type)) {
+    throw new Error('仅支持 JPG、PNG 或 WebP 图片');
+  }
+
+  const objectUrl = URL.createObjectURL(file);
+
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const nextImage = new Image();
+      nextImage.onload = () => resolve(nextImage);
+      nextImage.onerror = () => reject(new Error('无法解析图片'));
+      nextImage.src = objectUrl;
+    });
+
+    const maxDimension = 1600;
+    const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('图片处理失败');
+    context.drawImage(image, 0, 0, width, height);
+
+    const optimizedBlob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        blob => blob ? resolve(blob) : reject(new Error('图片压缩失败')),
+        'image/webp',
+        0.82
+      );
+    });
+
+    return readBlobAsDataUrl(optimizedBlob);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+};
+
+function AssetThumbnail({ asset, onClick }: { asset: Asset; onClick: () => void }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [imageSource, setImageSource] = useState(() => asset.image || assetImageCache.get(asset.id) || '');
+  const hasImage = Boolean(asset.image || asset.hasImage);
+
+  useEffect(() => {
+    if (asset.image) {
+      assetImageCache.set(asset.id, asset.image);
+      setImageSource(asset.image);
+      return;
+    }
+
+    setImageSource(assetImageCache.get(asset.id) || '');
+  }, [asset.id, asset.image]);
+
+  useEffect(() => {
+    if (!hasImage || imageSource) return;
+
+    let cancelled = false;
+    const load = async () => {
+      const image = await loadAssetImage(asset.id);
+      if (!cancelled && image) setImageSource(image);
+    };
+
+    if (!('IntersectionObserver' in window)) {
+      void load();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const observer = new IntersectionObserver(entries => {
+      if (!entries.some(entry => entry.isIntersecting)) return;
+      observer.disconnect();
+      void load();
+    }, { rootMargin: '240px' });
+
+    if (containerRef.current) observer.observe(containerRef.current);
+
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+    };
+  }, [asset.id, hasImage, imageSource]);
+
+  return (
+    <div
+      ref={containerRef}
+      className={clsx(
+        "w-20 h-20 rounded-xl flex-shrink-0 flex items-center justify-center overflow-hidden border-2",
+        hasImage
+          ? "border-transparent cursor-pointer bg-gray-100"
+          : "border-dashed border-gray-200 hover:border-panda-black/30 cursor-pointer"
+      )}
+      onClick={onClick}
+    >
+      {imageSource ? (
+        <img
+          src={imageSource}
+          alt={asset.productName}
+          loading="lazy"
+          decoding="async"
+          className="w-full h-full object-cover"
+        />
+      ) : hasImage ? (
+        <div className="w-full h-full animate-pulse bg-gray-200" aria-label="图片加载中" />
+      ) : (
+        <div className="flex flex-col items-center text-gray-400">
+          <Upload size={16} />
+          <span className="text-[9px] mt-0.5">上传图片</span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const createAssetInitialForm = {
   productName: '',
@@ -142,10 +296,18 @@ export default function Assets() {
 
   const isEcard = (asset: Asset) => asset.productName.includes('E卡');
 
-  const handleImageUpload = (asset: Asset) => {
+  const handleImageUpload = async (asset: Asset) => {
     if (isEcard(asset)) return;
-    setImageAsset(asset);
+    const cachedImage = asset.image || assetImageCache.get(asset.id);
+    setImageAsset(cachedImage ? { ...asset, image: cachedImage } : asset);
     setIsImageModalOpen(true);
+
+    if (!cachedImage && asset.hasImage) {
+      const image = await loadAssetImage(asset.id);
+      if (image) {
+        setImageAsset(current => current?.id === asset.id ? { ...current, image } : current);
+      }
+    }
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -154,21 +316,22 @@ export default function Assets() {
 
     if (file.size > 5 * 1024 * 1024) {
       showToast('图片大小不能超过5MB', 'error');
+      e.target.value = '';
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        await updateAsset(imageAsset.id, { image: reader.result as string });
-        showToast('图片上传成功');
-        setIsImageModalOpen(false);
-        setImageAsset(null);
-      } catch {
-        showToast('图片上传失败', 'error');
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const optimizedImage = await optimizeAssetImage(file);
+      await updateAsset(imageAsset.id, { image: optimizedImage });
+      assetImageCache.set(imageAsset.id, optimizedImage);
+      showToast('图片已压缩并上传');
+      setIsImageModalOpen(false);
+      setImageAsset(null);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '图片上传失败', 'error');
+    } finally {
+      e.target.value = '';
+    }
   };
 
   const handleDelete = async () => {
@@ -296,28 +459,13 @@ export default function Assets() {
               className="card-pixel p-4 bg-white rounded-2xl border-2 border-gray-100 hover:border-panda-black/20 hover:shadow-lg transition-all duration-300"
             >
               <div className="flex items-start gap-3">
-                <div
-                  className={clsx(
-                    "w-20 h-20 rounded-xl flex-shrink-0 flex items-center justify-center overflow-hidden border-2",
-                    isEcard(asset)
-                      ? "border-red-200 bg-red-50"
-                      : asset.image
-                        ? "border-transparent cursor-pointer"
-                        : "border-dashed border-gray-200 hover:border-panda-black/30 cursor-pointer"
-                  )}
-                  onClick={() => handleImageUpload(asset)}
-                >
-                  {isEcard(asset) ? (
-                    <img src="/jd.png" alt="E卡" className="w-full h-full object-cover" />
-                  ) : asset.image ? (
-                    <img src={asset.image} alt={asset.productName} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="flex flex-col items-center text-gray-400">
-                      <Upload size={16} />
-                      <span className="text-[9px] mt-0.5">上传图片</span>
-                    </div>
-                  )}
-                </div>
+                {isEcard(asset) ? (
+                  <div className="w-20 h-20 rounded-xl flex-shrink-0 overflow-hidden border-2 border-red-200 bg-red-50">
+                    <img src="/jd.png" alt="E卡" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                  </div>
+                ) : (
+                  <AssetThumbnail asset={asset} onClick={() => { void handleImageUpload(asset); }} />
+                )}
                 <div className="flex-1 min-w-0">
                   {editingAsset?.id === asset.id ? (
                     <div className="space-y-1.5">
@@ -517,7 +665,7 @@ export default function Assets() {
           >
             <Upload size={24} className="mx-auto text-gray-400 mb-2" />
             <p className="text-sm text-gray-500">点击选择图片</p>
-            <p className="text-xs text-gray-400 mt-1">支持 JPG、PNG，最大 5MB</p>
+            <p className="text-xs text-gray-400 mt-1">支持 JPG、PNG、WebP，最大 5MB；上传时自动压缩</p>
           </div>
           <input
             ref={fileInputRef}

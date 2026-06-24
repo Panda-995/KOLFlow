@@ -28,7 +28,9 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Node.js-20+-green.svg" alt="Node.js">
   <img src="https://img.shields.io/badge/React-19-blue.svg" alt="React">
-  <img src="https://img.shields.io/badge/License-Custom-orange.svg" alt="License: Custom (个人免费使用，商用需授权)">
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg" alt="License: GNU AGPL v3.0">
+  </a>
 </p>
 
 ---
@@ -278,8 +280,8 @@ docker pull ghcr.io/panda-995/kolflow:arm64
 ```bash
 GET  /api/health               # 健康检查
 GET  /api/auth/check-users     # 检查是否已有用户
-POST /api/auth/register        # 注册  Body: { email, password, inviteCode }
-POST /api/auth/login            # 登录  Body: { email, password }
+POST /api/auth/register        # 注册  Body: { email, password, inviteCode, privacyAccepted: true }
+POST /api/auth/login           # 登录  Body: { email, password, privacyAccepted: true }
 POST /api/auth/verify           # 验证 Token
 ```
 
@@ -427,6 +429,15 @@ External order create/update supports `productName` and `productValue`. When an 
 
 ## 📝 更新日志 | Changelog
 
+### 2026-06-24
+
+- **隐私政策确认**: 登录与注册必须阅读并勾选隐私政策，前端提交和服务端认证接口均执行校验
+- **登录限流调整**: 登录与注册接口由每 15 分钟 5 次调整为最多 60 次失败尝试，成功请求不计入限制
+- **资产库图片优化**: 资产列表不再一次性传输全部原图，图片按可视区域加载；新上传图片会自动缩放并压缩为 WebP
+- **开源协议更新**: 项目改用 GNU Affero General Public License v3.0（AGPL-3.0-only）
+- **作者名称统一**: 项目作者名称统一为“熊猫不是猫QAQ”
+- **Android 版本更新**: 应用版本升级至 1.3.0，并重新构建 Android APK
+
 ### 2026-06-05
 
 - **单向数据联动规则**: 明确以商单详情为主数据，商单变更会同步关联待办、账单和资产；账单、资产、待办可独立存在，编辑或删除不会反向修改或删除商单
@@ -539,7 +550,7 @@ External order create/update supports `productName` and `productValue`. When an 
 - **Docker 多架构支持**: 支持 amd64 / arm64 双架构自动构建
 - **GitHub Actions CI**: 添加自动构建 Docker 镜像的工作流
 - **中英双语 README**: README 全面支持中英文双语展示
-- **开源协议**: 更新为 MIT License 并完善协议说明
+- **许可证说明**: 完善项目许可证说明（当前许可证已于 2026-06-24 更新为 AGPL-3.0）
 
 ### 更早版本
 
@@ -553,7 +564,11 @@ External order create/update supports `productName` and `productValue`. When an 
 
 ## License | 许可证
 
-**MIT License** - Commercial use allowed, but must retain author attribution.
+本项目由 **熊猫不是猫QAQ** 以 **GNU Affero General Public License v3.0**
+（`AGPL-3.0-only`）开源。
+
+您可以依照 AGPL-3.0 的条款使用、修改与再分发本项目。若您修改本项目并通过网络向用户提供服务，
+必须向这些用户提供该运行版本的完整对应源代码，并保留相同许可证及版权声明。
 
 详细许可证内容请查看 [LICENSE](LICENSE) 文件。
 
@@ -561,11 +576,11 @@ External order create/update supports `productName` and `productValue`. When an 
 
 ## Author | 作者
 
-**Panda-995**
+**熊猫不是猫QAQ**
 
 - GitHub: https://github.com/Panda-995
 - Email: 676096193@qq.com
-- 公众号：Panda不是猫
+- 公众号：熊猫不是猫QAQ
 - 什么值得买主页：https://zhiyou.smzdm.com/member/9256201282/
 
 ---
@@ -592,5 +607,5 @@ External order create/update supports `productName` and `productValue`. When an 
 ---
 
 <p align="center">
-  Made with ❤️ by <a href="https://github.com/Panda-995">Panda-995</a>
+  Made with ❤️ by <a href="https://github.com/Panda-995">熊猫不是猫QAQ</a>
 </p>

@@ -30,12 +30,52 @@ const adjustBrandIncome = (userId: string, brandName: string | null | undefined,
 router.get('/', (req, res) => {
   try {
     const userId = getUserId(req);
-    const assets = db.prepare('SELECT * FROM assets WHERE userId = ? ORDER BY createdAt DESC').all(userId);
-    return res.json(assets);
+    const assets = db.prepare(`
+      SELECT
+        id,
+        orderId,
+        orderNo,
+        brandName,
+        productName,
+        productValue,
+        saleStatus,
+        soldAmount,
+        soldDate,
+        createdAt,
+        CASE WHEN image IS NOT NULL AND image <> '' THEN 1 ELSE 0 END AS hasImage
+      FROM assets
+      WHERE userId = ?
+      ORDER BY createdAt DESC
+    `).all(userId) as Array<Record<string, unknown> & { hasImage: number }>;
+    return res.json(assets.map(asset => ({ ...asset, hasImage: asset.hasImage === 1 })));
   } catch (error) {
     console.error('获取资产列表错误:', error instanceof Error ? error.message : error);
     return res.status(500).json({
       error: '获取资产列表失败',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+router.get('/:id/image', (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const { id } = req.params;
+    const asset = db.prepare('SELECT image FROM assets WHERE id = ? AND userId = ?').get(id, userId) as { image?: string | null } | undefined;
+
+    if (!asset) {
+      return res.status(404).json({ error: '资产不存在' });
+    }
+
+    if (!asset.image) {
+      return res.status(404).json({ error: '资产图片不存在' });
+    }
+
+    return res.json({ image: asset.image });
+  } catch (error) {
+    console.error('获取资产图片错误:', error instanceof Error ? error.message : error);
+    return res.status(500).json({
+      error: '获取资产图片失败',
       timestamp: new Date().toISOString()
     });
   }

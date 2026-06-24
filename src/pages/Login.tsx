@@ -22,6 +22,7 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [inviteCode, setInviteCode] = useState('');
+  const [hasAcceptedPrivacy, setHasAcceptedPrivacy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -82,6 +83,12 @@ export default function Login() {
     e.preventDefault();
     setError('');
     setNotice('');
+
+    if (!hasAcceptedPrivacy) {
+      setError('请先阅读并同意《隐私政策》');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -102,12 +109,12 @@ export default function Login() {
       setServerBaseUrl(normalized);
 
       if (mode === 'register') {
-        const res = await register(email, password, inviteCode);
+        const res = await register(email, password, inviteCode, hasAcceptedPrivacy);
         if (!res.success) {
           setError(res.error || '注册失败');
         }
       } else {
-        const res = await login(email, password);
+        const res = await login(email, password, hasAcceptedPrivacy);
         if (!res.success) {
           setError(res.error || '登录失败');
         }
@@ -215,13 +222,21 @@ export default function Login() {
         </div>
 
         {error && (
-          <div className="bg-danger/10 text-danger text-sm p-3 rounded-xl mb-6 text-center border border-danger/20">
+          <div
+            role="alert"
+            aria-live="assertive"
+            className="bg-danger/10 text-danger text-sm p-3 rounded-xl mb-6 text-center border border-danger/20"
+          >
             {error}
           </div>
         )}
 
         {notice && (
-          <div className="bg-success/10 text-success text-sm p-3 rounded-xl mb-6 text-center border border-success/20">
+          <div
+            role="status"
+            aria-live="polite"
+            className="bg-success/10 text-success text-sm p-3 rounded-xl mb-6 text-center border border-success/20"
+          >
             {notice}
           </div>
         )}
@@ -295,10 +310,42 @@ export default function Login() {
             </div>
           )}
 
+          <div className="flex items-start gap-3">
+            <input
+              id="privacy-consent"
+              name="privacyConsent"
+              type="checkbox"
+              checked={hasAcceptedPrivacy}
+              onChange={e => {
+                setHasAcceptedPrivacy(e.target.checked);
+                if (e.target.checked && error === '请先阅读并同意《隐私政策》') {
+                  setError('');
+                }
+              }}
+              aria-describedby="privacy-consent-description"
+              className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer rounded border-gray-300 accent-panda-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-panda-black focus-visible:ring-offset-2"
+            />
+            <p id="privacy-consent-description" className="text-xs leading-5 text-gray-600">
+              <label htmlFor="privacy-consent" className="cursor-pointer">
+                我已阅读并同意
+              </label>
+              <a
+                href="/privacy-policy.html"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="阅读 KOLFlow 隐私政策（在新窗口打开）"
+                className="mx-1 font-medium text-panda-black underline underline-offset-2 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-panda-black focus-visible:ring-offset-2"
+              >
+                《隐私政策》
+              </a>
+              ，了解个人信息的收集、使用与保护方式。
+            </p>
+          </div>
+
           <button
             type="submit"
-            disabled={isLoading}
-            className="w-full bg-panda-black text-white py-3 mt-2 rounded-xl font-medium hover:bg-gray-800 transition-colors disabled:opacity-50"
+            disabled={isLoading || !hasAcceptedPrivacy}
+            className="w-full bg-panda-black text-white py-3 mt-2 rounded-xl font-medium hover:bg-gray-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-panda-black focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isLoading
               ? (mode === 'login' ? '登录中...' : '注册中...')

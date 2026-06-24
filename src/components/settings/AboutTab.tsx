@@ -102,11 +102,22 @@ export function AboutTab({ previewImage, setPreviewImage }: AboutTabProps) {
           {/* 版权信息 */}
           <div className="pt-4 border-t border-border/30 text-center">
             <p className="text-xs text-gray-400">
-              Made with ❤️ by 熊猫不是猫 QAQ
+              Made with ❤️ by 熊猫不是猫QAQ
             </p>
             <p className="text-[10px] text-gray-300 mt-1">
-              © 2026 KOLFlow. 本项目仅供个人学习和研究使用。
+              © 2024-2026 熊猫不是猫QAQ · GNU AGPL v3.0
             </p>
+            <p className="text-[10px] text-gray-300 mt-1">
+              本软件不提供任何担保，您可以依照 AGPL v3.0 的条款再分发。
+            </p>
+            <a
+              href="https://github.com/Panda-995/KOLFlow"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-block text-xs font-medium text-gray-500 underline underline-offset-2 hover:text-panda-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-panda-black focus-visible:ring-offset-2"
+            >
+              查看项目源码与开源协议
+            </a>
           </div>
         </div>
       </div>

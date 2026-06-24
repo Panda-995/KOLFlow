@@ -73,6 +73,7 @@ export interface Asset {
   productName: string;
   productValue: number;
   image?: string;
+  hasImage?: boolean;
   saleStatus: 'keep' | 'sold';
   soldAmount: number;
   soldDate?: string;

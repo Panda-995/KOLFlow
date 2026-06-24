@@ -1,8 +1,9 @@
 {
   "name": "kolflow",
   "private": true,
-  "version": "1.0.0",
-  "license": "SEE LICENSE IN LICENSE",
+  "version": "1.3.0",
+  "license": "AGPL-3.0-only",
+  "author": "熊猫不是猫QAQ",
   "type": "module",
   "engines": {
     "node": ">=20.19.0 || >=22.12.0"
@@ -22,10 +23,10 @@
     "cap:live": "npx cap run android --livereload --external"
   },
   "dependencies": {
-    "@capacitor/android": "^8.3.4",
-    "@capacitor/cli": "^8.3.4",
-    "@capacitor/core": "^8.3.4",
-    "@capacitor/keyboard": "^8.0.3",
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/cli": "^8.4.1",
+    "@capacitor/core": "^8.4.1",
+    "@capacitor/keyboard": "^8.0.5",
     "@capacitor/splash-screen": "^8.0.1",
     "@capacitor/status-bar": "^8.0.2",
     "@tailwindcss/vite": "^4.3.0",
@@ -64,7 +65,7 @@
     "@types/uuid": "^10.0.0",
     "autoprefixer": "^10.5.0",
     "tailwindcss": "^4.3.0",
-    "tsx": "^4.19.2",
+    "tsx": "^4.22.4",
     "typescript": "~5.8.2",
     "vite": "^6.4.2"
   },
@@ -72,6 +73,6 @@
     "path-to-regexp": "0.1.13",
     "picomatch": "4.0.4",
     "postcss": "8.5.15",
-    "tar": "7.5.15"
+    "tar": "7.5.16"
   }
 }

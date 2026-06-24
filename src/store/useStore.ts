@@ -57,8 +57,8 @@ interface AppState {
   darkMode: boolean;
 
   setAuthenticated: (value: boolean) => void;
-  login: (email: string, password: string) => Promise<{success: boolean, error?: string}>;
-  register: (email: string, password: string, inviteCode: string) => Promise<{success: boolean, error?: string, isNew?: boolean}>;
+  login: (email: string, password: string, privacyAccepted: boolean) => Promise<{success: boolean, error?: string}>;
+  register: (email: string, password: string, inviteCode: string, privacyAccepted: boolean) => Promise<{success: boolean, error?: string, isNew?: boolean}>;
   logout: () => void;
   updateSecurity: (email: string, password: string, oldPassword?: string) => Promise<{success: boolean, error?: string}>;
   generateApiKey: () => Promise<string>;
@@ -170,11 +170,11 @@ export const useStore = create<AppState>((set, get) => ({
     console.log(`[${type.toUpperCase()}] ${message}`);
   },
 
-  login: async (email, password) => {
+  login: async (email, password, privacyAccepted) => {
     try {
       const res = await createFetch()('/api/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email, password, privacyAccepted })
       });
       const data = await res.json();
       if (data.success) {
@@ -190,11 +190,11 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  register: async (email, password, inviteCode) => {
+  register: async (email, password, inviteCode, privacyAccepted) => {
     try {
       const res = await createFetch()('/api/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ email, password, inviteCode })
+        body: JSON.stringify({ email, password, inviteCode, privacyAccepted })
       });
       const data = await res.json();
       if (data.success) {
