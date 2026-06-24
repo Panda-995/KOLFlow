@@ -15,6 +15,12 @@ tag_types:
   - utility
 depend_fw_version: 1.13.0.0000
 depend_docker_version: 1.7.0.0000
+license_agreement_link:
+  - https://github.com/Panda-995/KOLFlow/blob/main/LICENSE
+source_code_link:
+  - https://github.com/Panda-995/KOLFlow
+privacy_policy_link:
+  - https://github.com/Panda-995/KOLFlow/blob/main/public/privacy-policy.html
 parameters:
   - key: JWT_SECRET
     type: password
