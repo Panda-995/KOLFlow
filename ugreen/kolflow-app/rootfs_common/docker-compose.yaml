@@ -7,7 +7,7 @@ services:
     volumes:
       - ./data:/app/data
     environment:
-      TZ: ${TZ:-Asia/Shanghai}
+      TZ: Asia/Shanghai
       NODE_ENV: production
       PORT: 3000
       DATA_DIR: /app/data
