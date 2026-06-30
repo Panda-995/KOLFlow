@@ -10,7 +10,7 @@ supports:
 is_docker_app: true
 only_admin: true
 port: 3441
-open_type: inner
+open_type: tab
 tag_types:
   - utility
 depend_fw_version: 1.13.0.0000
