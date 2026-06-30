@@ -429,6 +429,12 @@ External order create/update supports `productName` and `productValue`. When an 
 
 ## 📝 更新日志 | Changelog
 
+### 2026-06-30
+
+- **绿联 NAS / UGOS Pro 包更新**: 重新打包 UGOS Pro 应用安装包 `1.3.0.0003`，提供 `amd64` 与 `arm64` 两个 UPK 文件，并已同步上传到 GitHub Release。
+- **绿联内打开 404 修复**: 将绿联 Docker 应用的 `open_type` 从 `inner` 调整为 `tab`，避免在绿联应用中心直接打开时走系统内置 nginx 页面导致 `404 Not Found`；安装新版后会通过应用端口打开 KOLFlow。
+- **发布信息补全**: UPK 包继续保留许可协议、源码链接、隐私政策字段，图标沿用项目原始 `public/app.png`，未生成新图标；Release Notes 已补充 SHA-256 校验信息。
+
 ### 2026-06-24
 
 - **隐私政策确认**: 登录与注册必须阅读并勾选隐私政策，前端提交和服务端认证接口均执行校验
