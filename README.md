@@ -441,6 +441,7 @@ External order create/update supports `productName` and `productValue`. When an 
 - **账号注销落地**: “设置－账号安全”新增密码验证与二次确认的永久注销入口，服务端事务删除账号及其全部关联业务数据。
 - **HTTPS 传输加固**: Android 关闭明文网络流量并仅接受有效 HTTPS 服务地址；生产部署可通过 `ENFORCE_HTTPS=true` 拒绝 HTTP API 请求。
 - **绿联双架构重建**: 重新构建并发布 `amd64`、`arm64` 镜像及多架构 `latest` 清单，并基于新镜像生成 UGOS Pro 双架构 `1.3.0.0004` 应用包。
+- **Release 资产更新**: GitHub Release 更新为 `1.3.0.0004` 双架构 UPK 与当前 Android APK；绿联构建工作流新增可选 Release 发布参数，避免构建产物只保留在 Actions Artifacts。
 
 ### 2026-06-30
 

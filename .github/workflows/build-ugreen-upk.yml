@@ -7,9 +7,13 @@ on:
         description: UGOS Pro package build number
         required: true
         default: "4"
+      release_tag:
+        description: Optional GitHub Release tag to publish the UPK files to
+        required: false
+        default: ""
 
 permissions:
-  contents: read
+  contents: write
   packages: read
 
 jobs:
@@ -91,3 +95,15 @@ jobs:
             ugreen/STORE_LISTING.md
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish UPK packages to GitHub Release
+        if: ${{ inputs.release_tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          gh release upload "$RELEASE_TAG" \
+            ugreen/kolflow-app/build_dir/pkgs/upk/*.upk \
+            ugreen/kolflow-app/build_dir/pkgs/upk/SHA256SUMS \
+            --clobber \
+            --repo "$GITHUB_REPOSITORY"
