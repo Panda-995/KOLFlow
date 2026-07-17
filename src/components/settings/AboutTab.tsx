@@ -1,5 +1,19 @@
-import { Heart, X, ZoomIn } from 'lucide-react';
+import {
+  Download,
+  ExternalLink,
+  FileText,
+  Heart,
+  Mail,
+  MessageSquareWarning,
+  ShieldCheck,
+  X,
+  ZoomIn,
+} from 'lucide-react';
 import type { AboutTabProps } from './types';
+
+const APP_DOWNLOAD_URL =
+  import.meta.env.VITE_APP_DOWNLOAD_URL?.trim() ||
+  'https://github.com/Panda-995/KOLFlow/releases/latest';
 
 export function AboutTab({ previewImage, setPreviewImage }: AboutTabProps) {
   return (
@@ -39,6 +53,93 @@ export function AboutTab({ previewImage, setPreviewImage }: AboutTabProps) {
               <span className="px-2 py-1 bg-gray-100 rounded-lg">TypeScript</span>
               <span className="px-2 py-1 bg-gray-100 rounded-lg">Tailwind CSS</span>
               <span className="px-2 py-1 bg-gray-100 rounded-lg">SQLite</span>
+            </div>
+          </div>
+
+          {/* 合规与支持 */}
+          <div className="p-6 bg-white rounded-2xl border border-border/40">
+            <h3 className="text-base font-bold text-panda-black mb-2 flex items-center gap-2">
+              <ShieldCheck size={18} />
+              合规与支持
+            </h3>
+            <p className="text-xs text-gray-500 leading-5 mb-4">
+              您可以随时查看隐私规则、个人信息清单及第三方共享清单，也可以通过下列渠道进行投诉、举报或问题反馈。
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <a
+                href="/privacy-policy.html"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-4 rounded-xl border border-border/30 hover:border-panda-black/30 hover:bg-gray-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-panda-black"
+              >
+                <span className="flex items-center gap-2 text-sm font-bold text-panda-black">
+                  <FileText size={16} />
+                  隐私政策
+                  <ExternalLink size={14} className="ml-auto text-gray-400" />
+                </span>
+                <span className="block mt-1 text-xs text-gray-500">了解各项业务功能如何处理个人信息</span>
+              </a>
+
+              <a
+                href="/privacy-policy.html#personal-information-lists"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-4 rounded-xl border border-border/30 hover:border-panda-black/30 hover:bg-gray-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-panda-black"
+              >
+                <span className="flex items-center gap-2 text-sm font-bold text-panda-black">
+                  <ShieldCheck size={16} />
+                  个人信息“双清单”
+                  <ExternalLink size={14} className="ml-auto text-gray-400" />
+                </span>
+                <span className="block mt-1 text-xs text-gray-500">查看已收集信息及与第三方共享信息</span>
+              </a>
+
+              <a
+                href="https://github.com/Panda-995/KOLFlow/issues"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-4 rounded-xl border border-border/30 hover:border-panda-black/30 hover:bg-gray-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-panda-black"
+              >
+                <span className="flex items-center gap-2 text-sm font-bold text-panda-black">
+                  <MessageSquareWarning size={16} />
+                  投诉、举报与问题反馈
+                  <ExternalLink size={14} className="ml-auto text-gray-400" />
+                </span>
+                <span className="block mt-1 text-xs text-gray-500">通过 GitHub Issues 提交并跟踪处理进度</span>
+              </a>
+
+              <a
+                href={APP_DOWNLOAD_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-4 rounded-xl border border-border/30 hover:border-panda-black/30 hover:bg-gray-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-panda-black"
+              >
+                <span className="flex items-center gap-2 text-sm font-bold text-panda-black">
+                  <Download size={16} />
+                  APP 下载与更新
+                  <ExternalLink size={14} className="ml-auto text-gray-400" />
+                </span>
+                <span className="block mt-1 text-xs text-gray-500">获取已构建的 Android APP 与版本说明</span>
+              </a>
+            </div>
+
+            <div className="mt-4 rounded-xl bg-gray-50 p-4 text-xs text-gray-600 leading-5">
+              <p><strong className="text-panda-black">开发者与发布者：</strong>熊猫不是猫QAQ（个人开发者，非企业主体）</p>
+              <p><strong className="text-panda-black">注册/办公地址：</strong>个人开发者远程办公，无企业注册地址或固定对外办公场所</p>
+              <p className="flex flex-wrap items-center gap-x-1">
+                <strong className="text-panda-black">个人信息保护负责人及投诉邮箱：</strong>
+                <a
+                  href="mailto:676096193@qq.com"
+                  className="inline-flex items-center gap-1 font-medium text-panda-black underline underline-offset-2"
+                >
+                  <Mail size={13} />
+                  676096193@qq.com
+                </a>
+              </p>
+              <p className="mt-1 text-gray-500">
+                KOLFlow 为自托管软件；若由其他组织或个人部署，当前实例的实际运营者及办公信息以该部署者公示为准。
+              </p>
             </div>
           </div>
 

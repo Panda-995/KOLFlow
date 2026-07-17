@@ -10,6 +10,8 @@
 - 帮助文档：https://post.smzdm.com/p/a6zg63m0/
 - 许可协议：https://github.com/Panda-995/KOLFlow/blob/main/LICENSE
 - 隐私政策：https://github.com/Panda-995/KOLFlow/blob/main/public/privacy-policy.html
+- 问题反馈：https://github.com/Panda-995/KOLFlow/issues
+- Android APP：https://github.com/Panda-995/KOLFlow/releases/latest
 
 商店上架所需的中英文描述、版本说明和链接见 `STORE_LISTING.md`。
 

@@ -137,7 +137,7 @@ $env:NODE_ENV = "production"
 node build/server.js
 ```
 
-The server listens on `0.0.0.0:3000`, so devices on the same LAN can access it through:
+The development server listens on `0.0.0.0:3000`, so devices on the same LAN can access it through:
 
 ```text
 http://<your-computer-lan-ip>:3000
@@ -159,14 +159,14 @@ KOLFlow provides a Capacitor-based Android app. The mobile app reuses the same b
 
 ### Server Address | 服务端地址
 
-Use an address that the phone can actually reach:
+Use an HTTPS address that the phone can actually reach and whose certificate is valid:
 
 | Device | 服务端地址示例 |
 |--------|----------------|
-| Android emulator | `http://10.0.2.2:3000` |
-| Real Android phone on the same LAN | `http://192.168.x.x:3000` |
+| Android emulator / test device | `https://kolflow-test.example.com` |
+| Real Android phone | `https://kolflow.example.com` |
 
-Do not use `localhost`, `127.0.0.1`, or `0.0.0.0` inside the app. On a real phone, `localhost` means the phone itself, not your computer.
+The Android app rejects HTTP, `localhost`, `127.0.0.1`, and `0.0.0.0` to prevent email, password, invite-code, and business data from being sent in clear text. Configure a trusted TLS certificate and use its HTTPS domain.
 
 ### Build APK | 构建 APK
 
@@ -207,8 +207,8 @@ android/app/build/outputs/apk/debug/app-debug.apk
 
 - App name: `KOLFlow`
 - App icon source: `public/app.png`
-- HTTP server access is enabled for LAN/private deployment scenarios.
-- Native HTTP is enabled in Capacitor so Android requests and file imports work reliably with a configured backend address.
+- Android cleartext traffic is disabled; the app only accepts HTTPS backend addresses with valid certificates.
+- The APP download/update link shown in “设置－关于项目” can be overridden at build time with `VITE_APP_DOWNLOAD_URL`.
 
 ---
 
@@ -248,8 +248,12 @@ export JWT_SECRET=your-secret-key
 export INVITE_CODE=your-invite-code
 # 默认允许 HTTP/HTTPS 域名、局域网和 App 访问；如需收紧可改为逗号分隔域名
 export CORS_ORIGIN=*
+# 已在可信 HTTPS 反向代理后部署时，开启服务端 API 明文访问拦截
+export ENFORCE_HTTPS=true
 docker compose up -d
 ```
+
+`ENFORCE_HTTPS=true` 依赖反向代理正确传递 `X-Forwarded-Proto: https`。直接通过容器 HTTP 端口访问时不要开启；合规公开部署应先配置 HTTPS 反向代理，再开启该选项。
 
 GitHub Actions 会优先发布 GHCR 镜像；Docker Hub 只有配置了 `DOCKER_HUB_USERNAME` 和 `DOCKER_HUB_TOKEN` secrets 时才会同步发布。如果拉取镜像提示 `manifest unknown`，先确认镜像名为全小写：
 
@@ -283,6 +287,7 @@ GET  /api/auth/check-users     # 检查是否已有用户
 POST /api/auth/register        # 注册  Body: { email, password, inviteCode, privacyAccepted: true }
 POST /api/auth/login           # 登录  Body: { email, password, privacyAccepted: true }
 POST /api/auth/verify           # 验证 Token
+DELETE /api/settings/account    # 永久注销账号  Body: { password }
 ```
 
 ### Orders | 商单
@@ -428,6 +433,14 @@ External order create/update supports `productName` and `productValue`. When an 
 ---
 
 ## 📝 更新日志 | Changelog
+
+### 2026-07-17
+
+- **合规入口补全**: “设置－关于项目”新增隐私政策、个人信息“双清单”、投诉举报、隐私负责人邮箱和 APP 下载/更新入口；下载地址支持通过 `VITE_APP_DOWNLOAD_URL` 在构建时替换。
+- **隐私政策细化**: 按业务功能逐项说明个人信息处理目的、方式、范围及必要性，补充运营者基本情况、已收集个人信息清单、第三方共享清单、用户权利和投诉举报渠道。
+- **账号注销落地**: “设置－账号安全”新增密码验证与二次确认的永久注销入口，服务端事务删除账号及其全部关联业务数据。
+- **HTTPS 传输加固**: Android 关闭明文网络流量并仅接受有效 HTTPS 服务地址；生产部署可通过 `ENFORCE_HTTPS=true` 拒绝 HTTP API 请求。
+- **绿联双架构重建**: 重新构建并发布 `amd64`、`arm64` 镜像及多架构 `latest` 清单，并基于新镜像生成 UGOS Pro 双架构 `1.3.0.0004` 应用包。
 
 ### 2026-06-30
 

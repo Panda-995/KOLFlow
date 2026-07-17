@@ -51,7 +51,7 @@ parameters:
 i18n:
   en-US:
     name: KOLFlow
-    description: KOLFlow is a self-hosted business collaboration manager designed for creators and KOLs. It centralizes orders, brands, contacts, billing, assets, todos, publishing links, paid promotion costs, analytics, activity logs, data import and export, and Android access. This package includes privacy consent for authentication and optimized on-demand asset image loading. Licensed under GNU AGPL v3.0. Source, license, and privacy information are available from the official project links.
+    description: KOLFlow is a self-hosted business collaboration manager designed for creators and KOLs. It centralizes orders, brands, contacts, billing, assets, todos, publishing links, paid promotion costs, analytics, activity logs, data import and export, and Android access. This update adds in-app privacy and personal-information lists, complaint/reporting and account-deletion paths, plus HTTPS-only Android server connections. Licensed under GNU AGPL v3.0.
     author: 熊猫不是猫QAQ
     official: https://github.com/Panda-995/KOLFlow
     help: https://post.smzdm.com/p/a6zg63m0/
@@ -59,7 +59,7 @@ i18n:
     publisher_link: https://github.com/Panda-995
   zh-CN:
     name: KOLFlow
-    description: KOLFlow 是面向 KOL、内容创作者与达人团队的自托管商单管理系统，可集中管理商单进度、品牌与联系人、账单结算、置换资产、待办日历、发布链接、付费推广成本、数据统计、操作日志以及数据导入导出，并支持 Android 客户端连接。当前版本加入登录与注册隐私政策确认、资产图片按需加载和自动压缩，适合在绿联 NAS 上长期运行。项目采用 GNU AGPL v3.0 开源，源码、许可协议与隐私政策可通过官方项目链接查看。
+    description: KOLFlow 是面向 KOL、内容创作者与达人团队的自托管商单管理系统，可集中管理商单进度、品牌与联系人、账单结算、置换资产、待办日历、发布链接、付费推广成本、数据统计、操作日志以及数据导入导出，并支持 Android 客户端连接。当前版本补充应用内隐私政策、个人信息“双清单”、投诉举报与账号注销入口，并要求 Android 客户端通过 HTTPS 连接服务端。项目采用 GNU AGPL v3.0 开源。
     author: 熊猫不是猫QAQ
     official: https://github.com/Panda-995/KOLFlow
     help: https://post.smzdm.com/p/a6zg63m0/

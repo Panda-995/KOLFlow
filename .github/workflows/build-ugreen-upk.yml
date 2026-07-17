@@ -6,7 +6,7 @@ on:
       build_number:
         description: UGOS Pro package build number
         required: true
-        default: "1"
+        default: "4"
 
 permissions:
   contents: read
