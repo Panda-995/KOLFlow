@@ -120,6 +120,55 @@ router.put('/security', async (req, res) => {
   }
 });
 
+// 永久注销账号及其全部关联数据
+router.delete('/account', async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const { password } = req.body;
+
+    if (!password || typeof password !== 'string') {
+      return res.status(400).json({ error: '请输入当前密码以确认注销账号' });
+    }
+
+    const currentUser = db.prepare('SELECT password FROM users WHERE id = ?').get(userId) as { password: string } | undefined;
+    if (!currentUser) {
+      return res.status(404).json({ error: '用户不存在或账号已注销' });
+    }
+
+    const isValidPassword = await verifyPassword(password, currentUser.password);
+    if (!isValidPassword) {
+      return res.status(400).json({ error: '当前密码错误，无法注销账号' });
+    }
+
+    const deleteAccount = db.transaction(() => {
+      const userScopedTables = [
+        'publish_links',
+        'paid_promotions',
+        'assets',
+        'comments',
+        'activity_logs',
+        'todos',
+        'payments',
+        'orders',
+        'brands',
+        'settings',
+      ];
+
+      for (const table of userScopedTables) {
+        db.prepare(`DELETE FROM ${table} WHERE userId = ?`).run(userId);
+      }
+      db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+    });
+
+    deleteAccount();
+    return res.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '账号注销失败';
+    const status = message.includes('未授权') ? 401 : 500;
+    return res.status(status).json({ error: status === 500 ? '账号注销失败，请稍后重试' : message });
+  }
+});
+
 // 生成 API Key
 router.post('/apikey', (req, res) => {
   const userId = getUserId(req);

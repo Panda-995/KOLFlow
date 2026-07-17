@@ -255,7 +255,7 @@ export default function Login() {
                     if (serverUrl.trim()) void checkUsers(serverUrl);
                   }}
                   className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-panda-black focus:bg-white rounded-xl outline-none transition-all text-sm"
-                  placeholder="http://10.0.2.2:3000 或 http://192.168.x.x:3000"
+                  placeholder="https://kolflow.example.com"
                 />
               </div>
               <button
@@ -267,7 +267,7 @@ export default function Login() {
                 {isTestingServer ? '正在测试连接...' : '测试服务端连接'}
               </button>
               <p className="text-xs text-gray-400 mt-1">
-                模拟器用 10.0.2.2，真机用电脑局域网 IP，不能填 localhost。
+                为保护邮箱、密码和邀请码等个人信息，APP 仅支持使用有效 HTTPS 证书的服务地址。
               </p>
             </div>
           )}

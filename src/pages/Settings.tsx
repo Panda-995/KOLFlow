@@ -66,6 +66,9 @@ export default function Settings() {
   const [clearDataConfirm, setClearDataConfirm] = useState(false);
   const [webdavRestoreConfirm, setWebdavRestoreConfirm] = useState(false);
   const [apiKeyConfirm, setApiKeyConfirm] = useState(false);
+  const [deleteAccountConfirm, setDeleteAccountConfirm] = useState(false);
+  const [deletionPassword, setDeletionPassword] = useState('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
@@ -174,6 +177,38 @@ export default function Settings() {
       setSecurityData(prev => ({ ...prev, password: '', oldPassword: '' }));
     } else {
       showToast(res.error || '更新失败', 'error');
+    }
+  };
+
+  const requestAccountDeletion = () => {
+    if (!deletionPassword) {
+      showToast('请输入当前密码以确认本人操作', 'warning');
+      return;
+    }
+    setDeleteAccountConfirm(true);
+  };
+
+  const handleDeleteAccount = async () => {
+    setIsDeletingAccount(true);
+    try {
+      const res = await authFetch('/api/settings/account', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: deletionPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || '账号注销失败');
+      }
+
+      setDeletionPassword('');
+      showToast('账号及关联数据已永久删除', 'success');
+      logout();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '账号注销失败，请稍后重试', 'error');
+      throw error;
+    } finally {
+      setIsDeletingAccount(false);
     }
   };
 
@@ -651,6 +686,10 @@ curl "${serverUrl}/api/external/orders?token=${settings?.apiKey || 'YOUR_KEY'}"`
               setSecurityData={setSecurityData}
               isSaving={isSaving}
               handleSecuritySave={handleSecuritySave}
+              deletionPassword={deletionPassword}
+              setDeletionPassword={setDeletionPassword}
+              isDeletingAccount={isDeletingAccount}
+              requestAccountDeletion={requestAccountDeletion}
             />
           )}
 
@@ -728,6 +767,16 @@ curl "${serverUrl}/api/external/orders?token=${settings?.apiKey || 'YOUR_KEY'}"`
         message="从 WebDAV 恢复数据将覆盖当前所有数据，确定继续吗？"
         confirmText="确认恢复"
         type="warning"
+      />
+
+      <ConfirmDialog
+        isOpen={deleteAccountConfirm}
+        onClose={() => setDeleteAccountConfirm(false)}
+        onConfirm={handleDeleteAccount}
+        title="确认永久注销账号"
+        message="此操作不可撤销。当前账号及其商单、品牌、账单、待办、素材、日志和设置等全部关联数据都将永久删除。"
+        confirmText="永久注销"
+        type="danger"
       />
     </div>
   );

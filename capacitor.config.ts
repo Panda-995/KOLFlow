@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'KOLFlow',
   webDir: 'dist',
   server: {
-    cleartext: true,
+    cleartext: false,
   },
   plugins: {
     CapacitorHttp: {

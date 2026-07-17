@@ -57,6 +57,10 @@ export interface SecurityTabProps {
   setSecurityData: React.Dispatch<React.SetStateAction<SecurityFormData>>;
   isSaving: boolean;
   handleSecuritySave: () => void;
+  deletionPassword: string;
+  setDeletionPassword: React.Dispatch<React.SetStateAction<string>>;
+  isDeletingAccount: boolean;
+  requestAccountDeletion: () => void;
 }
 
 // BackupTab Props

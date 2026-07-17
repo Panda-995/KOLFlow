@@ -55,12 +55,12 @@ export default function Layout() {
       />
 
       <div className={clsx(
-        "flex-1 flex flex-col min-h-screen transition-[margin] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
+        "flex-1 min-w-0 flex flex-col min-h-screen transition-[margin] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
         "ml-0",
         sidebarCollapsed ? "md:ml-[72px]" : "md:ml-[240px]"
       )}>
         <Header onMenuClick={() => setSidebarOpen(true)} />
-        <main className="flex-1 p-3 md:p-8 overflow-auto safe-area-top">
+        <main className="flex-1 min-w-0 p-3 md:p-8 overflow-auto safe-area-top">
           <Outlet />
         </main>
       </div>
