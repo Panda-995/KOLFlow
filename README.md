@@ -442,6 +442,7 @@ External order create/update supports `productName` and `productValue`. When an 
 - **HTTPS 传输加固**: Android 关闭明文网络流量并仅接受有效 HTTPS 服务地址；生产部署可通过 `ENFORCE_HTTPS=true` 拒绝 HTTP API 请求。
 - **绿联双架构重建**: 重新构建并发布 `amd64`、`arm64` 镜像及多架构 `latest` 清单，并基于新镜像生成 UGOS Pro 双架构 `1.3.0.0004` 应用包。
 - **Release 资产更新**: GitHub Release 更新为 `1.3.0.0004` 双架构 UPK 与当前 Android APK；绿联构建工作流新增可选 Release 发布参数，避免构建产物只保留在 Actions Artifacts。
+- **分支与镜像清理**: 仓库分支收敛为仅保留 `main`；GHCR 与 Docker Hub 自动删除历史版本，只保留当前 `latest` 多架构清单及其 `amd64`、`arm64` 子镜像。
 
 ### 2026-06-30
 
