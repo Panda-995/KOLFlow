@@ -157,3 +157,54 @@ jobs:
                 "${API_BASE}/versions/${ID}" || true
             fi
           done
+
+      - name: Delete old Docker Hub tags
+        if: env.HAS_DOCKERHUB == 'true'
+        env:
+          DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+          DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          KEEP_TAGS="latest amd64 arm64"
+          AUTH_PAYLOAD=$(jq -n \
+            --arg identifier "$DOCKER_HUB_USERNAME" \
+            --arg secret "$DOCKER_HUB_TOKEN" \
+            '{identifier: $identifier, secret: $secret}')
+          ACCESS_TOKEN=$(curl -fsSL \
+            -H "Content-Type: application/json" \
+            -d "$AUTH_PAYLOAD" \
+            https://hub.docker.com/v2/auth/token |
+            jq -er '.access_token')
+
+          TAGS_FILE=$(mktemp)
+          trap 'rm -f "$TAGS_FILE"' EXIT
+          TAGS_URL="https://hub.docker.com/v2/namespaces/${DOCKER_HUB_USERNAME}/repositories/kolflow/tags?page_size=100"
+
+          while [ -n "$TAGS_URL" ]; do
+            RESPONSE=$(curl -fsSL \
+              -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+              "$TAGS_URL")
+            echo "$RESPONSE" | jq -r '.results[].name' >> "$TAGS_FILE"
+            TAGS_URL=$(echo "$RESPONSE" | jq -r '.next // empty')
+          done
+
+          while read -r TAG; do
+            [ -z "$TAG" ] && continue
+            SHOULD_KEEP=false
+            for KEEP_TAG in $KEEP_TAGS; do
+              if [ "$TAG" = "$KEEP_TAG" ]; then
+                SHOULD_KEEP=true
+                break
+              fi
+            done
+
+            if [ "$SHOULD_KEEP" = true ]; then
+              echo "Keeping Docker Hub tag: $TAG"
+            else
+              echo "Deleting old Docker Hub tag: $TAG"
+              curl -fsS -X DELETE \
+                -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+                "https://hub.docker.com/v2/namespaces/${DOCKER_HUB_USERNAME}/repositories/kolflow/tags/${TAG}"
+            fi
+          done < "$TAGS_FILE"
