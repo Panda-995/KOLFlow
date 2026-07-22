@@ -1,4 +1,5 @@
 import { Capacitor, CapacitorHttp, type HttpOptions } from '@capacitor/core';
+import { getInsecureApiTransportError } from './transportSecurity';
 
 export const SERVER_BASE_URL_KEY = 'kolflow.serverBaseUrl';
 
@@ -145,6 +146,11 @@ export const apiFetch = async (path: string, options: RequestInit = {}): Promise
 
   const url = buildApiUrl(path);
   const shouldUseNativeHttp = isNativeAppRuntime() && !isFormDataBody(options.body);
+
+  if (!isNativeAppRuntime()) {
+    const transportError = getInsecureApiTransportError(url);
+    if (transportError) throw new Error(transportError);
+  }
 
   if (shouldUseNativeHttp) {
     const method = (options.method || 'GET').toUpperCase();

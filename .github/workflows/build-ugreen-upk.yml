@@ -6,7 +6,7 @@ on:
       build_number:
         description: UGOS Pro package build number
         required: true
-        default: "4"
+        default: "6"
       release_tag:
         description: Optional GitHub Release tag to publish the UPK files to
         required: false

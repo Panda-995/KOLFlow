@@ -7,13 +7,12 @@ import { MAX_AVATAR_SIZE } from '../constants';
 import { apiFetch, authFetch, getActiveServerUrl } from '../lib/api';
 import { formatLocalDate } from '../lib/dateFilter';
 import {
-  getWebdavAuthorization,
-  getWebdavFileUrl,
   loadWebdavLastSync,
   loadWebdavConfig,
   saveWebdavLastSync,
   saveWebdavConfig,
   uploadWebdavBackup,
+  webdavFetch,
 } from '../lib/webdav';
 
 // 导入拆分的 Tab 组件
@@ -358,12 +357,7 @@ export default function Settings() {
         return true;
       } else {
         // 从 WebDAV 下载
-        const response = await fetch(getWebdavFileUrl(webdavConfig), {
-          method: 'GET',
-          headers: {
-            'Authorization': getWebdavAuthorization(webdavConfig)
-          }
-        });
+        const response = await webdavFetch(webdavConfig, { method: 'GET' });
 
         if (response.ok) {
           const remoteData = await response.json();

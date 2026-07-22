@@ -388,3 +388,65 @@ test('普通资料更新不会让展示邮箱与登录邮箱失去同步', async
   assert.equal(settings.email, 'primary@example.com');
   assert.equal(settings.reportFrequency, 'monthly');
 });
+
+test('浏览器不会向局域网 HTTP 地址发送账号及业务 API 请求', async () => {
+  const {
+    getInsecureApiTransportError,
+    INSECURE_API_TRANSPORT_MESSAGE,
+  } = await import('../src/lib/transportSecurity.ts');
+
+  for (const path of [
+    '/api/auth/login',
+    '/api/auth/register',
+    '/api/orders',
+  ]) {
+    assert.equal(
+      getInsecureApiTransportError(path, 'http://172.17.120.203:3441/login'),
+      INSECURE_API_TRANSPORT_MESSAGE,
+    );
+  }
+
+  assert.equal(getInsecureApiTransportError('/api/auth/login', 'https://kolflow.example.com/login'), null);
+  assert.equal(getInsecureApiTransportError('/api/auth/login', 'http://localhost:5173/login'), null);
+  assert.equal(getInsecureApiTransportError('/api/health', 'http://172.17.120.203:3441/login'), null);
+});
+
+test('生产服务默认拒绝明文 API 且不信任未经配置的代理头', async () => {
+  const {
+    getHttpsEnforcementPolicy,
+    resolveTrustProxy,
+    shouldRejectInsecureApiRequest,
+  } = await import('../src/server/transportSecurity.ts');
+
+  assert.equal(getHttpsEnforcementPolicy({ NODE_ENV: 'production' }), true);
+  assert.equal(getHttpsEnforcementPolicy({ NODE_ENV: 'production', ENFORCE_HTTPS: 'false' }), false);
+  assert.equal(getHttpsEnforcementPolicy({ NODE_ENV: 'development' }), false);
+  assert.equal(resolveTrustProxy(undefined), false);
+  assert.equal(resolveTrustProxy('false'), false);
+  assert.equal(resolveTrustProxy('1'), 1);
+  assert.equal(shouldRejectInsecureApiRequest(true, false, '/auth/login'), true);
+  assert.equal(shouldRejectInsecureApiRequest(true, false, '/health'), false);
+  assert.equal(shouldRejectInsecureApiRequest(true, true, '/auth/login'), false);
+});
+
+test('WebDAV 不会通过 HTTP 发送认证密码和业务备份', async () => {
+  const {
+    getWebdavTransportError,
+    INSECURE_WEBDAV_TRANSPORT_MESSAGE,
+  } = await import('../src/lib/webdav.ts');
+
+  const config = {
+    url: 'http://dav.example.com/backups',
+    username: 'creator',
+    password: 'webdav-secret',
+    syncInterval: '24',
+  };
+  assert.equal(
+    getWebdavTransportError(config, 'https://kolflow.example.com/settings'),
+    INSECURE_WEBDAV_TRANSPORT_MESSAGE,
+  );
+  assert.equal(
+    getWebdavTransportError({ ...config, url: 'https://dav.example.com/backups' }, 'https://kolflow.example.com/settings'),
+    null,
+  );
+});

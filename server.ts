@@ -1,22 +1,30 @@
 import 'dotenv/config';
-import express, { ErrorRequestHandler, RequestHandler } from 'express';
+import express, { ErrorRequestHandler } from 'express';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import apiRoutes from './src/server/api.js';
+import {
+  createRequireHttpsMiddleware,
+  getHttpsEnforcementPolicy,
+  resolveTrustProxy,
+} from './src/server/transportSecurity.js';
 import os from 'os';
 
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
-  const enforceHttps = process.env.NODE_ENV === 'production' && process.env.ENFORCE_HTTPS === 'true';
+  const enforceHttps = getHttpsEnforcementPolicy(process.env);
 
-  // Honor the protocol reported by the first trusted reverse proxy.
-  app.set('trust proxy', 1);
+  // Only honor X-Forwarded-Proto when a controlled reverse proxy is explicitly configured.
+  app.set('trust proxy', resolveTrustProxy(process.env.TRUST_PROXY));
 
   // Security: Helmet HTTP headers
   app.use(helmet({
     contentSecurityPolicy: false,
   }));
+
+  // Reject cleartext API traffic before parsing request bodies.
+  app.use('/api', createRequireHttpsMiddleware(enforceHttps));
 
   // Rate limiting for auth routes
   const loginLimiter = rateLimit({
@@ -113,20 +121,6 @@ async function startServer() {
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
-
-  const requireHttps: RequestHandler = (req, res, next) => {
-    if (!enforceHttps || req.secure) {
-      next();
-      return;
-    }
-
-    res.status(426).json({
-      error: '生产环境仅允许通过 HTTPS 访问 API，请配置有效证书后重试',
-    });
-  };
-
-  // In production, all API data (except the non-sensitive health check) must use TLS.
-  app.use('/api', requireHttps);
 
   // API routes
   app.use('/api', apiRoutes);

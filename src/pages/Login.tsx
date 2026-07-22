@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { clsx } from 'clsx';
-import { Server } from 'lucide-react';
+import { Server, ShieldAlert } from 'lucide-react';
 import {
   apiFetch,
   getConnectionHelpMessage,
@@ -11,12 +11,14 @@ import {
   normalizeServerUrl,
   setServerBaseUrl,
 } from '../lib/api';
+import { getInsecureApiTransportError } from '../lib/transportSecurity';
 
 type Mode = 'login' | 'register';
 
 export default function Login() {
   const { login, register } = useStore();
   const showServerUrlField = isNativeAppRuntime();
+  const insecureTransportError = showServerUrlField ? null : getInsecureApiTransportError('/api/auth/login');
   const [mode, setMode] = useState<Mode>('login');
   const [serverUrl, setServerUrl] = useState(() => getSavedServerBaseUrl());
   const [email, setEmail] = useState('');
@@ -27,7 +29,9 @@ export default function Login() {
   const [notice, setNotice] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isTestingServer, setIsTestingServer] = useState(false);
-  const [isCheckingUsers, setIsCheckingUsers] = useState(() => !isNativeAppRuntime() || !!getSavedServerBaseUrl());
+  const [isCheckingUsers, setIsCheckingUsers] = useState(
+    () => !insecureTransportError && (!isNativeAppRuntime() || !!getSavedServerBaseUrl()),
+  );
 
   const checkUsers = async (nextServerUrl = serverUrl, silent = false): Promise<boolean> => {
     try {
@@ -69,6 +73,10 @@ export default function Login() {
   };
 
   useEffect(() => {
+    if (insecureTransportError) {
+      setIsCheckingUsers(false);
+      return;
+    }
     const savedServerUrl = getSavedServerBaseUrl();
     if (showServerUrlField && !savedServerUrl) {
       setIsCheckingUsers(false);
@@ -83,6 +91,11 @@ export default function Login() {
     e.preventDefault();
     setError('');
     setNotice('');
+
+    if (insecureTransportError) {
+      setError(insecureTransportError);
+      return;
+    }
 
     if (!hasAcceptedPrivacy) {
       setError('请先阅读并同意《隐私政策》');
@@ -171,6 +184,26 @@ export default function Login() {
         />
         <div className="absolute inset-0 bg-gradient-to-br from-black/40 via-black/20 to-transparent" />
         <div className="relative z-10 text-white/80">正在检查系统状态...</div>
+      </div>
+    );
+  }
+
+  if (insecureTransportError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-gray-100">
+        <div className="w-full max-w-lg rounded-2xl border border-red-200 bg-white p-8 text-center shadow-xl">
+          <ShieldAlert className="mx-auto mb-4 text-red-600" size={48} aria-hidden="true" />
+          <h1 className="mb-3 text-2xl font-bold text-gray-900">需要安全连接</h1>
+          <p role="alert" className="text-sm leading-6 text-gray-700">
+            {insecureTransportError}
+          </p>
+          <p className="mt-4 break-all rounded-xl bg-gray-50 p-3 text-xs text-gray-500">
+            当前地址：{window.location.origin}
+          </p>
+          <p className="mt-4 text-xs leading-5 text-gray-500">
+            请为服务端配置 HTTPS 反向代理与有效证书，然后通过 HTTPS 地址重新打开应用。
+          </p>
+        </div>
       </div>
     );
   }

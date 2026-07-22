@@ -15,6 +15,10 @@
 
 商店上架所需的中英文描述、版本说明和链接见 `STORE_LISTING.md`。
 
+## HTTPS 访问要求
+
+UGOS Pro 会为应用分配 HTTP 与 HTTPS 两个访问端口。KOLFlow 生产 API 默认拒绝明文 HTTP，Web 端也会在请求发出前阻止邮箱、密码、邀请码、令牌和业务数据通过 HTTP 传输。安装 `1.3.0.0006` 后，请从系统分配的 HTTPS 访问端口或 UGREENlink HTTPS 域名打开应用；旧的 `http://NAS-IP:3441` 地址只显示安全连接提示。
+
 ## 构建方式
 
 在 GitHub Actions 中手动运行 `Build UGOS Pro UPK` 工作流。工作流会分别拉取 amd64、arm64 镜像，使用绿联官方 `ugcli` 校验项目并生成两个 UPK 安装包，同时生成 `SHA256SUMS`。
