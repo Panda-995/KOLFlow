@@ -5,6 +5,10 @@ import bcrypt from 'bcrypt';
 import { logActivity, generateToken, verifyToken } from './utils/index.js';
 import { VALID_INVITE_CODE } from './utils/constants.js';
 import { validateEmail, validatePassword } from './utils/helpers.js';
+import {
+  issueAuthEncryptionKey,
+  readEncryptedSensitiveBody,
+} from '../services/authEncryptionService.js';
 
 const router = Router();
 
@@ -17,9 +21,18 @@ const verifyPassword = async (password: string, hashedPassword: string): Promise
   return bcrypt.compare(password, hashedPassword);
 };
 
+router.get('/encryption-key', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json(issueAuthEncryptionKey());
+});
+
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, inviteCode, privacyAccepted } = req.body;
+    const payload = readEncryptedSensitiveBody(req.body);
+    const email = typeof payload.email === 'string' ? payload.email.trim() : '';
+    const password = typeof payload.password === 'string' ? payload.password : '';
+    const inviteCode = typeof payload.inviteCode === 'string' ? payload.inviteCode : '';
+    const privacyAccepted = payload.privacyAccepted;
 
     if (privacyAccepted !== true) {
       return res.status(400).json({ error: '请先阅读并同意隐私政策' });
@@ -66,9 +79,12 @@ router.post('/register', async (req, res) => {
 
     logActivity(userId, 'register', 'user', userId, `新用户注册: ${email}`);
 
-    const token = generateToken(userId, email);
-    return res.json({ success: true, userId, email, token });
+    const token = generateToken(userId);
+    return res.json({ success: true, userId, token });
   } catch (error) {
+    if (error instanceof Error && error.message.includes('认证')) {
+      return res.status(400).json({ error: error.message });
+    }
     console.error('注册错误:', error);
     return res.status(500).json({ error: '注册失败，请稍后重试' });
   }
@@ -76,7 +92,10 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   try {
-    const { email, password, privacyAccepted } = req.body;
+    const payload = readEncryptedSensitiveBody(req.body);
+    const email = typeof payload.email === 'string' ? payload.email.trim() : '';
+    const password = typeof payload.password === 'string' ? payload.password : '';
+    const privacyAccepted = payload.privacyAccepted;
 
     if (privacyAccepted !== true) {
       return res.status(400).json({ error: '请先阅读并同意隐私政策' });
@@ -99,9 +118,12 @@ router.post('/login', async (req, res) => {
 
     logActivity(user.id, 'login', 'user', user.id, `用户登录: ${email}`);
 
-    const token = generateToken(user.id, user.email);
-    return res.json({ success: true, userId: user.id, email: user.email, token });
+    const token = generateToken(user.id);
+    return res.json({ success: true, userId: user.id, token });
   } catch (error) {
+    if (error instanceof Error && error.message.includes('认证')) {
+      return res.status(400).json({ error: error.message });
+    }
     console.error('登录错误:', error);
     return res.status(500).json({ error: '登录失败，请稍后重试' });
   }
@@ -117,7 +139,7 @@ router.post('/verify', (req, res) => {
   const decoded = verifyToken(token);
   
   if (decoded) {
-    return res.json({ valid: true, userId: decoded.userId, email: decoded.email });
+    return res.json({ valid: true, userId: decoded.userId });
   } else {
     return res.status(401).json({ valid: false, error: '令牌无效或已过期' });
   }

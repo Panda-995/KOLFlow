@@ -25,14 +25,14 @@ export const logActivity = (userId: string, action: string, entityType: string, 
 };
 
 // 生成 JWT Token
-export const generateToken = (userId: string, email: string): string => {
-  return jwt.sign({ userId, email }, JWT_SECRET, { expiresIn: '7d' });
+export const generateToken = (userId: string, _email?: string): string => {
+  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' });
 };
 
 // 验证 JWT Token
-export const verifyToken = (token: string): { userId: string; email: string } | null => {
+export const verifyToken = (token: string): { userId: string } | null => {
   try {
-    return jwt.verify(token, JWT_SECRET) as { userId: string; email: string };
+    return jwt.verify(token, JWT_SECRET) as { userId: string };
   } catch (e) {
     console.error('JWT验证失败:', e instanceof Error ? e.message : e);
     return null;
@@ -48,7 +48,6 @@ export const getUserId = (req: any): string => {
     const decoded = verifyToken(token);
     if (decoded) {
       req.userId = decoded.userId;
-      req.userEmail = decoded.email;
       return decoded.userId;
     }
   }

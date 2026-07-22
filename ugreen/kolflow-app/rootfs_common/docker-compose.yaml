@@ -14,9 +14,6 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       INVITE_CODE: ${INVITE_CODE}
       CORS_ORIGIN: "*"
-      ENFORCE_HTTPS: "true"
-      # UGOS Pro 为应用分配受控的 HTTPS 访问端口并代理到此容器。
-      TRUST_PROXY: "1"
     restart: always
     healthcheck:
       test:

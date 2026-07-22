@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Order, OrderStatus, OrderType, Todo, Brand, Payment, Settings, ActivityLog, Comment, PublishLink, PaidPromotion, Asset } from '../types';
 import { apiFetch, authFetch, getConnectionHelpMessage } from '../lib/api';
 import { formatLocalDate } from '../lib/dateFilter';
+import { createEncryptedSensitiveBody } from '../lib/authEncryption';
 
 export type { Order, OrderStatus, OrderType, Todo, Brand, Payment, Settings, ActivityLog, Comment, PublishLink, PaidPromotion, Asset };
 
@@ -173,9 +174,10 @@ export const useStore = create<AppState>((set, get) => ({
 
   login: async (email, password, privacyAccepted) => {
     try {
+      const body = await createEncryptedSensitiveBody(createFetch(), { email, password, privacyAccepted });
       const res = await createFetch()('/api/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ email, password, privacyAccepted })
+        body,
       });
       const data = await res.json();
       if (data.success) {
@@ -193,9 +195,15 @@ export const useStore = create<AppState>((set, get) => ({
 
   register: async (email, password, inviteCode, privacyAccepted) => {
     try {
+      const body = await createEncryptedSensitiveBody(createFetch(), {
+        email,
+        password,
+        inviteCode,
+        privacyAccepted,
+      });
       const res = await createFetch()('/api/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ email, password, inviteCode, privacyAccepted })
+        body,
       });
       const data = await res.json();
       if (data.success) {
@@ -234,10 +242,11 @@ export const useStore = create<AppState>((set, get) => ({
 
   updateSecurity: async (email, password, oldPassword) => {
     try {
+      const body = await createEncryptedSensitiveBody(createFetch(), { email, password, oldPassword });
       const res = await createAuthFetch()('/api/settings/security', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, oldPassword })
+        body,
       });
       const data = await res.json();
       if (data.success) {

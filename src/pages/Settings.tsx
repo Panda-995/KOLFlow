@@ -6,13 +6,15 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { MAX_AVATAR_SIZE } from '../constants';
 import { apiFetch, authFetch, getActiveServerUrl } from '../lib/api';
 import { formatLocalDate } from '../lib/dateFilter';
+import { createEncryptedSensitiveBody } from '../lib/authEncryption';
 import {
+  getWebdavAuthorization,
+  getWebdavFileUrl,
   loadWebdavLastSync,
   loadWebdavConfig,
   saveWebdavLastSync,
   saveWebdavConfig,
   uploadWebdavBackup,
-  webdavFetch,
 } from '../lib/webdav';
 
 // 导入拆分的 Tab 组件
@@ -195,10 +197,11 @@ export default function Settings() {
   const handleDeleteAccount = async () => {
     setIsDeletingAccount(true);
     try {
+      const body = await createEncryptedSensitiveBody(apiFetch, { password: deletionPassword });
       const res = await authFetch('/api/settings/account', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: deletionPassword }),
+        body,
       });
       const data = await res.json();
       if (!res.ok) {
@@ -357,7 +360,12 @@ export default function Settings() {
         return true;
       } else {
         // 从 WebDAV 下载
-        const response = await webdavFetch(webdavConfig, { method: 'GET' });
+        const response = await fetch(getWebdavFileUrl(webdavConfig), {
+          method: 'GET',
+          headers: {
+            'Authorization': getWebdavAuthorization(webdavConfig)
+          }
+        });
 
         if (response.ok) {
           const remoteData = await response.json();

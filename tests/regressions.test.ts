@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { after, before, beforeEach, test } from 'node:test';
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import { normalizeServerUrl } from '../src/lib/api.ts';
 import { parseLocalDate } from '../src/lib/dateFilter.ts';
 
 const testDataDir = mkdtempSync(join(tmpdir(), 'kolflow-regressions-'));
@@ -389,64 +390,137 @@ test('普通资料更新不会让展示邮箱与登录邮箱失去同步', async
   assert.equal(settings.reportFrequency, 'monthly');
 });
 
-test('浏览器不会向局域网 HTTP 地址发送账号及业务 API 请求', async () => {
-  const {
-    getInsecureApiTransportError,
-    INSECURE_API_TRANSPORT_MESSAGE,
-  } = await import('../src/lib/transportSecurity.ts');
-
-  for (const path of [
-    '/api/auth/login',
-    '/api/auth/register',
-    '/api/orders',
-  ]) {
-    assert.equal(
-      getInsecureApiTransportError(path, 'http://172.17.120.203:3441/login'),
-      INSECURE_API_TRANSPORT_MESSAGE,
-    );
-  }
-
-  assert.equal(getInsecureApiTransportError('/api/auth/login', 'https://kolflow.example.com/login'), null);
-  assert.equal(getInsecureApiTransportError('/api/auth/login', 'http://localhost:5173/login'), null);
-  assert.equal(getInsecureApiTransportError('/api/health', 'http://172.17.120.203:3441/login'), null);
-});
-
-test('生产服务默认拒绝明文 API 且不信任未经配置的代理头', async () => {
+test('生产服务默认保留 HTTP 功能并允许按需启用 HTTPS 强制策略', async () => {
   const {
     getHttpsEnforcementPolicy,
     resolveTrustProxy,
-    shouldRejectInsecureApiRequest,
   } = await import('../src/server/transportSecurity.ts');
 
-  assert.equal(getHttpsEnforcementPolicy({ NODE_ENV: 'production' }), true);
+  assert.equal(getHttpsEnforcementPolicy({ NODE_ENV: 'production' }), false);
+  assert.equal(getHttpsEnforcementPolicy({ NODE_ENV: 'production', ENFORCE_HTTPS: 'true' }), true);
   assert.equal(getHttpsEnforcementPolicy({ NODE_ENV: 'production', ENFORCE_HTTPS: 'false' }), false);
   assert.equal(getHttpsEnforcementPolicy({ NODE_ENV: 'development' }), false);
   assert.equal(resolveTrustProxy(undefined), false);
   assert.equal(resolveTrustProxy('false'), false);
   assert.equal(resolveTrustProxy('1'), 1);
-  assert.equal(shouldRejectInsecureApiRequest(true, false, '/auth/login'), true);
-  assert.equal(shouldRejectInsecureApiRequest(true, false, '/health'), false);
-  assert.equal(shouldRejectInsecureApiRequest(true, true, '/auth/login'), false);
 });
 
-test('WebDAV 不会通过 HTTP 发送认证密码和业务备份', async () => {
-  const {
-    getWebdavTransportError,
-    INSECURE_WEBDAV_TRANSPORT_MESSAGE,
-  } = await import('../src/lib/webdav.ts');
+test('Android 服务地址省略协议时默认使用 HTTP', () => {
+  assert.equal(normalizeServerUrl('192.168.1.20:3000'), 'http://192.168.1.20:3000');
+  assert.equal(normalizeServerUrl('http://nas.local:3000'), 'http://nas.local:3000');
+  assert.equal(normalizeServerUrl('https://kolflow.example.com'), 'https://kolflow.example.com');
+});
 
-  const config = {
-    url: 'http://dav.example.com/backups',
-    username: 'creator',
-    password: 'webdav-secret',
-    syncInterval: '24',
+test('HTTP 认证请求体不包含邮箱、密码和邀请码明文且密文不可重放', async () => {
+  const {
+    encryptSensitivePayload,
+  } = await import('../src/lib/authEncryption.ts');
+  const {
+    decryptSensitivePayload,
+    issueAuthEncryptionKey,
+  } = await import('../src/server/services/authEncryptionService.ts');
+
+  const sensitiveData = {
+    email: 'encrypted-user@example.com',
+    password: 'Secret123!',
+    inviteCode: 'panda995',
+    privacyAccepted: true,
   };
+  const key = issueAuthEncryptionKey();
+  const encryptedAuth = await encryptSensitivePayload(key, sensitiveData);
+  const wireBody = JSON.stringify({ encryptedAuth });
+
+  assert.equal(wireBody.includes(sensitiveData.email), false);
+  assert.equal(wireBody.includes(sensitiveData.password), false);
+  assert.equal(wireBody.includes(sensitiveData.inviteCode), false);
+  assert.deepEqual(decryptSensitivePayload(encryptedAuth), sensitiveData);
+  assert.throws(() => decryptSensitivePayload(encryptedAuth), /已使用|过期/);
+});
+
+test('HTTP 下可以使用密文完成注册、登录、安全设置和账号注销', async () => {
+  const { encryptSensitivePayload } = await import('../src/lib/authEncryption.ts');
+
+  const registerKeyResponse = await fetch(`${baseUrl}/api/auth/encryption-key`);
+  assert.equal(registerKeyResponse.status, 200);
+  const registerKey = await registerKeyResponse.json() as any;
+  const registerPayload = {
+    email: 'http-user@example.com',
+    password: 'Secret123!',
+    inviteCode: 'panda995',
+    privacyAccepted: true,
+  };
+  const encryptedRegistration = await encryptSensitivePayload(registerKey, registerPayload);
+  const registerWireBody = JSON.stringify({ encryptedAuth: encryptedRegistration });
+  const registerResponse = await fetch(`${baseUrl}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: registerWireBody,
+  });
+  assert.equal(registerResponse.status, 200);
+  assert.equal(registerWireBody.includes(registerPayload.email), false);
+  assert.equal(registerWireBody.includes(registerPayload.password), false);
+  assert.equal(registerWireBody.includes(registerPayload.inviteCode), false);
+
+  const loginKey = await (await fetch(`${baseUrl}/api/auth/encryption-key`)).json() as any;
+  const loginPayload = {
+    email: registerPayload.email,
+    password: registerPayload.password,
+    privacyAccepted: true,
+  };
+  const encryptedLogin = await encryptSensitivePayload(loginKey, loginPayload);
+  const loginResponse = await fetch(`${baseUrl}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ encryptedAuth: encryptedLogin }),
+  });
+  assert.equal(loginResponse.status, 200);
+  const loginData = await loginResponse.json() as any;
+  assert.equal(loginData.email, undefined);
   assert.equal(
-    getWebdavTransportError(config, 'https://kolflow.example.com/settings'),
-    INSECURE_WEBDAV_TRANSPORT_MESSAGE,
+    Buffer.from(loginData.token.split('.')[1], 'base64url').toString('utf8').includes(registerPayload.email),
+    false,
   );
-  assert.equal(
-    getWebdavTransportError({ ...config, url: 'https://dav.example.com/backups' }, 'https://kolflow.example.com/settings'),
-    null,
-  );
+
+  const securityKey = await (await fetch(`${baseUrl}/api/auth/encryption-key`)).json() as any;
+  const securityPayload = {
+    email: 'http-user-renamed@example.com',
+    oldPassword: registerPayload.password,
+    password: 'NewSecret123!',
+  };
+  const encryptedSecurity = await encryptSensitivePayload(securityKey, securityPayload);
+  const securityWireBody = JSON.stringify({ encryptedAuth: encryptedSecurity });
+  const securityResponse = await fetch(`${baseUrl}/api/settings/security`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${loginData.token}`,
+      'Content-Type': 'application/json',
+    },
+    body: securityWireBody,
+  });
+  assert.equal(securityResponse.status, 200);
+  assert.equal(securityWireBody.includes(securityPayload.email), false);
+  assert.equal(securityWireBody.includes(securityPayload.oldPassword), false);
+  assert.equal(securityWireBody.includes(securityPayload.password), false);
+
+  const deletionKey = await (await fetch(`${baseUrl}/api/auth/encryption-key`)).json() as any;
+  const encryptedDeletion = await encryptSensitivePayload(deletionKey, { password: securityPayload.password });
+  const deletionWireBody = JSON.stringify({ encryptedAuth: encryptedDeletion });
+  const deletionResponse = await fetch(`${baseUrl}/api/settings/account`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${loginData.token}`,
+      'Content-Type': 'application/json',
+    },
+    body: deletionWireBody,
+  });
+  assert.equal(deletionResponse.status, 200);
+  assert.equal(deletionWireBody.includes(securityPayload.password), false);
+
+  const plaintextResponse = await fetch(`${baseUrl}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(loginPayload),
+  });
+  assert.equal(plaintextResponse.status, 400);
+  assert.match((await plaintextResponse.json() as any).error, /加密/);
 });

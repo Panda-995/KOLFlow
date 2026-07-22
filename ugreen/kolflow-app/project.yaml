@@ -51,7 +51,7 @@ parameters:
 i18n:
   en-US:
     name: KOLFlow
-    description: KOLFlow is a self-hosted business collaboration manager designed for creators and KOLs. It centralizes orders, brands, contacts, billing, assets, todos, publishing links, paid promotion costs, analytics, activity logs, data import and export, and Android access. This update blocks browser API traffic from cleartext HTTP pages, enforces HTTPS for production APIs, and requires the UGOS Pro HTTPS access port or UGREENlink HTTPS domain. Licensed under GNU AGPL v3.0.
+    description: KOLFlow is a self-hosted business collaboration manager designed for creators and KOLs. This update retains full HTTP access and login while encrypting login, registration, account-security, and account-deletion payloads with RSA-OAEP-256 and AES-256-GCM so email addresses, passwords, and invite codes no longer appear directly in HTTP request bodies. Licensed under GNU AGPL v3.0.
     author: 熊猫不是猫QAQ
     official: https://github.com/Panda-995/KOLFlow
     help: https://post.smzdm.com/p/a6zg63m0/
@@ -59,7 +59,7 @@ i18n:
     publisher_link: https://github.com/Panda-995
   zh-CN:
     name: KOLFlow
-    description: KOLFlow 是面向 KOL、内容创作者与达人团队的自托管商单管理系统，可集中管理商单进度、品牌与联系人、账单结算、置换资产、待办日历、发布链接、付费推广成本、数据统计、操作日志以及数据导入导出，并支持 Android 客户端连接。当前版本阻止 Web 页面通过 HTTP 明文提交邮箱、密码、邀请码、令牌和业务数据，生产 API 强制使用 HTTPS；UGOS Pro 请使用系统分配的 HTTPS 访问端口或 UGREENlink HTTPS 域名。项目采用 GNU AGPL v3.0 开源。
+    description: KOLFlow 是面向 KOL、内容创作者与达人团队的自托管商单管理系统。当前版本保留完整 HTTP 访问与登录功能，并对登录、注册、修改邮箱/密码和账号注销载荷执行 RSA-OAEP-256 与 AES-256-GCM 混合加密，避免邮箱、密码和邀请码直接出现在 HTTP 请求体中。项目采用 GNU AGPL v3.0 开源。
     author: 熊猫不是猫QAQ
     official: https://github.com/Panda-995/KOLFlow
     help: https://post.smzdm.com/p/a6zg63m0/

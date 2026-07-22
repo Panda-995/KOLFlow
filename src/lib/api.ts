@@ -1,5 +1,4 @@
 import { Capacitor, CapacitorHttp, type HttpOptions } from '@capacitor/core';
-import { getInsecureApiTransportError } from './transportSecurity';
 
 export const SERVER_BASE_URL_KEY = 'kolflow.serverBaseUrl';
 
@@ -9,7 +8,7 @@ export const normalizeServerUrl = (value: string): string => {
   const trimmed = value.trim();
   if (!trimmed) return '';
 
-  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
   const url = new URL(withProtocol);
 
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
@@ -44,9 +43,6 @@ export const getSavedServerBaseUrl = (): string => {
 
 export const setServerBaseUrl = (value: string): string => {
   const normalized = normalizeServerUrl(value);
-  if (normalized && isNativeAppRuntime() && new URL(normalized).protocol !== 'https:') {
-    throw new Error('为保护邮箱、密码和邀请码等个人信息，APP 仅允许连接 HTTPS 服务地址');
-  }
   if (normalized) {
     localStorage.setItem(SERVER_BASE_URL_KEY, normalized);
   } else {
@@ -64,19 +60,14 @@ export const getNativeServerUrlError = (value: string): string | null => {
     return '请先输入服务端地址';
   }
 
-  const parsedUrl = new URL(normalized);
-  if (parsedUrl.protocol !== 'https:') {
-    return '为保护邮箱、密码和邀请码等个人信息，APP 仅允许连接 HTTPS 服务地址。请先为 KOLFlow 服务配置有效的 HTTPS 证书。';
-  }
-
-  const hostname = parsedUrl.hostname.toLowerCase();
+  const hostname = new URL(normalized).hostname.toLowerCase();
   if (
     hostname === 'localhost' ||
     hostname === '0.0.0.0' ||
     hostname === '::1' ||
     hostname.startsWith('127.')
   ) {
-    return 'APP 内不能使用 localhost 或 127.0.0.1。请使用已配置有效 HTTPS 证书的域名。';
+    return 'App 内不能使用 localhost 或 127.0.0.1。Android 模拟器请用 http://10.0.2.2:3000，真机请用电脑局域网 IP，例如 http://192.168.x.x:3000。';
   }
 
   return null;
@@ -92,7 +83,7 @@ export const getConnectionHelpMessage = (value = getSavedServerBaseUrl()): strin
 
   const suffix = target ? ` 当前地址：${target}` : '';
   if (isNativeAppRuntime()) {
-    return `无法安全连接服务端。请确认服务端正在运行、HTTPS 证书有效，并使用可从当前设备访问的 HTTPS 域名。${suffix}`;
+    return `无法连接服务端。请确认服务端正在运行，Android 模拟器使用 http://10.0.2.2:3000，真机使用电脑局域网 IP，例如 http://192.168.x.x:3000，并确认手机和电脑在同一网络。${suffix}`;
   }
 
   return `无法连接服务端，请确认服务正在运行。${suffix}`;
@@ -146,11 +137,6 @@ export const apiFetch = async (path: string, options: RequestInit = {}): Promise
 
   const url = buildApiUrl(path);
   const shouldUseNativeHttp = isNativeAppRuntime() && !isFormDataBody(options.body);
-
-  if (!isNativeAppRuntime()) {
-    const transportError = getInsecureApiTransportError(url);
-    if (transportError) throw new Error(transportError);
-  }
 
   if (shouldUseNativeHttp) {
     const method = (options.method || 'GET').toUpperCase();

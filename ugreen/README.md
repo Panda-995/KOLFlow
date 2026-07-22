@@ -15,9 +15,9 @@
 
 商店上架所需的中英文描述、版本说明和链接见 `STORE_LISTING.md`。
 
-## HTTPS 访问要求
+## HTTP 与敏感信息保护
 
-UGOS Pro 会为应用分配 HTTP 与 HTTPS 两个访问端口。KOLFlow 生产 API 默认拒绝明文 HTTP，Web 端也会在请求发出前阻止邮箱、密码、邀请码、令牌和业务数据通过 HTTP 传输。安装 `1.3.0.0006` 后，请从系统分配的 HTTPS 访问端口或 UGREENlink HTTPS 域名打开应用；旧的 `http://NAS-IP:3441` 地址只显示安全连接提示。
+KOLFlow 保留 UGOS Pro 的 HTTP 与 HTTPS 访问方式。`1.3.0.0007` 起，HTTP 下可正常注册、登录和使用全部功能；登录、注册、修改邮箱/密码及账号注销的敏感载荷使用 RSA-OAEP-256 与 AES-256-GCM 混合加密，请求体不再出现邮箱、密码或邀请码明文。HTTPS 仍是推荐方式，用于抵御 HTTP 页面被主动中间人篡改。
 
 ## 构建方式
 

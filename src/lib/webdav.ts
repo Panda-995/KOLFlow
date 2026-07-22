@@ -1,12 +1,9 @@
 import { authFetch } from './api';
-import { getInsecureHttpTransportError } from './transportSecurity';
 
 export const WEBDAV_CONFIG_KEY = 'webdavConfig';
 export const WEBDAV_PASSWORD_KEY = 'webdavPassword';
 export const WEBDAV_CONFIG_UPDATED_EVENT = 'kolflow:webdav-config-updated';
 export const WEBDAV_LAST_SYNC_KEY = 'lastWebdavSync';
-export const INSECURE_WEBDAV_TRANSPORT_MESSAGE =
-  'WebDAV 地址必须使用 HTTPS，以免认证用户名、密码和业务备份被明文传输。';
 
 export type WebdavConfig = {
   url: string;
@@ -94,32 +91,15 @@ export const getWebdavAuthorization = (config: WebdavConfig): string => (
   `Basic ${btoa(`${config.username}:${config.password}`)}`
 );
 
-export const getWebdavTransportError = (
-  config: WebdavConfig,
-  pageUrl = typeof window !== 'undefined' ? window.location.href : '',
-): string | null => (
-  getInsecureHttpTransportError(getWebdavFileUrl(config), pageUrl)
-    ? INSECURE_WEBDAV_TRANSPORT_MESSAGE
-    : null
-);
-
-export const webdavFetch = (config: WebdavConfig, options: RequestInit): Promise<Response> => {
-  const transportError = getWebdavTransportError(config);
-  if (transportError) throw new Error(transportError);
-
-  const headers = new Headers(options.headers);
-  headers.set('Authorization', getWebdavAuthorization(config));
-  return fetch(getWebdavFileUrl(config), { ...options, headers });
-};
-
 export const uploadWebdavBackup = async (config: WebdavConfig): Promise<string> => {
   const exportResponse = await authFetch('/api/data/export');
   if (!exportResponse.ok) throw new Error('获取导出数据失败');
   const data = await exportResponse.json();
 
-  const response = await webdavFetch(config, {
+  const response = await fetch(getWebdavFileUrl(config), {
     method: 'PUT',
     headers: {
+      Authorization: getWebdavAuthorization(config),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(data, null, 2),

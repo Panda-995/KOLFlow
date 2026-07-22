@@ -227,12 +227,10 @@ docker compose up -d
 # 如果使用旧版 Docker Compose
 docker-compose up -d
 
-# 或在已有 HTTPS 反向代理的主机上手动指定镜像
+# 或手动指定镜像（HTTP/HTTPS 均可访问）
 docker run -d -p 3000:3000 \
   -e JWT_SECRET=your-secret \
   -e INVITE_CODE=your-code \
-  -e ENFORCE_HTTPS=true \
-  -e TRUST_PROXY=1 \
   ghcr.io/panda-995/kolflow:latest
 ```
 
@@ -250,16 +248,12 @@ export JWT_SECRET=your-secret-key
 export INVITE_CODE=your-invite-code
 # 默认允许 HTTP/HTTPS 域名、局域网和 App 访问；如需收紧可改为逗号分隔域名
 export CORS_ORIGIN=*
-# 生产环境默认拒绝明文 API
-export ENFORCE_HTTPS=true
-# 仅在容器前一跳是受控 HTTPS 反向代理时设为 1
-export TRUST_PROXY=1
+# 默认保留 HTTP；如已配置 HTTPS 反向代理，可按需改为 true
+export ENFORCE_HTTPS=false
 docker compose up -d
 ```
 
-生产环境必须通过 HTTPS 反向代理访问，反向代理需传递 `X-Forwarded-Proto: https`。KOLFlow 默认拒绝非 HTTPS API，并在浏览器发出请求前阻止从局域网 HTTP 页面提交邮箱、密码、邀请码、登录令牌和业务数据。`TRUST_PROXY=1` 只适用于容器前一跳确实是受控代理的部署，直连容器端口时应保持 `false`。HTTP 仅保留 `/api/health` 健康检查；本机 `localhost` 的 development 开发环境不受影响。
-
-UGOS Pro 会为应用分配 HTTP 与 HTTPS 两个访问端口。请从应用的 HTTPS 访问端口或 UGREENlink HTTPS 域名打开 KOLFlow；旧的 `http://NAS-IP:3441` 地址只会显示安全连接提示，不会再显示或提交登录/注册表单。
+KOLFlow 默认保留完整 HTTP 页面、注册、登录和业务功能。登录、注册、修改邮箱/密码和账号注销使用 `RSA-OAEP-256 + AES-256-GCM` 混合加密，HTTP 请求体不会直接出现邮箱、密码或邀请码；一次性挑战值会阻止抓包密文被重复提交。HTTPS 仍是推荐部署方式，因为 HTTP 页面本身无法抵御主动中间人篡改。配置 HTTPS 反向代理并启用 `ENFORCE_HTTPS=true` 时，只有容器前一跳确为受控代理才设置 `TRUST_PROXY=1`。
 
 GitHub Actions 会优先发布 GHCR 镜像；Docker Hub 只有配置了 `DOCKER_HUB_USERNAME` 和 `DOCKER_HUB_TOKEN` secrets 时才会同步发布。如果拉取镜像提示 `manifest unknown`，先确认镜像名为全小写：
 
@@ -290,8 +284,9 @@ docker pull ghcr.io/panda-995/kolflow:arm64
 ```bash
 GET  /api/health               # 健康检查
 GET  /api/auth/check-users     # 检查是否已有用户
-POST /api/auth/register        # 注册  Body: { email, password, inviteCode, privacyAccepted: true }
-POST /api/auth/login           # 登录  Body: { email, password, privacyAccepted: true }
+GET  /api/auth/encryption-key  # 获取一次性认证公钥与挑战值
+POST /api/auth/register        # 注册  Body: { encryptedAuth: { keyId, encryptedKey, iv, ciphertext, ... } }
+POST /api/auth/login           # 登录  Body: { encryptedAuth: { keyId, encryptedKey, iv, ciphertext, ... } }
 POST /api/auth/verify           # 验证 Token
 DELETE /api/settings/account    # 永久注销账号  Body: { password }
 ```
@@ -451,9 +446,9 @@ External order create/update supports `productName` and `productValue`. When an 
 - **内外部 API 一致性**: 统一待办、账单、品牌和发布链接的内部 API 与外部 API 校验、错误码和用户数据范围，并修正外部 API 认证路由优先级。
 - **本地日期修复**: 修复账单、素材出售、商单派生记录、导出文件和日期筛选中的 UTC 时区偏差。
 - **账号资料一致性**: 资料邮箱与登录邮箱保持同步，普通资料页不再直接修改登录邮箱。
-- **HTTPS 明文传输修复**: Web 端在局域网 HTTP 页面不再显示登录/注册表单，并在 `fetch` 前阻止邮箱、密码、邀请码、令牌及业务 API 请求；WebDAV 上传与下载拒绝通过 HTTP 发送认证密码和业务备份；生产服务默认在解析请求体前拒绝非 HTTPS API，且仅在显式配置后信任受控反向代理。UGOS Pro 请改用系统分配的 HTTPS 访问端口或 UGREENlink HTTPS 域名。
-- **安全与测试**: 加强金额、日期、资产状态、待办内容和 HTTP/HTTPS 发布链接校验，升级 Capacitor 及多项依赖安全补丁；新增 14 项回归测试，并通过 TypeScript 检查、前端构建和服务端构建。
-- **Android 与 Release 更新**: Android `versionCode` 升级为 `4`，重新同步最新 Web 资源并构建 APK；GitHub Release 同步更新 Android APK、UGOS Pro `1.3.0.0006` 双架构 UPK、SHA-256 校验文件和发布说明。
+- **HTTP 兼容与敏感认证加密**: 推翻“禁用 HTTP”的错误实现，恢复网页端与 Android App 的 HTTP 页面、服务地址、注册、登录和全部业务功能；登录、注册、修改邮箱/密码及账号注销改用 RSA-OAEP-256 与 AES-256-GCM 混合加密，请求体不再出现邮箱、密码和邀请码明文；增加两分钟有效的一次性挑战值，密文不可重放，并从 JWT 与认证响应中移除邮箱字段。HTTPS 仍用于抵御主动中间人篡改。
+- **安全与测试**: 加强金额、日期、资产状态、待办内容和 HTTP/HTTPS 发布链接校验，升级 Capacitor 及多项依赖安全补丁；新增 15 项回归测试，并通过 TypeScript 检查、前端构建和服务端构建。
+- **Android 与 Release 更新**: Android `versionCode` 升级为 `5`，重新同步最新 Web 资源并构建 APK；GitHub Release 同步更新 Android APK、UGOS Pro `1.3.0.0007` 双架构 UPK、SHA-256 校验文件和发布说明。
 
 ### 2026-07-17
 

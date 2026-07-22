@@ -6,7 +6,7 @@ type HttpsEnvironment = {
 };
 
 export const getHttpsEnforcementPolicy = (environment: HttpsEnvironment): boolean => {
-  return environment.NODE_ENV === 'production' && environment.ENFORCE_HTTPS?.toLowerCase() !== 'false';
+  return environment.NODE_ENV === 'production' && environment.ENFORCE_HTTPS?.toLowerCase() === 'true';
 };
 
 export const resolveTrustProxy = (value: string | undefined): false | number | string => {

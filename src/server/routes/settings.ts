@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcrypt';
 import { logActivity, getUserId } from './utils/index.js';
 import { validateEmail, validatePassword } from './utils/helpers.js';
+import { readEncryptedSensitiveBody } from '../services/authEncryptionService.js';
 
 const router = Router();
 
@@ -73,7 +74,7 @@ router.put('/', (req, res) => {
 router.put('/security', async (req, res) => {
   try {
     const userId = getUserId(req);
-    const { email, password, oldPassword } = req.body;
+    const { email, password, oldPassword } = readEncryptedSensitiveBody(req.body);
     const newEmail = typeof email === 'string' ? email.trim() : '';
 
     if (!newEmail || !validateEmail(newEmail)) {
@@ -117,9 +118,12 @@ router.put('/security', async (req, res) => {
     return res.json({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : '更新安全设置失败';
-    const status = message.includes('UNIQUE') ? 400 : (message.includes('未授权') ? 401 : 500);
+    const isDuplicateEmail = message.includes('UNIQUE');
+    const status = isDuplicateEmail || message.includes('认证')
+      ? 400
+      : (message.includes('未授权') ? 401 : 500);
     return res.status(status).json({
-      error: status === 400 ? '该邮箱已被其他账号使用' : message,
+      error: isDuplicateEmail ? '该邮箱已被其他账号使用' : message,
       timestamp: new Date().toISOString(),
     });
   }
@@ -129,7 +133,7 @@ router.put('/security', async (req, res) => {
 router.delete('/account', async (req, res) => {
   try {
     const userId = getUserId(req);
-    const { password } = req.body;
+    const { password } = readEncryptedSensitiveBody(req.body);
 
     if (!password || typeof password !== 'string') {
       return res.status(400).json({ error: '请输入当前密码以确认注销账号' });
@@ -169,7 +173,7 @@ router.delete('/account', async (req, res) => {
     return res.json({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : '账号注销失败';
-    const status = message.includes('未授权') ? 401 : 500;
+    const status = message.includes('认证') ? 400 : (message.includes('未授权') ? 401 : 500);
     return res.status(status).json({ error: status === 500 ? '账号注销失败，请稍后重试' : message });
   }
 });

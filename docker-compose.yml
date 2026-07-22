@@ -15,8 +15,8 @@ services:
       - INVITE_CODE=${INVITE_CODE:-panda995}
       # 默认允许 HTTP/HTTPS 域名、局域网和 App 访问；需要收紧时可改为逗号分隔域名列表
       - CORS_ORIGIN=${CORS_ORIGIN:-*}
-      # 生产 API 默认拒绝明文 HTTP；请通过 HTTPS 反向代理访问应用
-      - ENFORCE_HTTPS=${ENFORCE_HTTPS:-true}
+      # 默认保留 HTTP；如已配置 HTTPS 反向代理，可设为 true 强制 HTTPS
+      - ENFORCE_HTTPS=${ENFORCE_HTTPS:-false}
       # 仅当容器前一跳是受控反向代理时设为 1，用于读取 X-Forwarded-Proto
       - TRUST_PROXY=${TRUST_PROXY:-false}
     restart: unless-stopped
