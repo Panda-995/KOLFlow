@@ -8,7 +8,7 @@ import { useToast } from '../components/Toast';
 import OrderCard from '../components/orders/OrderCard';
 import { ORDER_STATUS_MAP, ORDER_TYPE_MAP, getPlatformIcon } from '../constants/orders';
 import { authFetch } from '../lib/api';
-import { ALL_MONTHS, ALL_YEARS, getAvailableYears, matchesYearMonth, monthOptions } from '../lib/dateFilter';
+import { ALL_MONTHS, ALL_YEARS, formatLocalDate, getAvailableYears, matchesYearMonth, monthOptions } from '../lib/dateFilter';
 
 
 const statusMap = ORDER_STATUS_MAP;
@@ -79,7 +79,7 @@ export default function Orders() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `商单导出_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `商单导出_${formatLocalDate()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     showToast(`已导出 ${exportData.length} 条商单数据`);

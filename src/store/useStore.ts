@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Order, OrderStatus, OrderType, Todo, Brand, Payment, Settings, ActivityLog, Comment, PublishLink, PaidPromotion, Asset } from '../types';
 import { apiFetch, authFetch, getConnectionHelpMessage } from '../lib/api';
+import { formatLocalDate } from '../lib/dateFilter';
 
 export type { Order, OrderStatus, OrderType, Todo, Brand, Payment, Settings, ActivityLog, Comment, PublishLink, PaidPromotion, Asset };
 
@@ -298,7 +299,7 @@ export const useStore = create<AppState>((set, get) => ({
       const res = await createAuthFetch()('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(order)
+        body: JSON.stringify({ ...order, operationDate: formatLocalDate() })
       });
       if (!res.ok) {
         const data = await res.json();
@@ -328,7 +329,7 @@ export const useStore = create<AppState>((set, get) => ({
       const res = await createAuthFetch()(`/api/orders/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(order)
+        body: JSON.stringify({ ...order, operationDate: formatLocalDate() })
       });
       if (!res.ok) {
         const data = await res.json();
@@ -359,7 +360,7 @@ export const useStore = create<AppState>((set, get) => ({
       const res = await createAuthFetch()(`/api/orders/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status })
+        body: JSON.stringify({ status, operationDate: formatLocalDate() })
       });
       if (!res.ok) {
         const data = await res.json();
@@ -628,7 +629,9 @@ export const useStore = create<AppState>((set, get) => ({
   settlePayment: async (id) => {
     try {
       const res = await createAuthFetch()(`/api/payments/${id}/settle`, {
-        method: 'PUT'
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settledDate: formatLocalDate() })
       });
       if (!res.ok) {
         const data = await res.json();
@@ -737,24 +740,28 @@ export const useStore = create<AppState>((set, get) => ({
       const res = await createAuthFetch()('/api/data/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: JSON.stringify({ ...data, operationDate: formatLocalDate() })
       });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || '导入数据失败');
       }
-      const imported = await res.json();
+      await res.json();
       if (token) {
         localStorage.setItem('token', token);
       }
-      if (imported.orders) set({ orders: imported.orders });
-      if (imported.todos) set({ todos: imported.todos });
-      if (imported.brands) set({ brands: imported.brands });
-      if (imported.payments) set({ payments: imported.payments });
-      if (imported.assets) set({ assets: imported.assets });
-      if (imported.paidPromotions) set({ paidPromotions: imported.paidPromotions });
-      if (imported.settings) set({ settings: imported.settings });
       invalidateAllCache();
+      set({ comments: [], publishLinks: [] });
+      await Promise.all([
+        get().fetchOrders(),
+        get().fetchTodos(),
+        get().fetchBrands(),
+        get().fetchPayments(),
+        get().fetchSettings(),
+        get().fetchAssets(),
+        get().fetchPaidPromotions(),
+        get().fetchActivityLogs(),
+      ]);
       get().showToast('数据导入成功', 'success');
     } catch (error) {
       console.error('setAllData失败:', error instanceof Error ? error.message : error);
@@ -1002,7 +1009,7 @@ export const useStore = create<AppState>((set, get) => ({
       const res = await createAuthFetch()('/api/assets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(asset)
+        body: JSON.stringify({ ...asset, operationDate: formatLocalDate() })
       });
       if (!res.ok) {
         const data = await res.json();
@@ -1022,7 +1029,7 @@ export const useStore = create<AppState>((set, get) => ({
       const res = await createAuthFetch()(`/api/assets/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(asset)
+        body: JSON.stringify({ ...asset, operationDate: formatLocalDate() })
       });
       if (!res.ok) {
         const data = await res.json();

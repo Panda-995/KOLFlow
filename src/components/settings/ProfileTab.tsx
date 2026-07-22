@@ -45,9 +45,11 @@ export function ProfileTab({ formData, setFormData, fileInputRef, handleAvatarCh
             <input 
               type="email" 
               value={formData.email} 
-              onChange={e => setFormData({...formData, email: e.target.value})}
-              className="w-full px-4 py-2 bg-bg-tertiary border border-transparent focus:border-accent focus:bg-white rounded-xl outline-none transition-all text-sm" 
+              readOnly
+              aria-readonly="true"
+              className="w-full px-4 py-2 bg-gray-100 border border-transparent rounded-xl outline-none text-sm text-gray-500 cursor-not-allowed"
             />
+            <p className="text-xs text-gray-400">登录邮箱请在“账号安全”中修改。</p>
           </div>
           <div className="space-y-1.5 md:col-span-2">
             <label className="text-sm font-medium text-gray-600">个人简介</label>

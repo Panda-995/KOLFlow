@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import { clsx } from 'clsx';
+import { authFetch } from '../lib/api';
+import { buildBusinessNotifications, type ReportSummary } from '../lib/notifications';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -10,59 +12,40 @@ interface HeaderProps {
 
 export default function Header({ onMenuClick }: HeaderProps) {
   const [showNotifications, setShowNotifications] = useState(false);
+  const [reportSummary, setReportSummary] = useState<ReportSummary | null>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
-  const { logout, orders, payments, dismissedNotifications, dismissNotification, clearNotifications } = useStore();
+  const { logout, orders, payments, settings, dismissedNotifications, dismissNotification, clearNotifications } = useStore();
   const navigate = useNavigate();
 
-  const notifications = useMemo(() => {
-    const notifs: { id: string; title: string; message: string; type: 'warning' | 'danger'; link: string }[] = [];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+  useEffect(() => {
+    if (!settings?.weeklyReport) {
+      setReportSummary(null);
+      return;
+    }
+    let cancelled = false;
+    const frequency = settings.reportFrequency === 'monthly' ? 'monthly' : 'weekly';
+    authFetch(`/api/report/${frequency}`)
+      .then(async response => {
+        if (!response.ok) throw new Error('报告生成失败');
+        return response.json();
+      })
+      .then(data => {
+        if (!cancelled) setReportSummary(data.summary || null);
+      })
+      .catch(() => {
+        if (!cancelled) setReportSummary(null);
+      });
+    return () => { cancelled = true; };
+  }, [settings?.reportFrequency, settings?.weeklyReport]);
 
-    const threeDaysFromNow = new Date();
-    threeDaysFromNow.setDate(today.getDate() + 3);
-    threeDaysFromNow.setHours(23, 59, 59, 999);
-
-    orders.forEach(order => {
-      if (order.status !== 'completed' && order.status !== 'cancelled' && order.submitDate) {
-        const deadlineDate = new Date(order.submitDate);
-        if (deadlineDate < today) {
-          notifs.push({
-            id: `order-overdue-${order.id}`,
-            title: '商单已逾期',
-            message: `商单 "${order.title}" 已超过交稿日期 (${order.submitDate})`,
-            type: 'danger',
-            link: '/orders'
-          });
-        } else if (deadlineDate <= threeDaysFromNow) {
-          notifs.push({
-            id: `order-warning-${order.id}`,
-            title: '商单即将到期',
-            message: `商单 "${order.title}" 将于 ${order.submitDate} 交稿`,
-            type: 'warning',
-            link: '/orders'
-          });
-        }
-      }
-    });
-
-    payments.forEach(payment => {
-      if (payment.type === 'pending' && payment.date) {
-        const paymentDate = new Date(payment.date);
-        if (paymentDate < today) {
-          notifs.push({
-            id: `payment-overdue-${payment.id}`,
-            title: '账单逾期未收',
-            message: `品牌 "${payment.brand}" 的账单 (¥${payment.amount}) 已逾期`,
-            type: 'danger',
-            link: '/billing'
-          });
-        }
-      }
-    });
-
-    return notifs.filter(n => !dismissedNotifications.includes(n.id));
-  }, [orders, payments, dismissedNotifications]);
+  const notifications = useMemo(() => buildBusinessNotifications({
+    now: new Date(),
+    orders,
+    payments,
+    settings,
+    dismissedIds: dismissedNotifications,
+    reportSummary,
+  }), [orders, payments, settings, dismissedNotifications, reportSummary]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -163,7 +146,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
                             <div className="flex items-center gap-2 mb-1">
                               <span className={clsx(
                                 "w-2 h-2 rounded-full",
-                                notif.type === 'danger' ? "bg-danger" : "bg-warning"
+                                notif.type === 'danger' ? "bg-danger" : notif.type === 'warning' ? "bg-warning" : "bg-info"
                               )}></span>
                               <h4 className="text-sm font-medium text-panda-black">{notif.title}</h4>
                             </div>
@@ -256,10 +239,12 @@ export default function Header({ onMenuClick }: HeaderProps) {
                         <div className="flex items-start gap-3">
                           <div className={clsx(
                             "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0",
-                            notif.type === 'danger' ? "bg-danger/10" : "bg-warning/10"
+                            notif.type === 'danger' ? "bg-danger/10" : notif.type === 'warning' ? "bg-warning/10" : "bg-info/10"
                           )}>
                             {notif.type === 'danger' ? (
                               <AlertTriangle size={20} className="text-danger" />
+                            ) : notif.type === 'info' ? (
+                              <CheckCheck size={20} className="text-info" />
                             ) : (
                               <Clock size={20} className="text-warning" />
                             )}

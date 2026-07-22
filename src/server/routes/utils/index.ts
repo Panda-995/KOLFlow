@@ -63,8 +63,9 @@ export const generateSecureRandom = (length: number = 32): string => {
 
 // 获取 API Key 对应的用户 ID
 export const getUserIdByApiKey = (apiKey: string): string | null => {
-  const settings = db.prepare('SELECT userId FROM settings WHERE apiKey = ?').get(apiKey) as any;
-  return settings?.userId || null;
+  if (!apiKey) return null;
+  const matches = db.prepare('SELECT userId FROM settings WHERE apiKey = ? LIMIT 2').all(apiKey) as Array<{ userId: string }>;
+  return matches.length === 1 ? matches[0].userId : null;
 };
 
 // 认证中间件

@@ -59,7 +59,10 @@ export interface Payment {
   brand: string;
   amount: number;
   type: 'pending' | 'settled';
+  /** 兼容旧版 API；新代码应根据状态使用 dueDate 或 settledDate。 */
   date: string;
+  dueDate?: string;
+  settledDate?: string;
   method: string;
   createdAt?: string;
 }

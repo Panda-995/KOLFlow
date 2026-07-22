@@ -5,6 +5,16 @@ import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { MAX_AVATAR_SIZE } from '../constants';
 import { apiFetch, authFetch, getActiveServerUrl } from '../lib/api';
+import { formatLocalDate } from '../lib/dateFilter';
+import {
+  getWebdavAuthorization,
+  getWebdavFileUrl,
+  loadWebdavLastSync,
+  loadWebdavConfig,
+  saveWebdavLastSync,
+  saveWebdavConfig,
+  uploadWebdavBackup,
+} from '../lib/webdav';
 
 // 导入拆分的 Tab 组件
 import {
@@ -22,8 +32,24 @@ import {
   type WebdavConfig,
 } from '../components/settings';
 
-const WEBDAV_CONFIG_KEY = 'webdavConfig';
-const WEBDAV_PASSWORD_KEY = 'webdavPassword';
+type ImportPreview = {
+  backupVersion: number | null;
+  legacy: boolean;
+  counts: Record<string, number>;
+  conflicts: { ids: number; orderNos: number; apiKey: number };
+  warnings: string[];
+};
+
+const IMPORT_COUNT_LABELS: Record<string, string> = {
+  orders: '商单',
+  brands: '品牌',
+  payments: '账单',
+  todos: '待办',
+  assets: '素材',
+  publishLinks: '发布链接',
+  paidPromotions: '投放记录',
+  comments: '评论',
+};
 
 export default function Settings() {
   const { settings, updateSettings, updateSecurity, clearData, logout, setAllData, fetchSettings } = useStore();
@@ -48,50 +74,29 @@ export default function Settings() {
     password: '',
     oldPassword: ''
   });
-  const [webdavConfig, setWebdavConfig] = useState<WebdavConfig>({
-    url: '',
-    username: '',
-    password: '',
-    syncInterval: '0' // 0=手动, 1=每小时, 24=每天, 168=每周
-  });
+  const [webdavConfig, setWebdavConfig] = useState<WebdavConfig>(() => loadWebdavConfig());
   const [isSaving, setIsSaving] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(() => {
-    return localStorage.getItem('lastWebdavSync');
+    return loadWebdavLastSync();
   });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const webdavSyncInProgressRef = useRef(false);
 
   const [clearDataConfirm, setClearDataConfirm] = useState(false);
-  const [webdavRestoreConfirm, setWebdavRestoreConfirm] = useState(false);
   const [apiKeyConfirm, setApiKeyConfirm] = useState(false);
   const [deleteAccountConfirm, setDeleteAccountConfirm] = useState(false);
   const [deletionPassword, setDeletionPassword] = useState('');
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+  const [pendingImportData, setPendingImportData] = useState<Record<string, unknown> | null>(null);
+  const [importSource, setImportSource] = useState<'file' | 'webdav'>('file');
 
   // 测试API连接状态
   const [isTestingApi, setIsTestingApi] = useState(false);
-
-  // 加载 WebDAV 配置
-  useEffect(() => {
-    const savedConfig = localStorage.getItem(WEBDAV_CONFIG_KEY);
-    if (savedConfig) {
-      const parsed = JSON.parse(savedConfig) as WebdavConfig;
-      const sessionPassword = sessionStorage.getItem(WEBDAV_PASSWORD_KEY);
-      if (parsed.password) {
-        sessionStorage.setItem(WEBDAV_PASSWORD_KEY, parsed.password);
-        const safeConfig = { ...parsed, password: '' };
-        localStorage.setItem(WEBDAV_CONFIG_KEY, JSON.stringify({ ...safeConfig, password: '' }));
-      }
-      setWebdavConfig({
-        ...parsed,
-        password: sessionPassword || parsed.password || '',
-      });
-    }
-  }, []);
 
   useEffect(() => {
     if (settings) {
@@ -151,7 +156,7 @@ export default function Settings() {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await updateSettings(formData);
+      await updateSettings({ ...formData, reportFrequency });
       showToast('保存成功');
     } catch (error) {
       showToast('保存失败，图片可能过大或网络异常', 'error');
@@ -241,7 +246,7 @@ export default function Settings() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.setAttribute('href', url);
-      link.setAttribute('download', `panda_backup_${new Date().toISOString().split('T')[0]}.json`);
+      link.setAttribute('download', `panda_backup_${formatLocalDate()}.json`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -252,28 +257,58 @@ export default function Settings() {
     }
   };
 
-  const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const prepareImportData = useCallback(async (
+    data: Record<string, unknown>,
+    source: 'file' | 'webdav',
+  ) => {
+    const response = await authFetch('/api/data/import/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const preview = await response.json();
+    if (!response.ok) {
+      throw new Error(preview.error || '导入预检失败');
+    }
+    setPendingImportData(data);
+    setImportPreview(preview as ImportPreview);
+    setImportSource(source);
+  }, []);
+
+  const handleImportData = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    e.target.value = '';
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const data = JSON.parse(event.target?.result as string);
-        if (window.confirm('导入数据将覆盖当前所有数据，确定继续吗？')) {
-          try {
-            await setAllData(data);
-            showToast('数据导入成功');
-            window.location.reload();
-          } catch (importError) {
-            showToast(importError instanceof Error ? importError.message : '导入数据失败', 'error');
-          }
-        }
-      } catch (error) {
-        showToast('导入失败：文件格式错误', 'error');
+    try {
+      const data = JSON.parse(await file.text()) as Record<string, unknown>;
+      await prepareImportData(data, 'file');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '导入失败：文件格式错误', 'error');
+    }
+  };
+
+  const closeImportPreview = () => {
+    setImportPreview(null);
+    setPendingImportData(null);
+  };
+
+  const confirmImportData = async () => {
+    if (!pendingImportData) return;
+    try {
+      await setAllData(pendingImportData);
+      if (importSource === 'webdav') {
+        const now = new Date().toISOString();
+        saveWebdavLastSync(now);
+        setLastSyncTime(now);
+        showToast('数据已从 WebDAV 恢复');
+      } else {
+        showToast('数据导入成功');
       }
-    };
-    reader.readAsText(file);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '导入数据失败', 'error');
+      throw error;
+    }
   };
 
   const handleClearData = async () => {
@@ -292,13 +327,7 @@ export default function Settings() {
       showToast('请填写完整的 WebDAV 认证信息', 'warning');
       return;
     }
-    const { password, ...safeConfig } = webdavConfig;
-    localStorage.setItem(WEBDAV_CONFIG_KEY, JSON.stringify({ ...safeConfig, password: '' }));
-    if (password) {
-      sessionStorage.setItem(WEBDAV_PASSWORD_KEY, password);
-    } else {
-      sessionStorage.removeItem(WEBDAV_PASSWORD_KEY);
-    }
+    saveWebdavConfig(webdavConfig);
     showToast('WebDAV 配置已保存');
   };
 
@@ -320,55 +349,25 @@ export default function Settings() {
     webdavSyncInProgressRef.current = true;
     setIsSyncing(true);
     try {
-      const auth = btoa(`${webdavConfig.username}:${webdavConfig.password}`);
-      const fileName = 'kolflow_backup.json';
-      const webdavUrl = webdavConfig.url.endsWith('/') ? webdavConfig.url : `${webdavConfig.url}/`;
-      const fileUrl = `${webdavUrl}${fileName}`;
-
       if (direction === 'upload') {
-        // 从 API 获取完整数据（包括发布链接）
-        const exportRes = await authFetch('/api/data/export');
-        if (!exportRes.ok) {
-          throw new Error('获取导出数据失败');
+        const syncedAt = await uploadWebdavBackup(webdavConfig);
+        setLastSyncTime(syncedAt);
+        if (!options.silent) {
+          showToast('数据已同步到 WebDAV');
         }
-        const data = await exportRes.json();
-        data.timestamp = new Date().toISOString();
-
-        // 上传到 WebDAV
-        const response = await fetch(fileUrl, {
-          method: 'PUT',
-          headers: {
-            'Authorization': `Basic ${auth}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(data, null, 2)
-        });
-
-        if (response.ok || response.status === 201 || response.status === 204) {
-          const now = new Date().toISOString();
-          localStorage.setItem('lastWebdavSync', now);
-          setLastSyncTime(now);
-          if (!options.silent) {
-            showToast('数据已同步到 WebDAV');
-          }
-          return true;
-        } else {
-          throw new Error(`上传失败: ${response.status}`);
-        }
+        return true;
       } else {
         // 从 WebDAV 下载
-        const response = await fetch(fileUrl, {
+        const response = await fetch(getWebdavFileUrl(webdavConfig), {
           method: 'GET',
           headers: {
-            'Authorization': `Basic ${auth}`
+            'Authorization': getWebdavAuthorization(webdavConfig)
           }
         });
 
         if (response.ok) {
           const remoteData = await response.json();
-          // 存储 remoteData 以便后续确认
-          (window as any)._webdavRestoreData = remoteData;
-          setWebdavRestoreConfirm(true);
+          await prepareImportData(remoteData, 'webdav');
           return true;
         } else if (response.status === 404) {
           showToast('WebDAV 上暂无备份文件', 'warning');
@@ -387,41 +386,7 @@ export default function Settings() {
       webdavSyncInProgressRef.current = false;
       setIsSyncing(false);
     }
-  }, [showToast, webdavConfig.password, webdavConfig.url, webdavConfig.username]);
-
-  useEffect(() => {
-    const intervalHours = Number(webdavConfig.syncInterval);
-    const hasWebdavConfig = Boolean(webdavConfig.url && webdavConfig.username && webdavConfig.password);
-    if (!hasWebdavConfig || !Number.isFinite(intervalHours) || intervalHours <= 0) {
-      return;
-    }
-
-    const intervalMs = intervalHours * 60 * 60 * 1000;
-    const checkMs = Math.min(intervalMs, 60 * 60 * 1000);
-    const shouldUpload = () => {
-      const savedLastSync = localStorage.getItem('lastWebdavSync');
-      if (!savedLastSync) return true;
-
-      const lastSyncMs = new Date(savedLastSync).getTime();
-      return Number.isNaN(lastSyncMs) || Date.now() - lastSyncMs >= intervalMs;
-    };
-    const runAutoUpload = () => {
-      if (document.visibilityState === 'hidden') return;
-      if (shouldUpload()) {
-        void handleWebdavSync('upload', { silent: true });
-      }
-    };
-
-    runAutoUpload();
-    const timer = window.setInterval(runAutoUpload, checkMs);
-    return () => window.clearInterval(timer);
-  }, [
-    handleWebdavSync,
-    webdavConfig.password,
-    webdavConfig.syncInterval,
-    webdavConfig.url,
-    webdavConfig.username,
-  ]);
+  }, [prepareImportData, showToast, webdavConfig.password, webdavConfig.url, webdavConfig.username]);
 
   const handleGenerateApiKey = async () => {
     setApiKeyConfirm(true);
@@ -481,23 +446,6 @@ API Key: ${settings?.apiKey || '尚未生成'}
 curl "${serverUrl}/api/external/orders?token=${settings?.apiKey || 'YOUR_KEY'}"`;
     copyToClipboard(config);
     showToast('已复制配置信息');
-  };
-
-  const confirmWebdavRestore = async () => {
-    const remoteData = (window as any)._webdavRestoreData;
-    if (remoteData) {
-      try {
-        await setAllData(remoteData);
-        const now = new Date().toISOString();
-        localStorage.setItem('lastWebdavSync', now);
-        setLastSyncTime(now);
-        showToast('数据已从 WebDAV 恢复');
-        window.location.reload();
-      } catch (error) {
-        showToast(error instanceof Error ? error.message : '恢复数据失败', 'error');
-        throw error;
-      }
-    }
   };
 
   const copyToClipboard = async (text: string) => {
@@ -734,7 +682,6 @@ curl "${serverUrl}/api/external/orders?token=${settings?.apiKey || 'YOUR_KEY'}"`
               isSyncing={isSyncing}
               handleSaveWebdavConfig={handleSaveWebdavConfig}
               handleWebdavSync={handleWebdavSync}
-              setWebdavRestoreConfirm={setWebdavRestoreConfirm}
               showToast={showToast}
             />
           )}
@@ -760,12 +707,19 @@ curl "${serverUrl}/api/external/orders?token=${settings?.apiKey || 'YOUR_KEY'}"`
       />
 
       <ConfirmDialog
-        isOpen={webdavRestoreConfirm}
-        onClose={() => setWebdavRestoreConfirm(false)}
-        onConfirm={confirmWebdavRestore}
-        title="确认恢复数据"
-        message="从 WebDAV 恢复数据将覆盖当前所有数据，确定继续吗？"
-        confirmText="确认恢复"
+        isOpen={Boolean(importPreview && pendingImportData)}
+        onClose={closeImportPreview}
+        onConfirm={confirmImportData}
+        title={importSource === 'webdav' ? '确认恢复数据' : '确认导入数据'}
+        message={importPreview ? [
+          '此操作将覆盖当前数据。',
+          `预检结果：${Object.entries(importPreview.counts)
+            .filter(([, count]) => count > 0)
+            .map(([name, count]) => `${IMPORT_COUNT_LABELS[name] || name} ${count} 条`)
+            .join('、') || '无业务记录'}。`,
+          importPreview.warnings.join('；'),
+        ].filter(Boolean).join(' ') : ''}
+        confirmText={importSource === 'webdav' ? '确认恢复' : '确认导入'}
         type="warning"
       />
 

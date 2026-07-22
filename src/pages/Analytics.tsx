@@ -10,6 +10,7 @@ const STATUS_COLORS = {
   in_progress: '#f59e0b',
   cancelled: '#ef4444'
 };
+const getSettledDate = (payment: { settledDate?: string; date?: string }) => payment.settledDate || payment.date || '';
 
 export default function Analytics() {
   const [year, setYear] = useState(new Date().getFullYear().toString());
@@ -22,7 +23,7 @@ export default function Analytics() {
   const availableYears = useMemo(() => {
     const years = new Set<string>();
     orders.forEach(o => o.acceptDate && years.add(o.acceptDate.substring(0, 4)));
-    payments.forEach(p => p.date && years.add(p.date.substring(0, 4)));
+    payments.forEach(p => getSettledDate(p) && years.add(getSettledDate(p).substring(0, 4)));
     assets.forEach(a => a.soldDate && years.add(a.soldDate.substring(0, 4)));
     paidPromotions.forEach(p => p.createdAt && years.add(p.createdAt.substring(0, 4)));
     years.add(new Date().getFullYear().toString());
@@ -47,8 +48,9 @@ export default function Analytics() {
 
   const filteredPayments = useMemo(() => {
     return payments.filter(payment => {
-      const matchYear = payment.date?.startsWith(year);
-      const matchMonth = month === 'all' || payment.date?.substring(5, 7) === month;
+      const settledDate = getSettledDate(payment);
+      const matchYear = settledDate.startsWith(year);
+      const matchMonth = month === 'all' || settledDate.substring(5, 7) === month;
       const matchBrand = brandFilter === 'all' || payment.brand === brandFilter;
       return matchYear && matchMonth && matchBrand && payment.type === 'settled';
     });
@@ -91,11 +93,12 @@ export default function Analytics() {
     const isFullYear = month === 'all';
 
     const prevPayments = payments.filter(p => {
-      if (p.type !== 'settled' || !p.date) return false;
+      const settledDate = getSettledDate(p);
+      if (p.type !== 'settled' || !settledDate) return false;
       if (isFullYear) {
-        return p.date.startsWith(prevYear);
+        return settledDate.startsWith(prevYear);
       }
-      return p.date.startsWith(prevYear) && p.date.substring(5, 7) === prevMonth.toString().padStart(2, '0');
+      return settledDate.startsWith(prevYear) && settledDate.substring(5, 7) === prevMonth.toString().padStart(2, '0');
     });
     const prevPaymentIncome = prevPayments.reduce((sum, p) => sum + p.amount, 0);
     const prevAssetIncome = assets
@@ -140,7 +143,10 @@ export default function Analytics() {
       const m = month === 'all' ? i : startMonth;
       const monthStr = (m + 1).toString().padStart(2, '0');
       const monthOrders = orders.filter(o => o.acceptDate?.startsWith(year) && o.acceptDate?.substring(5, 7) === monthStr);
-      const monthPayments = payments.filter(p => p.date?.startsWith(year) && p.date?.substring(5, 7) === monthStr && p.type === 'settled');
+      const monthPayments = payments.filter(p => {
+        const settledDate = getSettledDate(p);
+        return settledDate.startsWith(year) && settledDate.substring(5, 7) === monthStr && p.type === 'settled';
+      });
       const monthAssetIncome = assets
         .filter(a => a.saleStatus === 'sold' && a.soldDate?.startsWith(year) && a.soldDate?.substring(5, 7) === monthStr)
         .reduce((sum, a) => sum + a.soldAmount, 0);

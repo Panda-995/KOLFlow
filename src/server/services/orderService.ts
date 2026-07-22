@@ -1,7 +1,7 @@
 import db from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { logActivity } from '../routes/utils/index.js';
-import { validateAmount, generateOrderNo, safeJsonParse } from '../routes/utils/helpers.js';
+import { formatLocalDate, generateOrderNo, isValidDateOnly, safeJsonParse, validateAmount } from '../routes/utils/helpers.js';
 
 type OrderRow = {
   id: string;
@@ -33,6 +33,7 @@ type OrderInput = {
   submitDate?: string | null;
   productName?: string | null;
   productValue?: number;
+  operationDate?: string;
 };
 
 type OrderUpdate = Partial<OrderInput>;
@@ -119,7 +120,13 @@ const syncOrderTodo = (order: OrderRow, userId: string): void => {
   );
 };
 
-const upsertPaymentFromOrder = (order: OrderRow, userId: string): string | null => {
+const resolveOperationDate = (value: unknown): string => {
+  if (value === undefined || value === null || value === '') return formatLocalDate();
+  if (!isValidDateOnly(value)) throw new Error('操作日期无效');
+  return value;
+};
+
+const upsertPaymentFromOrder = (order: OrderRow, userId: string, operationDate?: string): string | null => {
   if (order.status !== 'completed' || !isMonetaryType(order.type) || toNumber(order.actualAmount) <= 0) {
     db.prepare('DELETE FROM payments WHERE orderNo = ? AND userId = ?').run(order.orderNo, userId);
     return null;
@@ -136,9 +143,10 @@ const upsertPaymentFromOrder = (order: OrderRow, userId: string): string | null 
   }
 
   const paymentId = uuidv4();
+  const dueDate = resolveOperationDate(operationDate);
   db.prepare(`
-    INSERT INTO payments (id, userId, orderNo, brand, amount, type, date, method)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO payments (id, userId, orderNo, brand, amount, type, date, dueDate, settledDate, method)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
   `).run(
     paymentId,
     userId,
@@ -146,7 +154,8 @@ const upsertPaymentFromOrder = (order: OrderRow, userId: string): string | null 
     order.brandName || null,
     order.actualAmount,
     'pending',
-    new Date().toISOString().split('T')[0],
+    dueDate,
+    dueDate,
     '待结算',
   );
   logActivity(userId, 'auto_create', 'payment', paymentId, `商单完成自动创建账单: ${order.brandName || '未知品牌'} ¥${order.actualAmount}`);
@@ -180,15 +189,15 @@ const upsertAssetFromOrder = (order: OrderRow, userId: string): string | null =>
   return assetId;
 };
 
-export const syncOrderDerivedRecords = (order: any, userId: string): void => {
+export const syncOrderDerivedRecords = (order: any, userId: string, operationDate?: string): void => {
   const normalizedOrder = normalizeOrder(order);
   syncOrderTodo(normalizedOrder, userId);
-  upsertPaymentFromOrder(normalizedOrder, userId);
+  upsertPaymentFromOrder(normalizedOrder, userId, operationDate);
   upsertAssetFromOrder(normalizedOrder, userId);
 };
 
 export const createOrderWithTodo = (userId: string, orderData: OrderInput) => {
-  const { title, type, status, expectedAmount, actualAmount, brandName, platforms, acceptDate, submitDate, productName, productValue } = orderData;
+  const { title, type, status, expectedAmount, actualAmount, brandName, platforms, acceptDate, submitDate, productName, productValue, operationDate } = orderData;
 
   if (!title || title.trim().length === 0) {
     throw new Error('商单标题不能为空');
@@ -250,7 +259,7 @@ export const createOrderWithTodo = (userId: string, orderData: OrderInput) => {
     );
 
     const order = db.prepare('SELECT * FROM orders WHERE id = ? AND userId = ?').get(id, userId) as any;
-    syncOrderDerivedRecords(order, userId);
+    syncOrderDerivedRecords(order, userId, operationDate);
     logActivity(userId, 'create', 'order', id, `创建商单: ${title.trim()} (${orderNo})`);
     return order;
   });
@@ -319,7 +328,7 @@ export const updateOrderWithSync = (userId: string, orderId: string, updateData:
       userId,
     );
 
-    syncOrderDerivedRecords(newOrder, userId);
+    syncOrderDerivedRecords(newOrder, userId, updateData.operationDate);
 
     if (updateData.status !== undefined && newOrder.status !== existing.status) {
       logActivity(userId, 'update_status', 'order', orderId, `商单状态变更: ${existing.title} (${existing.status} -> ${newOrder.status})`);

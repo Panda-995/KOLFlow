@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import db from '../db.js';
-import { v4 as uuidv4 } from 'uuid';
 import { getUserId } from './utils/index.js';
+import { createTodo, listTodos, updateTodo } from '../services/todoService.js';
+import { getApiErrorMessage, getApiErrorStatus } from '../services/errors.js';
 
 const router = Router();
 
@@ -9,14 +10,7 @@ const router = Router();
 router.get('/', (req, res) => {
   try {
     const userId = getUserId(req);
-    const todos = db.prepare(`
-      SELECT t.*, o.status as orderStatus, o.orderNo as orderNo
-      FROM todos t
-      LEFT JOIN orders o ON t.orderId = o.id AND o.userId = t.userId
-      WHERE t.userId = ?
-      ORDER BY t.createdAt DESC
-    `).all(userId);
-    return res.json(todos.map((t: any) => ({ ...t, completed: Boolean(t.completed) })));
+    return res.json(listTodos(userId));
   } catch (error) {
     console.error('获取待办列表错误:', error instanceof Error ? error.message : error);
     return res.status(500).json({ 
@@ -29,60 +23,20 @@ router.get('/', (req, res) => {
 // 创建待办
 router.post('/', (req, res) => {
   try {
-    const userId = getUserId(req);
-    const { content, priority, dueDate, orderId, brandId, category } = req.body;
-
-    if (!content || content.trim().length === 0) {
-      return res.status(400).json({ error: '待办内容不能为空' });
-    }
-
-    const id = uuidv4();
-    db.prepare(`
-      INSERT INTO todos (id, userId, content, priority, category, completed, dueDate, orderId, brandId)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, userId, content.trim(), priority || 'medium', category || null, 0, dueDate || null, orderId || null, brandId || null);
-
-    const newTodo = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as any;
-    newTodo.completed = Boolean(newTodo.completed);
-    return res.json(newTodo);
+    return res.json(createTodo(getUserId(req), req.body));
   } catch (error) {
     console.error('创建待办错误:', error);
-    return res.status(500).json({ error: '创建待办失败，请稍后重试' });
+    return res.status(getApiErrorStatus(error)).json({ error: getApiErrorMessage(error, '创建待办失败，请稍后重试') });
   }
 });
 
 // 更新待办
 router.put('/:id/update', (req, res) => {
   try {
-    const userId = getUserId(req);
-    const { id } = req.params;
-    const { content, priority, category, completed, dueDate, brandId } = req.body;
-
-    const existing = db.prepare('SELECT * FROM todos WHERE id = ? AND userId = ?').get(id, userId) as any;
-    if (!existing) return res.status(404).json({ error: '待办事项不存在' });
-
-    const newContent = content !== undefined ? content : existing.content;
-    const newPriority = priority !== undefined ? priority : existing.priority;
-    const newCategory = category !== undefined ? category : existing.category;
-    const newCompleted = completed !== undefined ? (completed ? 1 : 0) : existing.completed;
-    const newDueDate = dueDate !== undefined ? dueDate : existing.dueDate;
-    const newBrandId = brandId !== undefined ? brandId : existing.brandId;
-
-    db.prepare(`
-      UPDATE todos
-      SET content = ?, priority = ?, category = ?, completed = ?, dueDate = ?, brandId = ?
-      WHERE id = ?
-    `).run(newContent, newPriority, newCategory, newCompleted, newDueDate, newBrandId, id);
-
-    const updated = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as any;
-    updated.completed = Boolean(updated.completed);
-    return res.json(updated);
+    return res.json(updateTodo(getUserId(req), req.params.id, req.body));
   } catch (error) {
     console.error('更新待办错误:', error instanceof Error ? error.message : error);
-    return res.status(500).json({ 
-      error: '更新待办失败，请稍后重试',
-      timestamp: new Date().toISOString()
-    });
+    return res.status(getApiErrorStatus(error)).json({ error: getApiErrorMessage(error, '更新待办失败，请稍后重试') });
   }
 });
 

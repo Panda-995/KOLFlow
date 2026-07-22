@@ -20,7 +20,9 @@ router.get('/:type', (req, res) => {
   let startDate: Date;
 
   if (type === 'weekly') {
-    startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    startDate = new Date(now);
+    const dayOfWeek = startDate.getDay() || 7;
+    startDate.setDate(startDate.getDate() - dayOfWeek + 1);
   } else {
     startDate = new Date(now.getFullYear(), now.getMonth(), 1);
   }
@@ -36,9 +38,13 @@ router.get('/:type', (req, res) => {
 
   const payments = db.prepare(`
     SELECT * FROM payments
-    WHERE userId = ? AND date >= ? AND date <= ?
-    ORDER BY date DESC
-  `).all(userId, startDateStr, endDateStr) as any[];
+    WHERE userId = ? AND (
+      (type = 'settled' AND COALESCE(settledDate, date) >= ? AND COALESCE(settledDate, date) <= ?)
+      OR
+      (type = 'pending' AND COALESCE(dueDate, date) >= ? AND COALESCE(dueDate, date) <= ?)
+    )
+    ORDER BY COALESCE(settledDate, dueDate, date) DESC
+  `).all(userId, startDateStr, endDateStr, startDateStr, endDateStr) as any[];
 
   const totalOrders = orders.length;
   const completedOrders = orders.filter(o => o.status === 'completed').length;

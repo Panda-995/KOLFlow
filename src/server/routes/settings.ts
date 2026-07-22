@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import db from '../db.js';
+import db, { generateUniqueApiKey } from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcrypt';
-import { logActivity, getUserId, generateSecureRandom } from './utils/index.js';
+import { logActivity, getUserId } from './utils/index.js';
 import { validateEmail, validatePassword } from './utils/helpers.js';
 
 const router = Router();
@@ -41,19 +41,24 @@ router.get('/', (req, res) => {
 // 更新设置
 router.put('/', (req, res) => {
   const userId = getUserId(req);
-  const { displayName, email, bio, orderReminder, weeklyReport, avatar } = req.body;
+  const { displayName, bio, orderReminder, weeklyReport, avatar, reportFrequency } = req.body;
 
   const existing = db.prepare('SELECT * FROM settings WHERE userId = ?').get(userId) as any;
   if (!existing) {
     return res.status(404).json({ error: 'Settings not found' });
   }
+  const user = db.prepare('SELECT email FROM users WHERE id = ?').get(userId) as { email: string } | undefined;
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
   const newAvatar = avatar !== undefined ? avatar : existing.avatar;
+  const normalizedFrequency = reportFrequency === 'monthly' ? 'monthly' : 'weekly';
 
   db.prepare(`
     UPDATE settings
-    SET displayName = ?, email = ?, bio = ?, orderReminder = ?, weeklyReport = ?, avatar = ?
+    SET displayName = ?, email = ?, bio = ?, orderReminder = ?, weeklyReport = ?, avatar = ?, reportFrequency = ?
     WHERE userId = ?
-  `).run(displayName, email, bio, orderReminder ? 1 : 0, weeklyReport ? 1 : 0, newAvatar, userId);
+  `).run(displayName, user.email, bio, orderReminder ? 1 : 0, weeklyReport ? 1 : 0, newAvatar, normalizedFrequency, userId);
 
   const updatedSettings = db.prepare('SELECT * FROM settings WHERE userId = ?').get(userId) as any;
 
@@ -174,7 +179,7 @@ router.post('/apikey', (req, res) => {
   const userId = getUserId(req);
   try {
     // 生成 API Key - 24字符安全token
-    const newApiKey = generateSecureRandom(24);
+    const newApiKey = generateUniqueApiKey();
 
     const tableInfo = db.prepare("PRAGMA table_info(settings)").all() as any[];
     const hasApiKeyColumn = tableInfo.some(col => col.name === 'apiKey');

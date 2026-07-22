@@ -2,7 +2,8 @@ import { Router } from 'express';
 import db from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { logActivity, getUserId } from './utils/index.js';
-import { validateAmount } from './utils/helpers.js';
+import { formatLocalDate, isValidDateOnly, validateAmount } from './utils/helpers.js';
+import { ApiError, getApiErrorMessage, getApiErrorStatus } from '../services/errors.js';
 
 const router = Router();
 
@@ -25,6 +26,12 @@ const adjustBrandIncome = (userId: string, brandName: string | null | undefined,
   const brand = db.prepare('SELECT id FROM brands WHERE name = ? AND userId = ?').get(brandName, userId) as any;
   if (!brand) return;
   db.prepare('UPDATE brands SET totalIncome = MAX(0, totalIncome + ?) WHERE id = ?').run(delta, brand.id);
+};
+
+const resolveOperationDate = (value: unknown): string => {
+  if (value === undefined || value === null || value === '') return formatLocalDate();
+  if (!isValidDateOnly(value)) throw new ApiError('操作日期无效');
+  return value;
 };
 
 router.get('/', (req, res) => {
@@ -102,7 +109,7 @@ router.get('/:id', (req, res) => {
 router.post('/', (req, res) => {
   try {
     const userId = getUserId(req);
-    const { brandName, productName, productValue, image, saleStatus, soldAmount } = req.body;
+    const { brandName, productName, productValue, image, saleStatus, soldAmount, operationDate } = req.body;
 
     if (!productName || productName.trim().length === 0) {
       return res.status(400).json({ error: '资产名称不能为空' });
@@ -113,9 +120,12 @@ router.post('/', (req, res) => {
     }
 
     const id = uuidv4();
+    if (saleStatus !== undefined && saleStatus !== 'sold' && saleStatus !== 'keep') {
+      return res.status(400).json({ error: '资产状态无效' });
+    }
     const normalizedSaleStatus = saleStatus === 'sold' ? 'sold' : 'keep';
     const normalizedSoldAmount = normalizedSaleStatus === 'sold' ? (Number(soldAmount) || 0) : 0;
-    const soldDate = normalizedSaleStatus === 'sold' ? new Date().toISOString().split('T')[0] : null;
+    const soldDate = normalizedSaleStatus === 'sold' ? resolveOperationDate(operationDate) : null;
 
     const createAsset = db.transaction(() => {
       db.prepare(`
@@ -145,8 +155,8 @@ router.post('/', (req, res) => {
     return res.json(created);
   } catch (error) {
     console.error('创建资产错误:', error instanceof Error ? error.message : error);
-    return res.status(500).json({
-      error: '创建资产失败',
+    return res.status(getApiErrorStatus(error)).json({
+      error: getApiErrorMessage(error, '创建资产失败'),
       timestamp: new Date().toISOString()
     });
   }
@@ -156,7 +166,7 @@ router.put('/:id', (req, res) => {
   try {
     const userId = getUserId(req);
     const { id } = req.params;
-    const { productName, productValue, image, saleStatus, soldAmount } = req.body;
+    const { productName, productValue, image, saleStatus, soldAmount, operationDate } = req.body;
 
     const existing = db.prepare('SELECT * FROM assets WHERE id = ? AND userId = ?').get(id, userId) as any;
     if (!existing) {
@@ -164,15 +174,25 @@ router.put('/:id', (req, res) => {
     }
 
     const newProductName = productName !== undefined ? productName : existing.productName;
+    if (typeof newProductName !== 'string' || !newProductName.trim()) {
+      return res.status(400).json({ error: '资产名称不能为空' });
+    }
     const newProductValue = productValue !== undefined ? productValue : existing.productValue;
     const newImage = image !== undefined ? image : existing.image;
     const newSaleStatus = saleStatus !== undefined ? saleStatus : (existing.saleStatus || 'keep');
-    const newSoldAmount = soldAmount !== undefined ? soldAmount : (existing.soldAmount || 0);
+    if (newSaleStatus !== 'sold' && newSaleStatus !== 'keep') {
+      return res.status(400).json({ error: '资产状态无效' });
+    }
+    const requestedSoldAmount = soldAmount !== undefined ? soldAmount : (existing.soldAmount || 0);
+    if (!validateAmount(newProductValue) || !validateAmount(requestedSoldAmount)) {
+      return res.status(400).json({ error: '金额数值无效' });
+    }
+    const newSoldAmount = newSaleStatus === 'sold' ? (Number(requestedSoldAmount) || 0) : 0;
 
     let newSoldDate = existing.soldDate || null;
     if (saleStatus !== undefined && saleStatus !== existing.saleStatus) {
       if (saleStatus === 'sold') {
-        newSoldDate = new Date().toISOString().split('T')[0];
+        newSoldDate = resolveOperationDate(operationDate);
       } else {
         newSoldDate = null;
       }
@@ -181,13 +201,13 @@ router.put('/:id', (req, res) => {
     const updateAsset = db.transaction(() => {
       db.prepare(`
         UPDATE assets SET productName = ?, productValue = ?, image = ?, saleStatus = ?, soldAmount = ?, soldDate = ? WHERE id = ? AND userId = ?
-      `).run(newProductName, newProductValue, newImage, newSaleStatus, newSoldAmount, newSoldDate, id, userId);
+      `).run(newProductName.trim(), Number(newProductValue) || 0, newImage, newSaleStatus, newSoldAmount, newSoldDate, id, userId);
 
       const oldIncome = getAssetIncome(existing);
       const newIncome = getAssetIncome({ saleStatus: newSaleStatus, soldAmount: newSoldAmount });
       adjustBrandIncome(userId, existing.brandName, newIncome - oldIncome);
 
-      logActivity(userId, 'update', 'asset', id, `更新资产: ${newProductName}`);
+      logActivity(userId, 'update', 'asset', id, `更新资产: ${newProductName.trim()}`);
 
       return db.prepare('SELECT * FROM assets WHERE id = ? AND userId = ?').get(id, userId);
     });
@@ -196,8 +216,8 @@ router.put('/:id', (req, res) => {
     return res.json(updated);
   } catch (error) {
     console.error('更新资产错误:', error instanceof Error ? error.message : error);
-    return res.status(500).json({
-      error: '更新资产失败',
+    return res.status(getApiErrorStatus(error)).json({
+      error: getApiErrorMessage(error, '更新资产失败'),
       timestamp: new Date().toISOString()
     });
   }

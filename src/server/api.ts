@@ -4,7 +4,7 @@ import externalApi from './externalApi.js';
 
 const router = Router();
 
-router.use('/', routes);
 router.use('/external', externalApi);
+router.use('/', routes);
 
 export default router;

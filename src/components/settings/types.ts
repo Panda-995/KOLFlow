@@ -1,5 +1,6 @@
 import type { Settings } from '../../types';
 import type { RefObject } from 'react';
+import type { WebdavConfig } from '../../lib/webdav';
 
 // 主题色配置
 export const THEME_COLORS = [
@@ -28,12 +29,7 @@ export interface SecurityFormData {
 }
 
 // WebDAV配置类型
-export interface WebdavConfig {
-  url: string;
-  username: string;
-  password: string;
-  syncInterval: string;
-}
+export type { WebdavConfig } from '../../lib/webdav';
 
 // ProfileTab Props
 export interface ProfileTabProps {
@@ -101,7 +97,6 @@ export interface SyncTabProps {
   isSyncing: boolean;
   handleSaveWebdavConfig: () => void;
   handleWebdavSync: (direction: 'upload' | 'download') => void;
-  setWebdavRestoreConfirm: React.Dispatch<React.SetStateAction<boolean>>;
   showToast: (message: string, type?: 'success' | 'error' | 'warning') => void;
 }
 

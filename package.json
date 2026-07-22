@@ -10,6 +10,7 @@
   },
   "scripts": {
     "dev": "tsx server.ts",
+    "test": "tsx --test tests/regressions.test.ts",
     "build": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
     "preview": "vite preview",
@@ -23,12 +24,12 @@
     "cap:live": "npx cap run android --livereload --external"
   },
   "dependencies": {
-    "@capacitor/android": "^8.4.1",
-    "@capacitor/cli": "^8.4.1",
-    "@capacitor/core": "^8.4.1",
+    "@capacitor/android": "^8.4.2",
+    "@capacitor/cli": "^8.4.2",
+    "@capacitor/core": "^8.4.2",
     "@capacitor/keyboard": "^8.0.5",
-    "@capacitor/splash-screen": "^8.0.1",
-    "@capacitor/status-bar": "^8.0.2",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.3",
     "@tailwindcss/vite": "^4.3.0",
     "@vitejs/plugin-react": "^5.2.0",
     "bcrypt": "^6.0.0",
@@ -73,6 +74,8 @@
     "path-to-regexp": "0.1.13",
     "picomatch": "4.0.4",
     "postcss": "8.5.15",
-    "tar": "7.5.16"
+    "body-parser": "1.20.6",
+    "brace-expansion": "5.0.7",
+    "tar": "7.5.21"
   }
 }

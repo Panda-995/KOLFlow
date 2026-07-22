@@ -6,9 +6,12 @@ import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
 import { clsx } from 'clsx';
-import { ALL_MONTHS, ALL_YEARS, getAvailableYears, matchesYearMonth, monthOptions } from '../lib/dateFilter';
+import { ALL_MONTHS, ALL_YEARS, formatLocalDate, getAvailableYears, matchesYearMonth, monthOptions } from '../lib/dateFilter';
 
 const getPaymentCreatedDate = (payment: Payment): string => payment.createdAt || payment.date;
+const getPaymentBusinessDate = (payment: Payment): string => payment.type === 'settled'
+  ? (payment.settledDate || payment.date)
+  : (payment.dueDate || payment.date);
 
 const normalizeMonthParam = (value: string | null): string => {
   if (!value) return ALL_MONTHS;
@@ -23,7 +26,7 @@ const normalizeMonthParam = (value: string | null): string => {
 };
 
 const isSettledPaymentInMonth = (payment: Payment, year: number, monthIndex: number): boolean => {
-  return payment.type === 'settled' && matchesYearMonth(payment.date, String(year), String(monthIndex + 1).padStart(2, '0'));
+  return payment.type === 'settled' && matchesYearMonth(payment.settledDate || payment.date, String(year), String(monthIndex + 1).padStart(2, '0'));
 };
 
 export default function Billing() {
@@ -44,7 +47,8 @@ export default function Billing() {
     brand: '',
     amount: '',
     type: 'pending' as Payment['type'],
-    date: '',
+    dueDate: '',
+    settledDate: '',
     method: ''
   });
 
@@ -72,7 +76,7 @@ export default function Billing() {
       }
       setIsModalOpen(false);
       setEditingPayment(null);
-      setFormData({ orderNo: '', brand: '', amount: '', type: 'pending', date: '', method: '' });
+      setFormData({ orderNo: '', brand: '', amount: '', type: 'pending', dueDate: '', settledDate: '', method: '' });
     } catch (error) {
       showToast(error instanceof Error ? error.message : '操作失败', 'error');
     }
@@ -85,10 +89,21 @@ export default function Billing() {
       brand: payment.brand || '',
       amount: payment.amount.toString(),
       type: payment.type,
-      date: payment.date || '',
+      dueDate: payment.dueDate || (payment.type === 'pending' ? payment.date : ''),
+      settledDate: payment.settledDate || (payment.type === 'settled' ? payment.date : ''),
       method: payment.method || ''
     });
     setIsModalOpen(true);
+  };
+
+  const handlePaymentTypeChange = (type: Payment['type']) => {
+    setFormData(current => ({
+      ...current,
+      type,
+      settledDate: type === 'settled' && current.type !== 'settled'
+        ? formatLocalDate()
+        : current.settledDate
+    }));
   };
 
   const handleDelete = (payment: Payment) => {
@@ -139,6 +154,8 @@ export default function Billing() {
         payment.brand,
         payment.orderNo,
         payment.method,
+        payment.dueDate,
+        payment.settledDate,
         payment.date,
         getPaymentCreatedDate(payment),
         String(payment.amount),
@@ -160,11 +177,12 @@ export default function Billing() {
   }, [scopedPayments, filterType]);
 
   const handleExport = () => {
-    const headers = ['日期', '关联商单', '品牌方', '金额', '状态', '备注'];
+    const headers = ['截止日期', '结算日期', '关联商单', '品牌方', '金额', '状态', '备注'];
     const csvContent = [
       headers.join(','),
       ...filteredPayments.map(p => [
-        `"${p.date || ''}"`,
+        `"${p.dueDate || (p.type === 'pending' ? p.date : '')}"`,
+        `"${p.settledDate || (p.type === 'settled' ? p.date : '')}"`,
         `"${p.orderNo || ''}"`,
         `"${p.brand || ''}"`,
         p.amount,
@@ -177,7 +195,7 @@ export default function Billing() {
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `账单报表_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `账单报表_${formatLocalDate()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -193,7 +211,7 @@ export default function Billing() {
             <Download size={14} />
             导出
           </button>
-          <button onClick={() => { setEditingPayment(null); setFormData({ orderNo: '', brand: '', amount: '', type: 'pending', date: '', method: '' }); setIsModalOpen(true); }} className="btn-sketch flex items-center justify-center gap-1 text-xs md:text-sm py-1.5 px-2.5 md:px-3">
+          <button onClick={() => { setEditingPayment(null); setFormData({ orderNo: '', brand: '', amount: '', type: 'pending', dueDate: '', settledDate: '', method: '' }); setIsModalOpen(true); }} className="btn-sketch flex items-center justify-center gap-1 text-xs md:text-sm py-1.5 px-2.5 md:px-3">
             <span>+</span> 记账
           </button>
         </div>
@@ -308,7 +326,7 @@ export default function Billing() {
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-[10px] text-gray-500">
-                  <span>{payment.date || '-'}</span>
+                  <span>{getPaymentBusinessDate(payment) || '-'}</span>
                   {payment.orderNo && <span className="font-mono">({payment.orderNo})</span>}
                 </div>
                 <div className="flex items-center gap-1">
@@ -349,7 +367,7 @@ export default function Billing() {
           <table className="w-full text-left text-xs">
             <thead className="bg-gray-50 text-gray-500">
               <tr>
-                <th className="px-4 py-3 font-medium">日期</th>
+                <th className="px-4 py-3 font-medium">截止/结算日期</th>
                 <th className="px-4 py-3 font-medium">关联商单</th>
                 <th className="px-4 py-3 font-medium">品牌方</th>
                 <th className="px-4 py-3 font-medium">金额</th>
@@ -360,7 +378,7 @@ export default function Billing() {
             <tbody className="divide-y divide-panda-black/5">
               {filteredPayments.map(payment => (
                 <tr key={payment.id} className="hover:bg-gray-50/50 transition-colors group">
-                  <td className="px-4 py-3 text-gray-600">{payment.date || '-'}</td>
+                  <td className="px-4 py-3 text-gray-600">{getPaymentBusinessDate(payment) || '-'}</td>
                   <td className="px-4 py-3 font-mono text-xs text-gray-500">{payment.orderNo || '-'}</td>
                   <td className="px-4 py-3 font-medium">{payment.brand || '-'}</td>
                   <td className="px-4 py-3 font-mono font-bold">
@@ -438,7 +456,7 @@ export default function Billing() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">状态</label>
-              <select value={formData.type} onChange={e => setFormData({...formData, type: e.target.value as 'settled' | 'pending'})} className="input-sketch">
+              <select value={formData.type} onChange={e => handlePaymentTypeChange(e.target.value as Payment['type'])} className="input-sketch">
                 <option value="pending">待结算</option>
                 <option value="settled">已结算</option>
               </select>
@@ -446,8 +464,17 @@ export default function Billing() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">日期</label>
-              <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="input-sketch" />
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                {formData.type === 'settled' ? '结算日期' : '预计收款日期'}
+              </label>
+              <input
+                type="date"
+                value={formData.type === 'settled' ? formData.settledDate : formData.dueDate}
+                onChange={e => setFormData(formData.type === 'settled'
+                  ? { ...formData, settledDate: e.target.value }
+                  : { ...formData, dueDate: e.target.value })}
+                className="input-sketch"
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">备注</label>

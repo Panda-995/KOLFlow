@@ -91,6 +91,8 @@ db.exec(`
     amount REAL NOT NULL,
     type TEXT DEFAULT 'pending',
     date TEXT,
+    dueDate TEXT,
+    settledDate TEXT,
     method TEXT,
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (userId) REFERENCES users(id)
@@ -226,6 +228,60 @@ for (const col of requiredColumns) {
   }
 }
 
+// API Key 必须唯一。升级旧数据库时保留第一条，其他重复记录生成新 Key。
+export const generateUniqueApiKey = (): string => {
+  let apiKey: string;
+  do {
+    apiKey = crypto.randomBytes(12).toString('hex');
+  } while (db.prepare('SELECT 1 FROM settings WHERE apiKey = ?').get(apiKey));
+  return apiKey;
+};
+
+const ensureUniqueApiKeys = db.transaction(() => {
+  const duplicateKeys = db.prepare(`
+    SELECT apiKey
+    FROM settings
+    WHERE apiKey IS NOT NULL AND apiKey <> ''
+    GROUP BY apiKey
+    HAVING COUNT(*) > 1
+  `).all() as Array<{ apiKey: string }>;
+
+  const duplicateRows = db.prepare('SELECT rowid FROM settings WHERE apiKey = ? ORDER BY rowid ASC');
+  const replaceApiKey = db.prepare('UPDATE settings SET apiKey = ? WHERE rowid = ?');
+  for (const { apiKey } of duplicateKeys) {
+    const rows = duplicateRows.all(apiKey) as Array<{ rowid: number }>;
+    for (const row of rows.slice(1)) {
+      replaceApiKey.run(generateUniqueApiKey(), row.rowid);
+    }
+  }
+});
+
+ensureUniqueApiKeys();
+db.exec(`
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_settings_apiKey
+  ON settings(apiKey)
+  WHERE apiKey IS NOT NULL AND apiKey <> ''
+`);
+
+// 账单日期拆分：旧版 date 在待结算时表示截止日期，已结算时表示结算日期。
+const paymentColumns = db.prepare("PRAGMA table_info(payments)").all() as Array<{ name: string }>;
+const paymentColumnNames = new Set(paymentColumns.map(column => column.name));
+if (!paymentColumnNames.has('dueDate')) {
+  db.exec('ALTER TABLE payments ADD COLUMN dueDate TEXT;');
+}
+if (!paymentColumnNames.has('settledDate')) {
+  db.exec('ALTER TABLE payments ADD COLUMN settledDate TEXT;');
+}
+db.exec(`
+  UPDATE payments
+  SET dueDate = CASE WHEN type = 'pending' THEN date ELSE dueDate END
+  WHERE dueDate IS NULL;
+
+  UPDATE payments
+  SET settledDate = CASE WHEN type = 'settled' THEN date ELSE settledDate END
+  WHERE settledDate IS NULL;
+`);
+
 // Ensure publish_links table exists
 const publishLinksExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='publish_links'").get() as any;
 if (!publishLinksExists) {
@@ -342,6 +398,8 @@ const createIndexes = () => {
     'CREATE INDEX IF NOT EXISTS idx_payments_userId ON payments(userId)',
     'CREATE INDEX IF NOT EXISTS idx_payments_type ON payments(type)',
     'CREATE INDEX IF NOT EXISTS idx_payments_date ON payments(date)',
+    'CREATE INDEX IF NOT EXISTS idx_payments_dueDate ON payments(dueDate)',
+    'CREATE INDEX IF NOT EXISTS idx_payments_settledDate ON payments(settledDate)',
     'CREATE INDEX IF NOT EXISTS idx_todos_userId ON todos(userId)',
     'CREATE INDEX IF NOT EXISTS idx_todos_dueDate ON todos(dueDate)',
     'CREATE INDEX IF NOT EXISTS idx_todos_completed ON todos(completed)',

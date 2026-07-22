@@ -26,7 +26,7 @@ export function BackupTab({ handleExportData, handleImportData, importInputRef, 
               <Upload className="text-accent" size={24} />
             </div>
             <span className="font-bold text-panda-black">导入数据</span>
-            <span className="text-xs text-gray-500 mt-1">从备份文件恢复数据</span>
+            <span className="text-xs text-gray-500 mt-1">预检后从备份文件恢复</span>
             <input 
               type="file" 
               ref={importInputRef} 

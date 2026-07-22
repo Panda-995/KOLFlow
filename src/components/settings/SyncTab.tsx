@@ -56,6 +56,7 @@ export function SyncTab({
                 className="w-full px-4 py-2.5 bg-bg-tertiary border border-transparent focus:border-accent focus:bg-white rounded-xl outline-none transition-all text-sm"
                 placeholder="WebDAV 密码"
               />
+              <p className="text-xs text-gray-400">密码仅保存在当前浏览器会话，关闭浏览器后需要重新输入。</p>
             </div>
           </div>
 
@@ -71,6 +72,7 @@ export function SyncTab({
               <option value="24">每天</option>
               <option value="168">每周</option>
             </select>
+            <p className="text-xs text-gray-400">应用保持打开时，会在所有页面按该周期自动上传备份。</p>
           </div>
 
           {lastSyncTime && (

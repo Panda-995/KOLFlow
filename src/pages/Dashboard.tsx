@@ -7,13 +7,9 @@ import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { AreaChartComponent } from '../components/charts/MemoizedCharts';
 import TodoItem from '../components/todos/TodoItem';
+import { parseLocalDate } from '../lib/dateFilter';
 
-// 日期解析辅助函数 - 提取到组件外部避免重复创建
-const safeParseDate = (dateStr: string | null | undefined): Date | null => {
-  if (!dateStr) return null;
-  const date = new Date(dateStr);
-  return isNaN(date.getTime()) ? null : date;
-};
+const getSettledDate = (payment: { settledDate?: string; date?: string }) => payment.settledDate || payment.date || '';
 
 export default function Dashboard() {
   const { orders, todos, toggleTodo, payments, assets } = useStore();
@@ -47,13 +43,13 @@ export default function Dashboard() {
   const paymentStats = useMemo(() => {
     const monthlyIncome = payments.filter(p => {
       if (p.type !== 'settled') return false;
-      const date = safeParseDate(p.date);
+      const date = parseLocalDate(getSettledDate(p));
       return date && date.getMonth() === currentMonth && date.getFullYear() === currentYear;
     }).reduce((acc, p) => acc + p.amount, 0);
 
     const lastMonthIncome = payments.filter(p => {
       if (p.type !== 'settled') return false;
-      const date = safeParseDate(p.date);
+      const date = parseLocalDate(getSettledDate(p));
       if (!date) return false;
       return date.getMonth() === (currentMonth === 0 ? 11 : currentMonth - 1) &&
              date.getFullYear() === (currentMonth === 0 ? currentYear - 1 : currentYear);
@@ -61,13 +57,13 @@ export default function Dashboard() {
 
     const monthlyAssetIncome = assets.filter(a => {
       if (a.saleStatus !== 'sold' || !a.soldDate) return false;
-      const date = safeParseDate(a.soldDate);
+      const date = parseLocalDate(a.soldDate);
       return date && date.getMonth() === currentMonth && date.getFullYear() === currentYear;
     }).reduce((acc, a) => acc + a.soldAmount, 0);
 
     const lastMonthAssetIncome = assets.filter(a => {
       if (a.saleStatus !== 'sold' || !a.soldDate) return false;
-      const date = safeParseDate(a.soldDate);
+      const date = parseLocalDate(a.soldDate);
       if (!date) return false;
       return date.getMonth() === (currentMonth === 0 ? 11 : currentMonth - 1) &&
              date.getFullYear() === (currentMonth === 0 ? currentYear - 1 : currentYear);
@@ -89,13 +85,13 @@ export default function Dashboard() {
 
     // 本月新增商单
     const newOrdersThisMonth = orders.filter(o => {
-      const date = safeParseDate(o.acceptDate);
+      const date = parseLocalDate(o.acceptDate);
       return date && date.getMonth() === currentMonth && date.getFullYear() === currentYear;
     }).length;
 
     // 上月完成率
     const lastMonthOrders = orders.filter(o => {
-      const date = safeParseDate(o.acceptDate);
+      const date = parseLocalDate(o.acceptDate);
       if (!date) return false;
       return date.getMonth() === (currentMonth === 0 ? 11 : currentMonth - 1) &&
              date.getFullYear() === (currentMonth === 0 ? currentYear - 1 : currentYear);
@@ -121,7 +117,7 @@ export default function Dashboard() {
 
   const data = useMemo(() => {
     const currentYear = new Date().getFullYear().toString();
-    const yearPayments = payments.filter(p => p.date && p.date.startsWith(currentYear) && p.type === 'settled');
+    const yearPayments = payments.filter(p => getSettledDate(p).startsWith(currentYear) && p.type === 'settled');
     
     const monthlyStats = Array.from({ length: 12 }, (_, i) => ({
       name: `${i + 1}月`,
@@ -130,7 +126,7 @@ export default function Dashboard() {
     }));
 
     yearPayments.forEach(payment => {
-      const month = safeParseDate(payment.date)?.getMonth();
+      const month = parseLocalDate(getSettledDate(payment))?.getMonth();
       if (month !== undefined && month !== null && !isNaN(month)) {
         monthlyStats[month].income += payment.amount;
       }
@@ -138,7 +134,7 @@ export default function Dashboard() {
 
     assets.filter(a => a.saleStatus === 'sold' && a.soldDate && a.soldDate.startsWith(currentYear))
       .forEach(a => {
-        const month = safeParseDate(a.soldDate!)?.getMonth();
+        const month = parseLocalDate(a.soldDate!)?.getMonth();
         if (month !== undefined && month !== null && !isNaN(month)) {
           monthlyStats[month].income += a.soldAmount;
         }

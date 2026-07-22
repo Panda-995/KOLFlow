@@ -5,8 +5,10 @@ import Header from './Header';
 import { useStore } from '../store/useStore';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { clsx } from 'clsx';
+import { useWebdavAutoSync } from '../hooks/useWebdavAutoSync';
 
 export default function Layout() {
+  useWebdavAutoSync();
   const { fetchOrders, fetchTodos, fetchBrands, fetchPayments, fetchSettings, fetchAssets, fetchPaidPromotions } = useStore();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);

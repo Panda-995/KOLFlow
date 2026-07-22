@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import db from './db.js';
-import { v4 as uuidv4 } from 'uuid';
 import '../types/index.js'; // 加载Express类型扩展
 import { getUserIdByApiKey } from './routes/utils/index.js';
 import { safeJsonParse } from './routes/utils/helpers.js';
@@ -10,8 +9,14 @@ import {
   updateOrderWithSync,
   deleteOrderWithRelated
 } from './services/orderService.js';
+import { createBrand, deleteBrand, listBrands, updateBrand } from './services/brandService.js';
+import { getApiErrorMessage, getApiErrorStatus } from './services/errors.js';
+import { createPayment, deletePaymentRecord, listPayments, updatePaymentRecord } from './services/paymentService.js';
+import { createTodo, listTodos, updateTodo } from './services/todoService.js';
+import { createPublishLink, deletePublishLink, listPublishLinks } from './services/publishLinkService.js';
 
 const router = Router();
+const BACKUP_VERSION = 2;
 
 // userId验证辅助函数
 function getUserId(req: Express.Request): string {
@@ -72,7 +77,7 @@ router.get('/orders', async (req, res) => {
 router.post('/orders', (req, res) => {
   try {
     const userId = getUserId(req);
-    const { title, type, actualAmount, brandName, platforms, acceptDate, submitDate, productName, productValue } = req.body;
+    const { title, type, actualAmount, brandName, platforms, acceptDate, submitDate, productName, productValue, operationDate } = req.body;
 
     const newOrder = createOrderWithTodo(userId, {
       title,
@@ -83,7 +88,8 @@ router.post('/orders', (req, res) => {
       acceptDate,
       submitDate,
       productName,
-      productValue
+      productValue,
+      operationDate
     });
 
     return res.json(newOrder);
@@ -97,7 +103,7 @@ router.put('/orders/:id', (req, res) => {
   try {
     const userId = getUserId(req);
     const { id } = req.params;
-    const { status, title, type, actualAmount, brandName, platforms, acceptDate, submitDate, productName, productValue } = req.body;
+    const { status, title, type, actualAmount, brandName, platforms, acceptDate, submitDate, productName, productValue, operationDate } = req.body;
 
     const updatedOrder = updateOrderWithSync(userId, id, {
       status,
@@ -109,7 +115,8 @@ router.put('/orders/:id', (req, res) => {
       acceptDate,
       submitDate,
       productName,
-      productValue
+      productValue,
+      operationDate
     });
 
     return res.json(updatedOrder);
@@ -136,71 +143,28 @@ router.delete('/orders/:id', (req, res) => {
 
 router.get('/todos', async (req, res) => {
   try {
-    const userId = getUserId(req);
-    const todos = db.prepare('SELECT * FROM todos WHERE userId = ? ORDER BY createdAt DESC').all(userId);
-    return res.json(todos.map((t: any) => ({ ...t, completed: Boolean(t.completed) })));
+    return res.json(listTodos(getUserId(req)));
   } catch (error) {
     console.error('externalApi GET /todos失败:', error);
-    return res.status(500).json({
-      error: '获取待办失败',
-      timestamp: new Date().toISOString()
-    });
+    return res.status(getApiErrorStatus(error)).json({ error: getApiErrorMessage(error, '获取待办失败') });
   }
 });
 
 router.post('/todos', async (req, res) => {
   try {
-    const userId = getUserId(req);
-    const { content, priority, dueDate, orderId, brandId, category } = req.body;
-    const id = uuidv4();
-    db.prepare(`
-      INSERT INTO todos (id, userId, content, priority, completed, dueDate, orderId, brandId, category)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, userId, content, priority || 'medium', 0, dueDate || null, orderId || null, brandId || null, category || null);
-
-    const newTodo = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as any;
-    newTodo.completed = Boolean(newTodo.completed);
-    return res.json(newTodo);
+    return res.json(createTodo(getUserId(req), req.body));
   } catch (error) {
     console.error('externalApi POST /todos失败:', error);
-    return res.status(500).json({
-      error: '创建待办失败',
-      timestamp: new Date().toISOString()
-    });
+    return res.status(getApiErrorStatus(error)).json({ error: getApiErrorMessage(error, '创建待办失败') });
   }
 });
 
 router.put('/todos/:id', async (req, res) => {
   try {
-    const userId = req.userId;
-    const { id } = req.params;
-    const { content, priority, completed, dueDate } = req.body;
-
-    const existingTodo = db.prepare('SELECT * FROM todos WHERE id = ? AND userId = ?').get(id, userId) as any;
-    if (!existingTodo) {
-      return res.status(404).json({ error: 'Todo not found' });
-    }
-
-    const newContent = content || existingTodo.content;
-    const newPriority = priority || existingTodo.priority;
-    const newCompleted = completed !== undefined ? (completed ? 1 : 0) : existingTodo.completed;
-    const newDueDate = dueDate !== undefined ? dueDate : existingTodo.dueDate;
-
-    db.prepare(`
-      UPDATE todos
-      SET content = ?, priority = ?, completed = ?, dueDate = ?
-      WHERE id = ?
-    `).run(newContent, newPriority, newCompleted, newDueDate, id);
-
-    const updatedTodo = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as any;
-    updatedTodo.completed = Boolean(updatedTodo.completed);
-    return res.json(updatedTodo);
+    return res.json(updateTodo(getUserId(req), req.params.id, req.body));
   } catch (error) {
     console.error('externalApi PUT /todos/:id失败:', error);
-    return res.status(500).json({
-      error: '更新待办失败',
-      timestamp: new Date().toISOString()
-    });
+    return res.status(getApiErrorStatus(error)).json({ error: getApiErrorMessage(error, '更新待办失败') });
   }
 });
 
@@ -208,87 +172,37 @@ router.put('/todos/:id', async (req, res) => {
 
 router.get('/payments', async (req, res) => {
   try {
-    const userId = req.userId;
-    const payments = db.prepare('SELECT * FROM payments WHERE userId = ? ORDER BY createdAt DESC').all(userId);
-    return res.json(payments);
+    return res.json(listPayments(getUserId(req)));
   } catch (error) {
     console.error('externalApi GET /payments失败:', error);
-    return res.status(500).json({
-      error: '获取款项失败',
-      timestamp: new Date().toISOString()
-    });
+    return res.status(getApiErrorStatus(error)).json({ error: getApiErrorMessage(error, '获取款项失败') });
   }
 });
 
 router.post('/payments', async (req, res) => {
   try {
-    const userId = req.userId;
-    const { orderNo, brand, amount, type, date, method } = req.body;
-    const id = uuidv4();
-
-    db.prepare(`
-      INSERT INTO payments (id, userId, orderNo, brand, amount, type, date, method)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, userId, orderNo || null, brand || '', amount || 0, type || 'pending', date || '', method || '');
-
-    const newPayment = db.prepare('SELECT * FROM payments WHERE id = ?').get(id) as any;
-    return res.json(newPayment);
+    return res.json(createPayment(getUserId(req), req.body));
   } catch (error) {
     console.error('externalApi POST /payments失败:', error);
-    return res.status(500).json({
-      error: '创建款项失败',
-      timestamp: new Date().toISOString()
-    });
+    return res.status(getApiErrorStatus(error)).json({ error: getApiErrorMessage(error, '创建款项失败') });
   }
 });
 
 router.put('/payments/:id', async (req, res) => {
   try {
-    const userId = req.userId;
-    const { id } = req.params;
-    const { orderNo, brand, amount, type, date, method } = req.body;
-
-    const existing = db.prepare('SELECT * FROM payments WHERE id = ? AND userId = ?').get(id, userId) as any;
-    if (!existing) {
-      return res.status(404).json({ error: 'Payment not found' });
-    }
-
-    db.prepare(`
-      UPDATE payments SET orderNo = ?, brand = ?, amount = ?, type = ?, date = ?, method = ?
-      WHERE id = ?
-    `).run(
-      orderNo !== undefined ? orderNo : existing.orderNo,
-      brand !== undefined ? brand : existing.brand,
-      amount !== undefined ? amount : existing.amount,
-      type !== undefined ? type : existing.type,
-      date !== undefined ? date : existing.date,
-      method !== undefined ? method : existing.method,
-      id
-    );
-
-    const updated = db.prepare('SELECT * FROM payments WHERE id = ?').get(id) as any;
-    return res.json(updated);
+    return res.json(updatePaymentRecord(getUserId(req), req.params.id, req.body));
   } catch (error) {
     console.error('externalApi PUT /payments/:id失败:', error);
-    return res.status(500).json({
-      error: '更新款项失败',
-      timestamp: new Date().toISOString()
-    });
+    return res.status(getApiErrorStatus(error)).json({ error: getApiErrorMessage(error, '更新款项失败') });
   }
 });
 
 router.delete('/payments/:id', async (req, res) => {
   try {
-    const userId = req.userId;
-    const { id } = req.params;
-    db.prepare('DELETE FROM payments WHERE id = ? AND userId = ?').run(id, userId);
-    return res.json({ success: true });
+    return res.json(deletePaymentRecord(getUserId(req), req.params.id));
   } catch (error) {
     console.error('externalApi DELETE /payments/:id失败:', error);
-    return res.status(500).json({
-      error: '删除款项失败',
-      timestamp: new Date().toISOString()
-    });
+    return res.status(getApiErrorStatus(error)).json({ error: getApiErrorMessage(error, '删除款项失败') });
   }
 });
 
@@ -296,111 +210,37 @@ router.delete('/payments/:id', async (req, res) => {
 
 router.get('/brands', async (req, res) => {
   try {
-    const userId = req.userId;
-    const brands = db.prepare('SELECT * FROM brands WHERE userId = ? ORDER BY createdAt DESC').all(userId);
-    return res.json(brands);
+    return res.json(listBrands(getUserId(req)));
   } catch (error) {
     console.error('externalApi GET /brands失败:', error);
-    return res.status(500).json({
-      error: '获取品牌失败',
-      timestamp: new Date().toISOString()
-    });
+    return res.status(getApiErrorStatus(error)).json({ error: getApiErrorMessage(error, '获取品牌失败') });
   }
 });
 
 router.post('/brands', async (req, res) => {
   try {
-    const userId = req.userId;
-    const { name, industry, contact, phone, contacts } = req.body;
-    const id = uuidv4();
-
-    const contactsJson = contacts && contacts.length > 0
-      ? JSON.stringify(contacts)
-      : (contact || phone ? JSON.stringify([{ id: uuidv4(), name: contact || '', phone: phone || '', note: '' }]) : null);
-
-    db.prepare(`
-      INSERT INTO brands (id, userId, name, industry, contact, phone, contacts)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, userId, name, industry || '', contact || '', phone || '', contactsJson);
-
-    const newBrand = db.prepare('SELECT * FROM brands WHERE id = ?').get(id) as any;
-    newBrand.contacts = newBrand.contacts ? JSON.parse(newBrand.contacts) : [];
-    return res.json(newBrand);
+    return res.json(createBrand(getUserId(req), req.body));
   } catch (error) {
     console.error('externalApi POST /brands失败:', error);
-    return res.status(500).json({
-      error: '创建品牌失败',
-      timestamp: new Date().toISOString()
-    });
+    return res.status(getApiErrorStatus(error)).json({ error: getApiErrorMessage(error, '创建品牌失败') });
   }
 });
 
 router.put('/brands/:id', async (req, res) => {
   try {
-    const userId = req.userId;
-    const { id } = req.params;
-    const { name, industry, contact, phone, contacts } = req.body;
-
-    const existing = db.prepare('SELECT * FROM brands WHERE id = ? AND userId = ?').get(id, userId) as any;
-    if (!existing) {
-      return res.status(404).json({ error: 'Brand not found' });
-    }
-
-    const newContacts = contacts !== undefined
-      ? (contacts.length > 0 ? JSON.stringify(contacts) : null)
-      : existing.contacts;
-
-    db.prepare(`
-      UPDATE brands SET name = ?, industry = ?, contact = ?, phone = ?, contacts = ?
-      WHERE id = ?
-    `).run(
-      name !== undefined ? name : existing.name,
-      industry !== undefined ? industry : existing.industry,
-      contact !== undefined ? contact : existing.contact,
-      phone !== undefined ? phone : existing.phone,
-      newContacts,
-      id
-    );
-
-    const updated = db.prepare('SELECT * FROM brands WHERE id = ?').get(id) as any;
-    updated.contacts = updated.contacts ? JSON.parse(updated.contacts) : [];
-    return res.json(updated);
+    return res.json(updateBrand(getUserId(req), req.params.id, req.body));
   } catch (error) {
     console.error('externalApi PUT /brands/:id失败:', error);
-    return res.status(500).json({
-      error: '更新品牌失败',
-      timestamp: new Date().toISOString()
-    });
+    return res.status(getApiErrorStatus(error)).json({ error: getApiErrorMessage(error, '更新品牌失败') });
   }
 });
 
 router.delete('/brands/:id', async (req, res) => {
   try {
-    const userId = getUserId(req);
-    const { id } = req.params;
-
-    const brand = db.prepare('SELECT name FROM brands WHERE id = ? AND userId = ?').get(id, userId) as any;
-    if (!brand) {
-      res.status(404).json({ error: 'Brand not found' });
-      return;
-    }
-
-    const deleteBrand = db.transaction(() => {
-      db.prepare('UPDATE orders SET brandName = NULL WHERE brandName = ? AND userId = ?').run(brand.name, userId);
-      db.prepare('UPDATE todos SET category = NULL, brandId = NULL WHERE (brandId = ? OR category = ?) AND userId = ?').run(id, brand.name, userId);
-      db.prepare('UPDATE payments SET brand = NULL WHERE brand = ? AND userId = ?').run(brand.name, userId);
-      db.prepare('UPDATE assets SET brandName = NULL WHERE brandName = ? AND userId = ?').run(brand.name, userId);
-      db.prepare('DELETE FROM brands WHERE id = ? AND userId = ?').run(id, userId);
-    });
-
-    deleteBrand();
-    return res.json({ success: true });
+    return res.json(deleteBrand(getUserId(req), req.params.id));
   } catch (error) {
     console.error('externalApi DELETE /brands/:id失败:', error);
-    return res.status(500).json({
-      error: '删除品牌失败',
-      timestamp: new Date().toISOString()
-    });
+    return res.status(getApiErrorStatus(error)).json({ error: getApiErrorMessage(error, '删除品牌失败') });
   }
 });
 
@@ -455,53 +295,28 @@ router.get('/statistics', async (req, res) => {
 
 router.get('/publish-links/:orderId', async (req, res) => {
   try {
-    const userId = req.userId;
-    const { orderId } = req.params;
-    const links = db.prepare('SELECT * FROM publish_links WHERE orderId = ? AND userId = ? ORDER BY createdAt DESC').all(orderId, userId);
-    return res.json(links);
+    return res.json(listPublishLinks(getUserId(req), req.params.orderId));
   } catch (error) {
     console.error('externalApi GET /publish-links/:orderId失败:', error);
-    return res.status(500).json({
-      error: '获取发布链接失败',
-      timestamp: new Date().toISOString()
-    });
+    return res.status(getApiErrorStatus(error)).json({ error: getApiErrorMessage(error, '获取发布链接失败') });
   }
 });
 
 router.post('/publish-links', async (req, res) => {
   try {
-    const userId = req.userId;
-    const { orderId, platform, url } = req.body;
-    const id = uuidv4();
-
-    db.prepare(`
-      INSERT INTO publish_links (id, orderId, userId, platform, url)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(id, orderId, userId, platform || '其他', url);
-
-    const newLink = db.prepare('SELECT * FROM publish_links WHERE id = ?').get(id);
-    return res.json(newLink);
+    return res.json(createPublishLink(getUserId(req), req.body));
   } catch (error) {
     console.error('externalApi POST /publish-links失败:', error);
-    return res.status(500).json({
-      error: '创建发布链接失败',
-      timestamp: new Date().toISOString()
-    });
+    return res.status(getApiErrorStatus(error)).json({ error: getApiErrorMessage(error, '创建发布链接失败') });
   }
 });
 
 router.delete('/publish-links/:id', async (req, res) => {
   try {
-    const userId = req.userId;
-    const { id } = req.params;
-    db.prepare('DELETE FROM publish_links WHERE id = ? AND userId = ?').run(id, userId);
-    return res.json({ success: true });
+    return res.json(deletePublishLink(getUserId(req), req.params.id));
   } catch (error) {
     console.error('externalApi DELETE /publish-links/:id失败:', error);
-    return res.status(500).json({
-      error: '删除发布链接失败',
-      timestamp: new Date().toISOString()
-    });
+    return res.status(getApiErrorStatus(error)).json({ error: getApiErrorMessage(error, '删除发布链接失败') });
   }
 });
 
@@ -563,6 +378,8 @@ router.get('/export', async (req, res) => {
     const assets = db.prepare('SELECT * FROM assets WHERE userId = ? ORDER BY createdAt DESC').all(userId);
 
     return res.json({
+      backupVersion: BACKUP_VERSION,
+      exportedAt: new Date().toISOString(),
       orders: orders.map(o => ({ ...o, platforms: safeJsonParse(o.platforms, []) })),
       brands,
       payments,

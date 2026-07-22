@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import db from '../db.js';
+import db, { generateUniqueApiKey } from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
@@ -8,12 +8,134 @@ import { readSheet } from 'read-excel-file/node';
 import { parse as parseCsv } from 'csv-parse/sync';
 import { logActivity, getUserId } from './utils/index.js';
 import { EXCEL_FIELD_MAP, ORDER_TYPE_MAP, ORDER_STATUS_MAP } from './utils/constants.js';
-import { generateOrderNo, safeJsonParse } from './utils/helpers.js';
+import { formatLocalDate, generateOrderNo, safeJsonParse } from './utils/helpers.js';
 import { syncOrderDerivedRecords } from '../services/orderService.js';
+import { ApiError, getApiErrorMessage, getApiErrorStatus } from '../services/errors.js';
 
 const router = Router();
 
 type ImportRow = Record<string, unknown>;
+
+const BACKUP_VERSION = 2;
+const MAX_IMPORT_ITEMS = 10_000;
+const IMPORT_COLLECTIONS = [
+  'orders',
+  'brands',
+  'payments',
+  'todos',
+  'assets',
+  'publishLinks',
+  'paidPromotions',
+  'comments',
+] as const;
+
+type ImportCollection = typeof IMPORT_COLLECTIONS[number];
+type ImportPreview = {
+  backupVersion: number | null;
+  legacy: boolean;
+  counts: Record<ImportCollection, number>;
+  conflicts: { ids: number; orderNos: number; apiKey: number };
+  warnings: string[];
+};
+
+const COLLECTION_TABLES: Record<ImportCollection, string> = {
+  orders: 'orders',
+  brands: 'brands',
+  payments: 'payments',
+  todos: 'todos',
+  assets: 'assets',
+  publishLinks: 'publish_links',
+  paidPromotions: 'paid_promotions',
+  comments: 'comments',
+};
+
+const readImportCollection = (payload: Record<string, unknown>, name: ImportCollection): any[] => {
+  const value = payload[name];
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw new ApiError(`${name} 必须是数组`);
+  if (value.length > MAX_IMPORT_ITEMS) throw new ApiError(`${name} 超过单次导入上限 ${MAX_IMPORT_ITEMS}`);
+  return value;
+};
+
+const assertUniqueValues = (items: any[], field: string, label: string) => {
+  const seen = new Set<string>();
+  for (const item of items) {
+    if (!item || typeof item !== 'object' || item[field] === undefined || item[field] === null || item[field] === '') continue;
+    const value = String(item[field]);
+    if (seen.has(value)) throw new ApiError(`${label}存在重复值: ${value}`);
+    seen.add(value);
+  }
+};
+
+const analyzeImportPayload = (userId: string, rawPayload: unknown): ImportPreview => {
+  if (!rawPayload || typeof rawPayload !== 'object' || Array.isArray(rawPayload)) {
+    throw new ApiError('备份文件结构无效');
+  }
+  const payload = rawPayload as Record<string, unknown>;
+  const rawVersion = payload.backupVersion;
+  const backupVersion = rawVersion === undefined ? null : Number(rawVersion);
+  if (backupVersion !== null && (!Number.isInteger(backupVersion) || backupVersion < 1 || backupVersion > BACKUP_VERSION)) {
+    throw new ApiError(`不支持的备份版本: ${String(rawVersion)}`);
+  }
+
+  const collections = Object.fromEntries(
+    IMPORT_COLLECTIONS.map(name => [name, readImportCollection(payload, name)]),
+  ) as Record<ImportCollection, any[]>;
+  if (collections.orders.some(order => !order || typeof order !== 'object' || !String(order.title || order.name || '').trim())) {
+    throw new ApiError('商单数据存在空标题');
+  }
+  if (collections.brands.some(brand => !brand || typeof brand !== 'object' || !String(brand.name || '').trim())) {
+    throw new ApiError('品牌数据存在空名称');
+  }
+  for (const name of IMPORT_COLLECTIONS) assertUniqueValues(collections[name], 'id', `${name} ID`);
+  assertUniqueValues(collections.orders, 'orderNo', '商单号');
+
+  let idConflicts = 0;
+  for (const name of IMPORT_COLLECTIONS) {
+    const table = COLLECTION_TABLES[name];
+    const findConflict = db.prepare(`SELECT 1 FROM ${table} WHERE id = ? AND userId <> ?`);
+    for (const item of collections[name]) {
+      if (item?.id && findConflict.get(String(item.id), userId)) idConflicts++;
+    }
+  }
+  const orderNoConflicts = collections.orders.reduce((count, order) => (
+    order?.orderNo && db.prepare('SELECT 1 FROM orders WHERE orderNo = ? AND userId <> ?').get(String(order.orderNo), userId)
+      ? count + 1
+      : count
+  ), 0);
+  const importedApiKey = (payload.settings as any)?.apiKey;
+  const apiKeyConflicts = typeof importedApiKey === 'string' && importedApiKey.trim()
+    && db.prepare('SELECT 1 FROM settings WHERE apiKey = ? AND userId <> ?').get(importedApiKey.trim(), userId)
+    ? 1
+    : 0;
+
+  const warnings: string[] = [];
+  if (backupVersion === null) warnings.push('旧版备份没有版本号，将按兼容模式导入');
+  if (idConflicts) warnings.push(`${idConflicts} 个记录 ID 与其他账号冲突，导入时将自动生成新 ID`);
+  if (orderNoConflicts) warnings.push(`${orderNoConflicts} 个商单号与其他账号冲突，导入时将自动生成新商单号`);
+  if (apiKeyConflicts) warnings.push('API Key 与其他账号冲突，导入时将生成新 Key');
+
+  return {
+    backupVersion,
+    legacy: backupVersion === null,
+    counts: Object.fromEntries(IMPORT_COLLECTIONS.map(name => [name, collections[name].length])) as Record<ImportCollection, number>,
+    conflicts: { ids: idConflicts, orderNos: orderNoConflicts, apiKey: apiKeyConflicts },
+    warnings,
+  };
+};
+
+const allocateImportedId = (table: string, userId: string, value: unknown): string => {
+  const requestedId = typeof value === 'string' && value ? value : uuidv4();
+  const conflict = db.prepare(`SELECT 1 FROM ${table} WHERE id = ? AND userId <> ?`).get(requestedId, userId);
+  return conflict ? uuidv4() : requestedId;
+};
+
+const allocateImportedOrderNo = (userId: string, value: unknown): string => {
+  const requestedOrderNo = typeof value === 'string' && value.trim() ? value.trim() : generateOrderNo();
+  return db.prepare('SELECT 1 FROM orders WHERE orderNo = ? AND userId <> ?').get(requestedOrderNo, userId)
+    ? generateOrderNo()
+    : requestedOrderNo;
+};
 
 const upload = multer({
   dest: 'uploads/',
@@ -33,7 +155,7 @@ const upload = multer({
 
 const normalizeCellValue = (value: unknown): unknown => {
   if (value instanceof Date) {
-    return value.toISOString().split('T')[0];
+    return formatLocalDate(value);
   }
   return value ?? '';
 };
@@ -98,6 +220,15 @@ const normalizePaymentType = (type: unknown): string => {
   return 'pending';
 };
 
+const resolveImportedApiKey = (userId: string, value: unknown): string | null => {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const apiKey = value.trim();
+  const conflict = db.prepare('SELECT userId FROM settings WHERE apiKey = ? AND userId <> ?').get(apiKey, userId);
+  if (!conflict) return apiKey;
+
+  return generateUniqueApiKey();
+};
+
 const mapImportedOrderRow = (row: Record<string, any>): Record<string, any> => {
   const mappedRow: Record<string, any> = { ...row };
   Object.keys(row).forEach(key => {
@@ -136,8 +267,8 @@ const insertImportedOrder = (
     throw new Error('缺少标题');
   }
 
-  const id = String(mappedRow.id || uuidv4());
-  const orderNo = mappedRow.orderNo || generateOrderNo();
+  const id = allocateImportedId('orders', userId, mappedRow.id);
+  const orderNo = allocateImportedOrderNo(userId, mappedRow.orderNo);
   const brandName = mappedRow.brandName || mappedRow.brand || null;
   const platforms = normalizeStringArray(mappedRow.platforms ?? mappedRow.platform);
   const expectedAmount = Number(mappedRow.expectedAmount ?? mappedRow.actualAmount ?? mappedRow.amount ?? 0) || 0;
@@ -227,6 +358,8 @@ router.get('/export', (req, res) => {
     const assets = db.prepare('SELECT * FROM assets WHERE userId = ? ORDER BY createdAt DESC').all(userId);
 
     return res.json({
+      backupVersion: BACKUP_VERSION,
+      exportedAt: new Date().toISOString(),
       orders: orders.map((o: any) => ({ ...o, platforms: safeJsonParse(o.platforms, []) })),
       brands,
       payments,
@@ -273,15 +406,47 @@ router.post('/clear', (req, res) => {
   }
 });
 
+router.post('/import/preview', (req, res) => {
+  try {
+    return res.json(analyzeImportPayload(getUserId(req), req.body));
+  } catch (error) {
+    return res.status(getApiErrorStatus(error)).json({ error: getApiErrorMessage(error, '导入预检失败') });
+  }
+});
+
 router.post('/import', (req, res) => {
   try {
     const userId = getUserId(req);
-    const { orders, brands, payments, todos, settings: importedSettings, publishLinks, paidPromotions, comments, assets } = req.body;
+    const preview = analyzeImportPayload(userId, req.body);
+    const { orders, brands, payments, todos, settings: importedSettings, publishLinks, paidPromotions, comments, assets, operationDate } = req.body;
 
     const importData = db.transaction(() => {
+      const brandIdMap = new Map<string, string>();
       const orderIdMap = new Map<string, string>();
+      const orderNoMap = new Map<string, string>();
       const importedOrderIds = new Set<string>();
       const resolveImportedOrderId = resolveOrderIdFactory(orderIdMap, importedOrderIds);
+      const resolveImportedOrderNo = (value: unknown): string | null => {
+        if (typeof value !== 'string' || !value.trim()) return null;
+        const sourceOrderNo = value.trim();
+        const existing = orderNoMap.get(sourceOrderNo);
+        if (existing) return existing;
+        const resolved = allocateImportedOrderNo(userId, sourceOrderNo);
+        orderNoMap.set(sourceOrderNo, resolved);
+        return resolved;
+      };
+
+      if (Array.isArray(brands)) {
+        brands.forEach((brand: any) => {
+          if (brand?.id) brandIdMap.set(String(brand.id), allocateImportedId('brands', userId, brand.id));
+        });
+      }
+      if (Array.isArray(orders)) {
+        orders.forEach((order: any) => {
+          if (order?.id) orderIdMap.set(String(order.id), allocateImportedId('orders', userId, order.id));
+          if (order?.orderNo) orderNoMap.set(String(order.orderNo), allocateImportedOrderNo(userId, order.orderNo));
+        });
+      }
 
       db.prepare('DELETE FROM comments WHERE userId = ?').run(userId);
       db.prepare('DELETE FROM paid_promotions WHERE userId = ?').run(userId);
@@ -299,7 +464,7 @@ router.post('/import', (req, res) => {
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         brands.forEach((brand: any) => {
-          const brandId = brand.id || uuidv4();
+          const brandId = brand.id ? (brandIdMap.get(String(brand.id)) || uuidv4()) : uuidv4();
           const contactsJson = brand.contacts
             ? (typeof brand.contacts === 'string' ? brand.contacts : JSON.stringify(brand.contacts))
             : (brand.contact || brand.phone ? JSON.stringify([{ id: uuidv4(), name: brand.contact || '', phone: brand.phone || '', note: '' }]) : null);
@@ -321,7 +486,12 @@ router.post('/import', (req, res) => {
       if (Array.isArray(orders)) {
         orders.forEach((order: any) => {
           const sourceOrderId = order.id ? String(order.id) : null;
-          const orderId = insertImportedOrder(userId, { ...order, id: sourceOrderId || uuidv4() }, { syncDerived: false });
+          const sourceOrderNo = order.orderNo ? String(order.orderNo) : null;
+          const orderId = insertImportedOrder(userId, {
+            ...order,
+            id: sourceOrderId ? orderIdMap.get(sourceOrderId) : uuidv4(),
+            orderNo: sourceOrderNo ? orderNoMap.get(sourceOrderNo) : generateOrderNo(),
+          }, { syncDerived: false });
           if (sourceOrderId) {
             orderIdMap.set(sourceOrderId, orderId);
           }
@@ -342,7 +512,7 @@ router.post('/import', (req, res) => {
             return;
           }
           todoStmt.run(
-            todo.id || uuidv4(),
+            allocateImportedId('todos', userId, todo.id),
             userId,
             todoContent,
             todo.priority || 'medium',
@@ -350,7 +520,7 @@ router.post('/import', (req, res) => {
             todo.completed ? 1 : 0,
             todo.dueDate || null,
             resolvedOrderId,
-            todo.brandId || null,
+            todo.brandId ? (brandIdMap.get(String(todo.brandId)) || null) : null,
             todo.createdAt || new Date().toISOString(),
           );
         });
@@ -358,23 +528,30 @@ router.post('/import', (req, res) => {
 
       if (Array.isArray(payments)) {
         const paymentStmt = db.prepare(`
-          INSERT INTO payments (id, userId, orderNo, brand, amount, type, date, method, createdAt)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO payments (id, userId, orderNo, brand, amount, type, date, dueDate, settledDate, method, createdAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         payments.forEach((payment: any) => {
-          const paymentId = payment.id || uuidv4();
+          const paymentId = allocateImportedId('payments', userId, payment.id);
           const amount = Number(payment.amount ?? payment.actualAmount ?? 0) || 0;
           const createdDate = typeof payment.createdAt === 'string' ? payment.createdAt.substring(0, 10) : null;
+          const type = normalizePaymentType(payment.type);
+          const legacyDate = payment.date || createdDate;
+          const dueDate = payment.dueDate || (type === 'pending' ? legacyDate : null);
+          const settledDate = payment.settledDate || (type === 'settled' ? legacyDate : null);
+          const compatibilityDate = type === 'settled' ? settledDate : dueDate;
           paymentStmt.run(
             paymentId,
             userId,
-            payment.orderNo || null,
+            resolveImportedOrderNo(payment.orderNo),
             payment.brand || payment.brandName || null,
             amount,
-            normalizePaymentType(payment.type),
-            payment.date || createdDate,
+            type,
+            compatibilityDate,
+            dueDate,
+            settledDate,
             payment.method || payment.remark || null,
-            payment.createdAt || payment.date || new Date().toISOString(),
+            payment.createdAt || compatibilityDate || new Date().toISOString(),
           );
         });
       }
@@ -385,13 +562,13 @@ router.post('/import', (req, res) => {
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         assets.forEach((asset: any) => {
-          const assetId = asset.id || uuidv4();
-          const assetOrderId = resolveImportedOrderId(asset.orderId) || asset.orderId || `imported-${assetId}`;
+          const assetId = allocateImportedId('assets', userId, asset.id);
+          const assetOrderId = resolveImportedOrderId(asset.orderId) || `imported-${assetId}`;
           assetStmt.run(
             assetId,
             userId,
             assetOrderId,
-            asset.orderNo || null,
+            resolveImportedOrderNo(asset.orderNo),
             asset.brandName || asset.brand || null,
             asset.productName || asset.name || '未知产品',
             Number(asset.productValue ?? asset.value ?? 0) || 0,
@@ -413,7 +590,7 @@ router.post('/import', (req, res) => {
           const resolvedOrderId = resolveImportedOrderId(link.orderId);
           if (!resolvedOrderId) return;
           linkStmt.run(
-            link.id || uuidv4(),
+            allocateImportedId('publish_links', userId, link.id),
             resolvedOrderId,
             userId,
             link.platform || '其他',
@@ -432,7 +609,7 @@ router.post('/import', (req, res) => {
           const resolvedOrderId = resolveImportedOrderId(promotion.orderId);
           if (!resolvedOrderId) return;
           promotionStmt.run(
-            promotion.id || uuidv4(),
+            allocateImportedId('paid_promotions', userId, promotion.id),
             resolvedOrderId,
             userId,
             promotion.platform || '其他',
@@ -451,7 +628,7 @@ router.post('/import', (req, res) => {
           const resolvedOrderId = resolveImportedOrderId(comment.orderId);
           if (!resolvedOrderId) return;
           commentStmt.run(
-            comment.id || uuidv4(),
+            allocateImportedId('comments', userId, comment.id),
             userId,
             resolvedOrderId,
             comment.content || '',
@@ -461,23 +638,35 @@ router.post('/import', (req, res) => {
       }
 
       if (importedSettings) {
-        const { displayName, email, bio, orderReminder, weeklyReport, avatar, apiKey } = importedSettings;
+        const { displayName, bio, orderReminder, weeklyReport, avatar, apiKey, reportFrequency } = importedSettings;
+        const user = db.prepare('SELECT email FROM users WHERE id = ?').get(userId) as { email?: string } | undefined;
+        const resolvedApiKey = resolveImportedApiKey(userId, apiKey);
         db.prepare(`
           UPDATE settings
-          SET displayName = ?, email = ?, bio = ?, orderReminder = ?, weeklyReport = ?, avatar = ?, apiKey = ?
+          SET displayName = ?, email = ?, bio = ?, orderReminder = ?, weeklyReport = ?, avatar = ?, apiKey = ?, reportFrequency = ?
           WHERE userId = ?
-        `).run(displayName || '博主账号', email || '', bio || '', orderReminder ? 1 : 0, weeklyReport ? 1 : 0, avatar || '', apiKey || '', userId);
+        `).run(
+          displayName || '博主账号',
+          user?.email || '',
+          bio || '',
+          orderReminder ? 1 : 0,
+          weeklyReport ? 1 : 0,
+          avatar || '',
+          resolvedApiKey,
+          reportFrequency === 'monthly' ? 'monthly' : 'weekly',
+          userId,
+        );
       }
 
       const importedOrders = db.prepare('SELECT * FROM orders WHERE userId = ?').all(userId) as any[];
-      importedOrders.forEach(order => syncOrderDerivedRecords(order, userId));
+      importedOrders.forEach(order => syncOrderDerivedRecords(order, userId, operationDate));
     });
 
     importData();
-    return res.json({ success: true });
+    return res.json({ success: true, preview });
   } catch (error) {
     console.error('导入数据错误:', error);
-    return res.status(500).json({ error: '导入数据失败，请稍后重试' });
+    return res.status(getApiErrorStatus(error)).json({ error: getApiErrorMessage(error, '导入数据失败，请稍后重试') });
   }
 });
 
