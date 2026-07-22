@@ -446,6 +446,7 @@ External order create/update supports `productName` and `productValue`. When an 
 - **本地日期修复**: 修复账单、素材出售、商单派生记录、导出文件和日期筛选中的 UTC 时区偏差。
 - **账号资料一致性**: 资料邮箱与登录邮箱保持同步，普通资料页不再直接修改登录邮箱。
 - **安全与测试**: 加强金额、日期、资产状态、待办内容和 HTTP/HTTPS 发布链接校验，升级 Capacitor 及多项依赖安全补丁；新增 11 项回归测试，并通过 TypeScript 检查、前端构建和服务端构建。
+- **Android 与 Release 更新**: Android `versionCode` 升级为 `3`，重新同步最新 Web 资源并构建 APK；GitHub Release 同步更新 Android APK、UGOS Pro `1.3.0.0005` 双架构 UPK、SHA-256 校验文件和发布说明。
 
 ### 2026-07-17
 
