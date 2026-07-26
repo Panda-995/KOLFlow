@@ -8,6 +8,10 @@ import {
   getHttpsEnforcementPolicy,
   resolveTrustProxy,
 } from './src/server/transportSecurity.js';
+import {
+  configureJsonBodyParsers,
+  getPayloadTooLargeMessage,
+} from './src/server/requestBodyLimits.js';
 import os from 'os';
 
 async function startServer() {
@@ -104,7 +108,7 @@ async function startServer() {
     next();
   });
 
-  app.use(express.json({ limit: '10mb' }));
+  configureJsonBodyParsers(app);
 
   // Stricter auth rate limiter
   app.use(['/api/auth/login', '/api/auth/register'], loginLimiter);
@@ -126,13 +130,17 @@ app.get('/api/health', (_req, res) => {
   app.use('/api', apiRoutes);
 
   // 全局错误处理 - 必须在所有路由之后
-  const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+  const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     // Determine status code
-    const status = err.status || (err.message.includes('未授权') ? 401 : 500);
+    const isPayloadTooLarge = err.status === 413 || err.type === 'entity.too.large';
+    const message = typeof err.message === 'string' ? err.message : '';
+    const status = err.status || (message.includes('未授权') ? 401 : 500);
     
     // Return JSON error response (no stack trace in production)
     res.status(status).json({
-      error: err.message || '服务器内部错误'
+      error: isPayloadTooLarge
+        ? getPayloadTooLargeMessage(req.originalUrl)
+        : (message || '服务器内部错误')
     });
   };
   

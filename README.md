@@ -375,11 +375,14 @@ DELETE /api/paid-promotions/:id                 # 删除付费推广记录
 
 ```bash
 GET    /api/data/export          # 导出当前用户全部数据（JSON）
+POST   /api/data/import/preview  # 预检完整备份数据（JSON）
 POST   /api/data/import          # 导入完整备份数据（JSON）
 POST   /api/data/orders          # JSON 批量导入商单
 POST   /api/data/orders/file     # Excel/CSV 文件导入商单（multipart/form-data）
 POST   /api/data/clear           # 清空当前用户业务数据
 ```
+
+完整备份的预检与导入接口支持最大 `100 MB` 的 JSON 请求体；其他 JSON API 继续保持 `10 MB` 上限。若在 KOLFlow 前部署反向代理，还需要将代理层的请求体上限配置为至少 `100 MB`。
 
 ### Settings | 设置
 
@@ -434,6 +437,11 @@ External order create/update supports `productName` and `productValue`. When an 
 ---
 
 ## 📝 更新日志 | Changelog
+
+### 2026-07-26
+
+- **完整数据导入容量修复**: 将完整备份预检与导入接口的 JSON 请求体上限定向提升至 `100 MB`，解决包含大量 Base64 资产图片的新版备份在导入时出现 `413 Request Entity Too Large` 的问题；其他 JSON API 继续保持 `10 MB` 上限，超限时返回明确的中文提示。
+- **回归验证与发布更新**: 新增请求体边界回归测试，验证超过 `10 MB` 的完整备份可以进入预检、普通接口仍会拒绝同等大小的请求；Android `versionCode` 升级为 `6`，同步重建 Android APK、UGOS Pro `1.3.0.0008` 双架构 UPK，并更新 GitHub Release 全部资产。
 
 ### 2026-07-22
 

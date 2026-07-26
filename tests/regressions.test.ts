@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, beforeEach, test } from 'node:test';
-import express from 'express';
+import express, { type ErrorRequestHandler } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { normalizeServerUrl } from '../src/lib/api.ts';
 import { parseLocalDate } from '../src/lib/dateFilter.ts';
@@ -523,4 +523,62 @@ test('HTTP 下可以使用密文完成注册、登录、安全设置和账号注
   });
   assert.equal(plaintextResponse.status, 400);
   assert.match((await plaintextResponse.json() as any).error, /加密/);
+});
+
+test('完整数据导入允许 100 MB JSON 且普通接口仍限制为 10 MB', async () => {
+  const {
+    configureJsonBodyParsers,
+    DEFAULT_JSON_BODY_LIMIT,
+    IMPORT_JSON_BODY_LIMIT,
+    getPayloadTooLargeMessage,
+  } = await import('../src/server/requestBodyLimits.ts');
+
+  assert.equal(DEFAULT_JSON_BODY_LIMIT, '10mb');
+  assert.equal(IMPORT_JSON_BODY_LIMIT, '100mb');
+
+  const limitApp = express();
+  configureJsonBodyParsers(limitApp);
+  limitApp.post('/api/data/import/preview', (req, res) => {
+    res.json({ imageLength: req.body.assets[0].image.length });
+  });
+  limitApp.post('/api/ordinary', (_req, res) => {
+    res.json({ success: true });
+  });
+  const payloadErrorHandler: ErrorRequestHandler = (error, req, res, _next) => {
+    const status = error.status || 500;
+    res.status(status).json({
+      error: status === 413 ? getPayloadTooLargeMessage(req.originalUrl) : error.message,
+    });
+  };
+  limitApp.use(payloadErrorHandler);
+
+  const limitServer = await new Promise<Server>(resolve => {
+    const nextServer = limitApp.listen(0, '127.0.0.1', () => resolve(nextServer));
+  });
+  const address = limitServer.address() as AddressInfo;
+  const limitBaseUrl = `http://127.0.0.1:${address.port}`;
+  const largeImage = 'x'.repeat(11 * 1024 * 1024);
+  const body = JSON.stringify({ assets: [{ image: largeImage }] });
+
+  try {
+    const importResponse = await fetch(`${limitBaseUrl}/api/data/import/preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    });
+    assert.equal(importResponse.status, 200);
+    assert.equal((await importResponse.json() as any).imageLength, largeImage.length);
+
+    const ordinaryResponse = await fetch(`${limitBaseUrl}/api/ordinary`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    });
+    assert.equal(ordinaryResponse.status, 413);
+    assert.equal((await ordinaryResponse.json() as any).error, '请求实体超过 10 MB 上限');
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      limitServer.close(error => error ? reject(error) : resolve());
+    });
+  }
 });
