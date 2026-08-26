@@ -244,10 +244,11 @@ export default function Login() {
         <form onSubmit={handleSubmit} className="space-y-5">
           {showServerUrlField && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">服务端地址</label>
+              <label htmlFor="server-url" className="block text-sm font-medium text-gray-700 mb-1.5">服务端地址</label>
               <div className="relative">
                 <Server size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
+                  id="server-url"
                   type="text"
                   value={serverUrl}
                   onChange={e => setServerUrl(e.target.value)}
@@ -273,8 +274,9 @@ export default function Login() {
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">账号邮箱</label>
+            <label htmlFor="login-email" className="block text-sm font-medium text-gray-700 mb-1.5">账号邮箱</label>
             <input
+              id="login-email"
               required
               type="email"
               value={email}
@@ -285,8 +287,9 @@ export default function Login() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">密码</label>
+            <label htmlFor="login-password" className="block text-sm font-medium text-gray-700 mb-1.5">密码</label>
             <input
+              id="login-password"
               required
               type="password"
               value={password}
@@ -298,8 +301,9 @@ export default function Login() {
 
           {mode === 'register' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">邀请码</label>
+              <label htmlFor="invite-code" className="block text-sm font-medium text-gray-700 mb-1.5">邀请码</label>
               <input
+                id="invite-code"
                 type="text"
                 value={inviteCode}
                 onChange={e => setInviteCode(e.target.value)}

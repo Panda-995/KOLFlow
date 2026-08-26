@@ -1,10 +1,10 @@
 import { create } from 'zustand';
-import type { Order, OrderStatus, OrderType, Todo, Brand, Payment, Settings, ActivityLog, Comment, PublishLink, PaidPromotion, Asset } from '../types';
+import type { Order, OrderTemplate, OrderStatus, OrderType, Todo, Brand, Payment, Settings, ActivityLog, Comment, PublishLink, PaidPromotion, Asset } from '../types';
 import { apiFetch, authFetch, getConnectionHelpMessage } from '../lib/api';
 import { formatLocalDate } from '../lib/dateFilter';
 import { createEncryptedSensitiveBody } from '../lib/authEncryption';
 
-export type { Order, OrderStatus, OrderType, Todo, Brand, Payment, Settings, ActivityLog, Comment, PublishLink, PaidPromotion, Asset };
+export type { Order, OrderTemplate, OrderStatus, OrderType, Todo, Brand, Payment, Settings, ActivityLog, Comment, PublishLink, PaidPromotion, Asset };
 
 const createAuthFetch = () => authFetch;
 
@@ -46,6 +46,7 @@ const persistDismissedNotifications = (ids: string[]): void => {
 interface AppState {
   isAuthenticated: boolean;
   orders: Order[];
+  orderTemplates: OrderTemplate[];
   todos: Todo[];
   brands: Brand[];
   payments: Payment[];
@@ -70,6 +71,11 @@ interface AppState {
   updateOrder: (id: string, order: Partial<Order>) => Promise<void>;
   updateOrderStatus: (id: string, status: OrderStatus) => Promise<void>;
   deleteOrder: (id: string) => Promise<void>;
+  fetchOrderTemplates: () => Promise<void>;
+  addOrderTemplate: (template: Partial<OrderTemplate>) => Promise<void>;
+  updateOrderTemplate: (id: string, template: Partial<OrderTemplate>) => Promise<void>;
+  deleteOrderTemplate: (id: string) => Promise<void>;
+  createOrderFromTemplate: (id: string) => Promise<Order>;
 
   fetchTodos: () => Promise<void>;
   addTodo: (todo: Partial<Todo>) => Promise<void>;
@@ -125,6 +131,7 @@ interface AppState {
 export const useStore = create<AppState>((set, get) => ({
   isAuthenticated: localStorage.getItem('isAuthenticated') === 'true',
   orders: [],
+  orderTemplates: [],
   setAuthenticated: (value: boolean) => {
     if (!value) {
       localStorage.removeItem('isAuthenticated');
@@ -229,6 +236,7 @@ export const useStore = create<AppState>((set, get) => ({
       isAuthenticated: false,
       settings: null,
       orders: [],
+      orderTemplates: [],
       todos: [],
       brands: [],
       payments: [],
@@ -416,6 +424,110 @@ export const useStore = create<AppState>((set, get) => ({
     } catch (error) {
       console.error('deleteOrder失败:', error instanceof Error ? error.message : error);
       get().showToast('删除商单失败，请稍后重试', 'error');
+      throw error;
+    }
+  },
+
+  fetchOrderTemplates: async () => {
+    try {
+      const cached = getCached<OrderTemplate[]>('orderTemplates');
+      if (cached) {
+        set({ orderTemplates: cached });
+        return;
+      }
+      const res = await createAuthFetch()('/api/order-templates');
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || '获取商单模板失败');
+      }
+      const data = await res.json();
+      setCache('orderTemplates', data);
+      set({ orderTemplates: data });
+    } catch (error) {
+      console.error('fetchOrderTemplates失败:', error instanceof Error ? error.message : error);
+      get().showToast('获取商单模板失败，请稍后重试', 'error');
+      throw error;
+    }
+  },
+
+  addOrderTemplate: async (template) => {
+    try {
+      const res = await createAuthFetch()('/api/order-templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(template),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || '创建商单模板失败');
+      }
+      const newTemplate = await res.json();
+      invalidateCache('orderTemplates');
+      set((state) => ({ orderTemplates: [newTemplate, ...state.orderTemplates] }));
+    } catch (error) {
+      console.error('addOrderTemplate失败:', error instanceof Error ? error.message : error);
+      throw error;
+    }
+  },
+
+  updateOrderTemplate: async (id, template) => {
+    try {
+      const res = await createAuthFetch()(`/api/order-templates/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(template),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || '更新商单模板失败');
+      }
+      const updatedTemplate = await res.json();
+      invalidateCache('orderTemplates');
+      set((state) => ({
+        orderTemplates: state.orderTemplates.map(templateItem => (
+          templateItem.id === id ? updatedTemplate : templateItem
+        )),
+      }));
+    } catch (error) {
+      console.error('updateOrderTemplate失败:', error instanceof Error ? error.message : error);
+      throw error;
+    }
+  },
+
+  deleteOrderTemplate: async (id) => {
+    try {
+      const res = await createAuthFetch()(`/api/order-templates/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || '删除商单模板失败');
+      }
+      invalidateCache('orderTemplates');
+      set((state) => ({ orderTemplates: state.orderTemplates.filter(template => template.id !== id) }));
+    } catch (error) {
+      console.error('deleteOrderTemplate失败:', error instanceof Error ? error.message : error);
+      throw error;
+    }
+  },
+
+  createOrderFromTemplate: async (id) => {
+    try {
+      const res = await createAuthFetch()(`/api/order-templates/${id}/create-order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ operationDate: formatLocalDate() }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || '从模板创建商单失败');
+      }
+      const newOrder = await res.json() as Order;
+      invalidateCache('orders');
+      invalidateCache('todos');
+      set((state) => ({ orders: [newOrder, ...state.orders] }));
+      await get().fetchTodos();
+      return newOrder;
+    } catch (error) {
+      console.error('createOrderFromTemplate失败:', error instanceof Error ? error.message : error);
       throw error;
     }
   },
@@ -735,7 +847,7 @@ export const useStore = create<AppState>((set, get) => ({
         throw new Error('清空数据失败');
       }
       invalidateAllCache();
-      set({ orders: [], todos: [], brands: [], payments: [], assets: [], activityLogs: [], comments: [], publishLinks: [], paidPromotions: [] });
+      set({ orders: [], orderTemplates: [], todos: [], brands: [], payments: [], assets: [], activityLogs: [], comments: [], publishLinks: [], paidPromotions: [] });
       get().showToast('数据已清空', 'success');
     } catch (error) {
       console.error('clearData失败:', error instanceof Error ? error.message : error);
@@ -763,6 +875,7 @@ export const useStore = create<AppState>((set, get) => ({
       set({ comments: [], publishLinks: [] });
       await Promise.all([
         get().fetchOrders(),
+        get().fetchOrderTemplates(),
         get().fetchTodos(),
         get().fetchBrands(),
         get().fetchPayments(),

@@ -12,6 +12,7 @@ import reportRouter from './report.js';
 import publishLinksRouter from './publishLinks.js';
 import paidPromotionsRouter from './paidPromotions.js';
 import assetsRouter from './assets.js';
+import orderTemplatesRouter from './orderTemplates.js';
 import { authMiddleware } from './utils/index.js';
 
 const router = Router();
@@ -19,6 +20,7 @@ const router = Router();
 router.use('/auth', authRouter);
 router.use(authMiddleware);
 router.use('/orders', ordersRouter);
+router.use('/order-templates', orderTemplatesRouter);
 router.use('/todos', todosRouter);
 router.use('/brands', brandsRouter);
 router.use('/payments', paymentsRouter);

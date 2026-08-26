@@ -6,6 +6,7 @@ on:
   workflow_dispatch:
 
 env:
+  APP_VERSION: 1.4.0
   GHCR_IMAGE: ghcr.io/panda-995/kolflow
   DOCKERHUB_IMAGE: panda995/kolflow
   HAS_DOCKERHUB: ${{ secrets.DOCKER_HUB_USERNAME != '' && secrets.DOCKER_HUB_TOKEN != '' }}
@@ -51,6 +52,7 @@ jobs:
           sbom: false
           tags: |
             ${{ env.GHCR_IMAGE }}:${{ matrix.suffix }}
+            ${{ env.GHCR_IMAGE }}:${{ env.APP_VERSION }}-${{ matrix.suffix }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -72,6 +74,7 @@ jobs:
           sbom: false
           tags: |
             ${{ env.DOCKERHUB_IMAGE }}:${{ matrix.suffix }}
+            ${{ env.DOCKERHUB_IMAGE }}:${{ env.APP_VERSION }}-${{ matrix.suffix }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -95,11 +98,14 @@ jobs:
         run: |
           docker buildx imagetools create \
             -t ${{ env.GHCR_IMAGE }}:latest \
-            ${{ env.GHCR_IMAGE }}:amd64 \
-            ${{ env.GHCR_IMAGE }}:arm64
+            -t ${{ env.GHCR_IMAGE }}:${{ env.APP_VERSION }} \
+            ${{ env.GHCR_IMAGE }}:${{ env.APP_VERSION }}-amd64 \
+            ${{ env.GHCR_IMAGE }}:${{ env.APP_VERSION }}-arm64
 
       - name: Verify published image (GHCR)
-        run: docker buildx imagetools inspect ${{ env.GHCR_IMAGE }}:latest
+        run: |
+          docker buildx imagetools inspect ${{ env.GHCR_IMAGE }}:latest
+          docker buildx imagetools inspect ${{ env.GHCR_IMAGE }}:${{ env.APP_VERSION }}
 
       - name: Log in to Docker Hub
         if: env.HAS_DOCKERHUB == 'true'
@@ -113,12 +119,15 @@ jobs:
         run: |
           docker buildx imagetools create \
             -t ${{ env.DOCKERHUB_IMAGE }}:latest \
-            ${{ env.DOCKERHUB_IMAGE }}:amd64 \
-            ${{ env.DOCKERHUB_IMAGE }}:arm64
+            -t ${{ env.DOCKERHUB_IMAGE }}:${{ env.APP_VERSION }} \
+            ${{ env.DOCKERHUB_IMAGE }}:${{ env.APP_VERSION }}-amd64 \
+            ${{ env.DOCKERHUB_IMAGE }}:${{ env.APP_VERSION }}-arm64
 
       - name: Verify published image (Docker Hub)
         if: env.HAS_DOCKERHUB == 'true'
-        run: docker buildx imagetools inspect ${{ env.DOCKERHUB_IMAGE }}:latest
+        run: |
+          docker buildx imagetools inspect ${{ env.DOCKERHUB_IMAGE }}:latest
+          docker buildx imagetools inspect ${{ env.DOCKERHUB_IMAGE }}:${{ env.APP_VERSION }}
 
   cleanup:
     needs: [merge-manifest]
@@ -132,7 +141,7 @@ jobs:
         run: |
           OWNER="${{ github.repository_owner }}"
           PACKAGE_NAME="kolflow"
-          KEEP_TAGS="latest amd64 arm64"
+          KEEP_TAGS="latest amd64 arm64 ${APP_VERSION} ${APP_VERSION}-amd64 ${APP_VERSION}-arm64"
           API_BASE="/users/${OWNER}/packages/container/${PACKAGE_NAME}"
 
           gh api -H "Accept: application/vnd.github+json" \
@@ -166,7 +175,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          KEEP_TAGS="latest amd64 arm64"
+          KEEP_TAGS="latest amd64 arm64 ${APP_VERSION} ${APP_VERSION}-amd64 ${APP_VERSION}-arm64"
           AUTH_PAYLOAD=$(jq -n \
             --arg identifier "$DOCKER_HUB_USERNAME" \
             --arg secret "$DOCKER_HUB_TOKEN" \

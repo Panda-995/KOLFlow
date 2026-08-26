@@ -1,10 +1,15 @@
 import { Bell, LogOut, X, Menu, Plus, AlertTriangle, Clock, CheckCheck } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useStore } from '../store/useStore';
 import { clsx } from 'clsx';
 import { authFetch } from '../lib/api';
-import { buildBusinessNotifications, type ReportSummary } from '../lib/notifications';
+import {
+  buildBusinessNotifications,
+  parseReportPayload,
+  type BusinessNotification,
+  type ReportPayload,
+} from '../lib/notifications';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -12,31 +17,50 @@ interface HeaderProps {
 
 export default function Header({ onMenuClick }: HeaderProps) {
   const [showNotifications, setShowNotifications] = useState(false);
-  const [reportSummary, setReportSummary] = useState<ReportSummary | null>(null);
+  const [report, setReport] = useState<ReportPayload | null>(null);
+  const [reportError, setReportError] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
-  const { logout, orders, payments, settings, dismissedNotifications, dismissNotification, clearNotifications } = useStore();
+  const reportRequestId = useRef(0);
+  const { logout, orders, payments, assets, paidPromotions, settings, dismissedNotifications, dismissNotification, clearNotifications } = useStore();
   const navigate = useNavigate();
+
+  const loadReport = useCallback(async () => {
+    const requestId = ++reportRequestId.current;
+    if (!settings?.weeklyReport) {
+      setReport(null);
+      setReportError(false);
+      return;
+    }
+    const frequency = settings.reportFrequency === 'monthly' ? 'monthly' : 'weekly';
+    setReportError(false);
+    try {
+      const response = await authFetch(`/api/report/${frequency}`);
+      if (!response.ok) throw new Error(`报告生成失败 (${response.status})`);
+      const payload = parseReportPayload(await response.json());
+      if (!payload) throw new Error('报告数据格式无效');
+      if (reportRequestId.current === requestId) setReport(payload);
+    } catch (error) {
+      console.error('周期报告加载失败:', error instanceof Error ? error.message : error);
+      if (reportRequestId.current === requestId) {
+        setReport(null);
+        setReportError(true);
+      }
+    }
+  }, [settings?.reportFrequency, settings?.weeklyReport]);
 
   useEffect(() => {
     if (!settings?.weeklyReport) {
-      setReportSummary(null);
+      reportRequestId.current += 1;
+      setReport(null);
+      setReportError(false);
       return;
     }
-    let cancelled = false;
-    const frequency = settings.reportFrequency === 'monthly' ? 'monthly' : 'weekly';
-    authFetch(`/api/report/${frequency}`)
-      .then(async response => {
-        if (!response.ok) throw new Error('报告生成失败');
-        return response.json();
-      })
-      .then(data => {
-        if (!cancelled) setReportSummary(data.summary || null);
-      })
-      .catch(() => {
-        if (!cancelled) setReportSummary(null);
-      });
-    return () => { cancelled = true; };
-  }, [settings?.reportFrequency, settings?.weeklyReport]);
+    const timer = window.setTimeout(() => { void loadReport(); }, 100);
+    return () => {
+      window.clearTimeout(timer);
+      reportRequestId.current += 1;
+    };
+  }, [assets, loadReport, orders, paidPromotions, payments, settings?.weeklyReport]);
 
   const notifications = useMemo(() => buildBusinessNotifications({
     now: new Date(),
@@ -44,8 +68,10 @@ export default function Header({ onMenuClick }: HeaderProps) {
     payments,
     settings,
     dismissedIds: dismissedNotifications,
-    reportSummary,
-  }), [orders, payments, settings, dismissedNotifications, reportSummary]);
+    reportSummary: report?.summary,
+    reportPeriod: report?.period,
+    reportError,
+  }), [orders, payments, settings, dismissedNotifications, report, reportError]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -57,9 +83,19 @@ export default function Header({ onMenuClick }: HeaderProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleNotificationClick = (link: string) => {
+  const handleNotificationClick = (notification: BusinessNotification) => {
+    if (notification.action === 'retry-report') {
+      void loadReport();
+      return;
+    }
     setShowNotifications(false);
-    navigate(link);
+    navigate(notification.link);
+  };
+
+  const handleNotificationToggle = () => {
+    const opening = !showNotifications;
+    setShowNotifications(opening);
+    if (opening && settings?.weeklyReport) void loadReport();
   };
 
   const handleClearNotifications = () => {
@@ -87,7 +123,8 @@ export default function Header({ onMenuClick }: HeaderProps) {
       <div className="flex items-center gap-1.5 md:gap-4">
         <div className="relative" ref={notificationRef}>
           <button
-            onClick={() => setShowNotifications(!showNotifications)}
+            onClick={handleNotificationToggle}
+            aria-label={`通知中心（${notifications.length}条未读）`}
             className="relative p-2 text-gray-500 hover:text-panda-black transition-colors rounded-full hover:bg-bg-tertiary"
           >
             <Bell size={20} />
@@ -141,7 +178,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
                           </button>
                           <div
                             className="cursor-pointer pr-6"
-                            onClick={() => handleNotificationClick(notif.link)}
+                            onClick={() => handleNotificationClick(notif)}
                           >
                             <div className="flex items-center gap-2 mb-1">
                               <span className={clsx(
@@ -234,7 +271,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
                     >
                       <div
                         className="cursor-pointer"
-                        onClick={() => handleNotificationClick(notif.link)}
+                        onClick={() => handleNotificationClick(notif)}
                       >
                         <div className="flex items-start gap-3">
                           <div className={clsx(

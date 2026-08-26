@@ -61,6 +61,22 @@ db.exec(`
     FOREIGN KEY (userId) REFERENCES users(id)
   );
 
+  CREATE TABLE IF NOT EXISTS order_templates (
+    id TEXT PRIMARY KEY,
+    userId TEXT NOT NULL,
+    name TEXT NOT NULL,
+    title TEXT NOT NULL,
+    type TEXT NOT NULL,
+    actualAmount REAL DEFAULT 0,
+    brandName TEXT,
+    platforms TEXT,
+    productName TEXT,
+    productValue REAL DEFAULT 0,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (userId) REFERENCES users(id)
+  );
+
   CREATE TABLE IF NOT EXISTS publish_links (
     id TEXT PRIMARY KEY,
     orderId TEXT NOT NULL,
@@ -394,6 +410,8 @@ const createIndexes = () => {
     'CREATE INDEX IF NOT EXISTS idx_orders_userId ON orders(userId)',
     'CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)',
     'CREATE INDEX IF NOT EXISTS idx_orders_createdAt ON orders(createdAt)',
+    'CREATE INDEX IF NOT EXISTS idx_order_templates_userId ON order_templates(userId)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_order_templates_user_name ON order_templates(userId, name COLLATE NOCASE)',
     'CREATE INDEX IF NOT EXISTS idx_brands_userId ON brands(userId)',
     'CREATE INDEX IF NOT EXISTS idx_payments_userId ON payments(userId)',
     'CREATE INDEX IF NOT EXISTS idx_payments_type ON payments(type)',

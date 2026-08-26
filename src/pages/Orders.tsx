@@ -6,6 +6,7 @@ import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
 import OrderCard from '../components/orders/OrderCard';
+import OrderTemplatesPanel from '../components/orders/OrderTemplatesPanel';
 import { ORDER_STATUS_MAP, ORDER_TYPE_MAP, getPlatformIcon } from '../constants/orders';
 import { authFetch } from '../lib/api';
 import { ALL_MONTHS, ALL_YEARS, formatLocalDate, getAvailableYears, matchesYearMonth, monthOptions } from '../lib/dateFilter';
@@ -375,6 +376,8 @@ export default function Orders() {
           </button>
         </div>
       </div>
+
+      <OrderTemplatesPanel />
 
       <div className="card-sketch p-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-white">
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-1">

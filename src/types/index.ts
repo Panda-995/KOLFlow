@@ -18,6 +18,21 @@ export interface Order {
   productValue?: number;
 }
 
+// 商单模板只保存可重用的业务字段，不复制商单状态、日期和关联记录。
+export interface OrderTemplate {
+  id: string;
+  name: string;
+  title: string;
+  type: OrderType;
+  actualAmount: number;
+  brandName: string;
+  platforms: string[];
+  productName?: string;
+  productValue?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 // 待办接口
 export interface Todo {
   id: string;

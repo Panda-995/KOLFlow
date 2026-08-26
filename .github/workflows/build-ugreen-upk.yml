@@ -6,7 +6,7 @@ on:
       build_number:
         description: UGOS Pro package build number
         required: true
-        default: "8"
+        default: "9"
       release_tag:
         description: Optional GitHub Release tag to publish the UPK files to
         required: false
@@ -15,6 +15,10 @@ on:
 permissions:
   contents: write
   packages: read
+
+env:
+  APP_VERSION: 1.4.0
+  GHCR_IMAGE: ghcr.io/panda-995/kolflow
 
 jobs:
   package:
@@ -29,6 +33,12 @@ jobs:
             ugreen/kolflow-app/rootfs_amd64/images \
             ugreen/kolflow-app/rootfs_arm64/images
 
+      - name: Verify package version metadata
+        run: |
+          test "$(awk '/^version:/ { print $2 }' ugreen/kolflow-app/project.yaml)" = "${APP_VERSION}"
+          grep -Fq "image: ${GHCR_IMAGE}:${APP_VERSION}" \
+            ugreen/kolflow-app/rootfs_common/docker-compose.yaml
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -38,26 +48,26 @@ jobs:
 
       - name: Export amd64 image
         run: |
-          docker pull --platform linux/amd64 ghcr.io/panda-995/kolflow:amd64
+          docker pull --platform linux/amd64 ${GHCR_IMAGE}:${APP_VERSION}-amd64
           docker tag \
-            ghcr.io/panda-995/kolflow:amd64 \
-            ghcr.io/panda-995/kolflow:1.3.0
-          test "$(docker image inspect ghcr.io/panda-995/kolflow:1.3.0 --format '{{.Architecture}}')" = "amd64"
+            ${GHCR_IMAGE}:${APP_VERSION}-amd64 \
+            ${GHCR_IMAGE}:${APP_VERSION}
+          test "$(docker image inspect ${GHCR_IMAGE}:${APP_VERSION} --format '{{.Architecture}}')" = "amd64"
           docker save \
-            -o ugreen/kolflow-app/rootfs_amd64/images/kolflow-1.3.0-amd64.tar \
-            ghcr.io/panda-995/kolflow:1.3.0
+            -o ugreen/kolflow-app/rootfs_amd64/images/kolflow-${APP_VERSION}-amd64.tar \
+            ${GHCR_IMAGE}:${APP_VERSION}
 
       - name: Export arm64 image
         run: |
-          docker image rm ghcr.io/panda-995/kolflow:1.3.0
-          docker pull --platform linux/arm64 ghcr.io/panda-995/kolflow:arm64
+          docker image rm ${GHCR_IMAGE}:${APP_VERSION}
+          docker pull --platform linux/arm64 ${GHCR_IMAGE}:${APP_VERSION}-arm64
           docker tag \
-            ghcr.io/panda-995/kolflow:arm64 \
-            ghcr.io/panda-995/kolflow:1.3.0
-          test "$(docker image inspect ghcr.io/panda-995/kolflow:1.3.0 --format '{{.Architecture}}')" = "arm64"
+            ${GHCR_IMAGE}:${APP_VERSION}-arm64 \
+            ${GHCR_IMAGE}:${APP_VERSION}
+          test "$(docker image inspect ${GHCR_IMAGE}:${APP_VERSION} --format '{{.Architecture}}')" = "arm64"
           docker save \
-            -o ugreen/kolflow-app/rootfs_arm64/images/kolflow-1.3.0-arm64.tar \
-            ghcr.io/panda-995/kolflow:1.3.0
+            -o ugreen/kolflow-app/rootfs_arm64/images/kolflow-${APP_VERSION}-arm64.tar \
+            ${GHCR_IMAGE}:${APP_VERSION}
 
       - name: Install official ugcli
         run: |
@@ -79,15 +89,15 @@ jobs:
           find build_dir/pkgs/upk -type f -name '*.upk' -print0 \
             | sort -z \
             | xargs -0 sha256sum \
-            > build_dir/pkgs/upk/SHA256SUMS
+            > build_dir/pkgs/upk/SHA256SUMS-UPK
 
       - name: Upload UPK packages
         uses: actions/upload-artifact@v4
         with:
-          name: kolflow-ugos-pro-1.3.0.${{ inputs.build_number }}
+          name: kolflow-ugos-pro-${{ env.APP_VERSION }}.${{ inputs.build_number }}
           path: |
             ugreen/kolflow-app/build_dir/pkgs/upk/*.upk
-            ugreen/kolflow-app/build_dir/pkgs/upk/SHA256SUMS
+            ugreen/kolflow-app/build_dir/pkgs/upk/SHA256SUMS-UPK
             ugreen/kolflow-app/project.yaml
             ugreen/kolflow-app/rootfs_common/docker-compose.yaml
             ugreen/kolflow-app/rootfs_common/icon.png
@@ -102,8 +112,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
+          test "$RELEASE_TAG" = "v${APP_VERSION}"
           gh release upload "$RELEASE_TAG" \
             ugreen/kolflow-app/build_dir/pkgs/upk/*.upk \
-            ugreen/kolflow-app/build_dir/pkgs/upk/SHA256SUMS \
+            ugreen/kolflow-app/build_dir/pkgs/upk/SHA256SUMS-UPK \
             --clobber \
             --repo "$GITHUB_REPOSITORY"

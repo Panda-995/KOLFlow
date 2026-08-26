@@ -1,0 +1,136 @@
+name: Build Android Debug APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Optional GitHub Release tag to publish the APK to
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+env:
+  APP_VERSION: 1.4.0
+  ANDROID_VERSION_CODE: "7"
+  EXPECTED_SIGNER_SHA256: 1372e14bf045bcfd156698b574912a89a9c6df15b82b1379b5d7cca2a0df27fa
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0"
+
+      - name: Restore published Android debug keystore
+        env:
+          ANDROID_DEBUG_KEYSTORE_BASE64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$ANDROID_DEBUG_KEYSTORE_BASE64" ]; then
+            mkdir -p "$HOME/.android"
+            printf '%s' "$ANDROID_DEBUG_KEYSTORE_BASE64" \
+              | base64 --decode \
+              > "$HOME/.android/debug.keystore"
+            chmod 600 "$HOME/.android/debug.keystore"
+          else
+            echo "::warning::ANDROID_DEBUG_KEYSTORE_BASE64 is not configured. The artifact will use an ephemeral debug key and cannot be published as an in-place update."
+          fi
+
+      - name: Verify version metadata
+        run: |
+          test "$(node -p "require('./package.json').version")" = "$APP_VERSION"
+          grep -Eq "versionCode[[:space:]]+${ANDROID_VERSION_CODE}" android/app/build.gradle
+          grep -Fq "versionName \"${APP_VERSION}\"" android/app/build.gradle
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync Capacitor web assets
+        run: npm run cap:sync
+
+      - name: Build debug APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Verify and stage APK
+        run: |
+          mkdir -p release-artifacts
+          APK_SOURCE="android/app/build/outputs/apk/debug/app-debug.apk"
+          APK_NAME="KOLFlow-v${APP_VERSION}-debug.apk"
+          APK_PATH="release-artifacts/${APK_NAME}"
+          cp "$APK_SOURCE" "$APK_PATH"
+
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          "$BUILD_TOOLS/aapt" dump badging "$APK_PATH" \
+            | grep -F "versionCode='${ANDROID_VERSION_CODE}' versionName='${APP_VERSION}'"
+          "$BUILD_TOOLS/apksigner" verify --verbose "$APK_PATH"
+
+          SIGNER_SHA256="$("$BUILD_TOOLS/apksigner" verify --print-certs "$APK_PATH" \
+            | awk -F': ' '/Signer #1 certificate SHA-256 digest:/ { print tolower($2) }')"
+          test -n "$SIGNER_SHA256"
+          echo "APK_SIGNER_SHA256=$SIGNER_SHA256" >> "$GITHUB_ENV"
+
+          (
+            cd release-artifacts
+            sha256sum "$APK_NAME" > "${APK_NAME}.sha256"
+          )
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kolflow-android-debug-${{ env.APP_VERSION }}
+          path: |
+            release-artifacts/KOLFlow-v${{ env.APP_VERSION }}-debug.apk
+            release-artifacts/KOLFlow-v${{ env.APP_VERSION }}-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Guard Release tag and signing compatibility
+        if: ${{ inputs.release_tag != '' }}
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          test "$RELEASE_TAG" = "v${APP_VERSION}"
+          if [ "$APK_SIGNER_SHA256" != "$EXPECTED_SIGNER_SHA256" ]; then
+            echo "::error::APK signer does not match the certificate used by the published v1.3.0 APK."
+            exit 1
+          fi
+
+      - name: Publish APK to GitHub Release
+        if: ${{ inputs.release_tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          gh release upload "$RELEASE_TAG" \
+            release-artifacts/KOLFlow-v${APP_VERSION}-debug.apk \
+            release-artifacts/KOLFlow-v${APP_VERSION}-debug.apk.sha256 \
+            --clobber \
+            --repo "$GITHUB_REPOSITORY"

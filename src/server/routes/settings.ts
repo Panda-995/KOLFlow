@@ -158,6 +158,7 @@ router.delete('/account', async (req, res) => {
         'activity_logs',
         'todos',
         'payments',
+        'order_templates',
         'orders',
         'brands',
         'settings',

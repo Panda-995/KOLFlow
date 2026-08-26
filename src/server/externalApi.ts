@@ -16,7 +16,7 @@ import { createTodo, listTodos, updateTodo } from './services/todoService.js';
 import { createPublishLink, deletePublishLink, listPublishLinks } from './services/publishLinkService.js';
 
 const router = Router();
-const BACKUP_VERSION = 2;
+const BACKUP_VERSION = 3;
 
 // userId验证辅助函数
 function getUserId(req: Express.Request): string {
@@ -376,6 +376,7 @@ router.get('/export', async (req, res) => {
     const paidPromotions = db.prepare('SELECT * FROM paid_promotions WHERE userId = ? ORDER BY createdAt DESC').all(userId);
     const comments = db.prepare('SELECT * FROM comments WHERE userId = ? ORDER BY createdAt DESC').all(userId);
     const assets = db.prepare('SELECT * FROM assets WHERE userId = ? ORDER BY createdAt DESC').all(userId);
+    const orderTemplates = db.prepare('SELECT * FROM order_templates WHERE userId = ? ORDER BY updatedAt DESC, createdAt DESC').all(userId) as any[];
 
     return res.json({
       backupVersion: BACKUP_VERSION,
@@ -392,7 +393,11 @@ router.get('/export', async (req, res) => {
       publishLinks,
       paidPromotions,
       comments,
-      assets
+      assets,
+      orderTemplates: orderTemplates.map(template => ({
+        ...template,
+        platforms: safeJsonParse(template.platforms, []),
+      })),
     });
   } catch (error) {
     console.error('externalApi GET /export失败:', error);

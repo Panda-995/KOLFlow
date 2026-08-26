@@ -9,20 +9,21 @@ import { useWebdavAutoSync } from '../hooks/useWebdavAutoSync';
 
 export default function Layout() {
   useWebdavAutoSync();
-  const { fetchOrders, fetchTodos, fetchBrands, fetchPayments, fetchSettings, fetchAssets, fetchPaidPromotions } = useStore();
+  const { fetchOrders, fetchOrderTemplates, fetchTodos, fetchBrands, fetchPayments, fetchSettings, fetchAssets, fetchPaidPromotions } = useStore();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     fetchOrders();
+    fetchOrderTemplates();
     fetchTodos();
     fetchBrands();
     fetchPayments();
     fetchSettings();
     fetchAssets();
     fetchPaidPromotions();
-  }, [fetchOrders, fetchTodos, fetchBrands, fetchPayments, fetchSettings, fetchAssets, fetchPaidPromotions]);
+  }, [fetchOrders, fetchOrderTemplates, fetchTodos, fetchBrands, fetchPayments, fetchSettings, fetchAssets, fetchPaidPromotions]);
 
   // 键盘快捷键（三组合键，避免冲突）
   useKeyboardShortcuts([

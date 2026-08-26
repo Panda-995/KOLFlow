@@ -36,6 +36,7 @@ const resetDatabase = () => {
     'activity_logs',
     'todos',
     'payments',
+    'order_templates',
     'orders',
     'brands',
     'settings',
@@ -111,6 +112,123 @@ test('API Key 在多用户之间必须唯一', () => {
   assert.throws(() => {
     db.prepare('UPDATE settings SET apiKey = ? WHERE userId = ?').run('shared-api-key', secondaryUserId);
   });
+});
+
+test('商单模板按用户隔离并可重复一键创建全新商单', async () => {
+  const createTemplateResponse = await internalRequest('/order-templates', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: '日常小红书合作',
+      title: '新品种草',
+      type: 'paid',
+      actualAmount: 2800,
+      brandName: '模板品牌',
+      platforms: ['小红书'],
+    }),
+  });
+  assert.equal(createTemplateResponse.status, 200);
+  const template = await createTemplateResponse.json() as any;
+  assert.deepEqual(template.platforms, ['小红书']);
+
+  db.prepare(`
+    INSERT INTO order_templates (id, userId, name, title, type, actualAmount, platforms)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(uuidv4(), secondaryUserId, '其他账号模板', '不应可见', 'paid', 1, '[]');
+
+  const listResponse = await internalRequest('/order-templates');
+  assert.equal(listResponse.status, 200);
+  const templates = await listResponse.json() as any[];
+  assert.deepEqual(templates.map(item => item.id), [template.id]);
+
+  const firstCreateResponse = await internalRequest(`/order-templates/${template.id}/create-order`, {
+    method: 'POST',
+    body: JSON.stringify({ operationDate: '2030-05-06' }),
+  });
+  const secondCreateResponse = await internalRequest(`/order-templates/${template.id}/create-order`, {
+    method: 'POST',
+    body: JSON.stringify({ operationDate: '2030-05-06' }),
+  });
+  assert.equal(firstCreateResponse.status, 200);
+  assert.equal(secondCreateResponse.status, 200);
+  const firstOrder = await firstCreateResponse.json() as any;
+  const secondOrder = await secondCreateResponse.json() as any;
+  assert.notEqual(firstOrder.id, secondOrder.id);
+  assert.notEqual(firstOrder.orderNo, secondOrder.orderNo);
+  assert.equal(firstOrder.status, 'in_progress');
+  assert.equal(firstOrder.acceptDate, '2030-05-06');
+  assert.equal(firstOrder.submitDate, null);
+  assert.equal(firstOrder.actualAmount, 2800);
+  assert.deepEqual(firstOrder.platforms, ['小红书']);
+  assert.equal(
+    (db.prepare('SELECT COUNT(*) AS count FROM todos WHERE userId = ? AND orderId IN (?, ?)')
+      .get(primaryUserId, firstOrder.id, secondOrder.id) as any).count,
+    2,
+  );
+  assert.equal(
+    (db.prepare('SELECT COUNT(*) AS count FROM comments WHERE orderId IN (?, ?)')
+      .get(firstOrder.id, secondOrder.id) as any).count,
+    0,
+  );
+
+  const updateResponse = await internalRequest(`/order-templates/${template.id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ name: '更新后的模板', actualAmount: 3200 }),
+  });
+  assert.equal(updateResponse.status, 200);
+  const updatedTemplate = await updateResponse.json() as any;
+  assert.equal(updatedTemplate.name, '更新后的模板');
+  assert.equal(updatedTemplate.title, '新品种草');
+  assert.equal(updatedTemplate.actualAmount, 3200);
+
+  const deleteResponse = await internalRequest(`/order-templates/${template.id}`, { method: 'DELETE' });
+  assert.equal(deleteResponse.status, 200);
+  assert.equal(db.prepare('SELECT 1 FROM order_templates WHERE id = ?').get(template.id), undefined);
+});
+
+test('备份 v3 导出商单模板且仍可导入不含模板的 v2 旧数据', async () => {
+  const createTemplateResponse = await internalRequest('/order-templates', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: '备份模板',
+      title: '备份商单',
+      type: 'direct',
+      actualAmount: 600,
+      platforms: ['抖音'],
+    }),
+  });
+  assert.equal(createTemplateResponse.status, 200);
+
+  const exportResponse = await internalRequest('/data/export');
+  assert.equal(exportResponse.status, 200);
+  const exported = await exportResponse.json() as any;
+  assert.equal(exported.backupVersion, 3);
+  assert.equal(exported.orderTemplates.length, 1);
+  assert.deepEqual(exported.orderTemplates[0].platforms, ['抖音']);
+
+  const legacyImportResponse = await internalRequest('/data/import', {
+    method: 'POST',
+    body: JSON.stringify({
+      backupVersion: 2,
+      orders: [],
+      brands: [],
+      payments: [],
+      todos: [],
+      assets: [],
+      publishLinks: [],
+      paidPromotions: [],
+      comments: [],
+    }),
+  });
+  assert.equal(legacyImportResponse.status, 200);
+  assert.equal((db.prepare('SELECT COUNT(*) AS count FROM order_templates WHERE userId = ?').get(primaryUserId) as any).count, 0);
+
+  const restoreResponse = await internalRequest('/data/import', {
+    method: 'POST',
+    body: JSON.stringify(exported),
+  });
+  assert.equal(restoreResponse.status, 200);
+  const restoredTemplate = db.prepare('SELECT platforms FROM order_templates WHERE userId = ?').get(primaryUserId) as any;
+  assert.deepEqual(JSON.parse(restoredTemplate.platforms), ['抖音']);
 });
 
 test('品牌重命名同步关联记录并拒绝重名', async () => {

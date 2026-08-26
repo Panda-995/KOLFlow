@@ -16,7 +16,7 @@ const router = Router();
 
 type ImportRow = Record<string, unknown>;
 
-const BACKUP_VERSION = 2;
+const BACKUP_VERSION = 3;
 const MAX_IMPORT_ITEMS = 10_000;
 const IMPORT_COLLECTIONS = [
   'orders',
@@ -27,6 +27,7 @@ const IMPORT_COLLECTIONS = [
   'publishLinks',
   'paidPromotions',
   'comments',
+  'orderTemplates',
 ] as const;
 
 type ImportCollection = typeof IMPORT_COLLECTIONS[number];
@@ -47,6 +48,7 @@ const COLLECTION_TABLES: Record<ImportCollection, string> = {
   publishLinks: 'publish_links',
   paidPromotions: 'paid_promotions',
   comments: 'comments',
+  orderTemplates: 'order_templates',
 };
 
 const readImportCollection = (payload: Record<string, unknown>, name: ImportCollection): any[] => {
@@ -87,8 +89,20 @@ const analyzeImportPayload = (userId: string, rawPayload: unknown): ImportPrevie
   if (collections.brands.some(brand => !brand || typeof brand !== 'object' || !String(brand.name || '').trim())) {
     throw new ApiError('品牌数据存在空名称');
   }
+  if (collections.orderTemplates.some(template => (
+    !template
+    || typeof template !== 'object'
+    || !String(template.name || '').trim()
+    || !String(template.title || '').trim()
+  ))) {
+    throw new ApiError('商单模板存在空名称或空标题');
+  }
   for (const name of IMPORT_COLLECTIONS) assertUniqueValues(collections[name], 'id', `${name} ID`);
   assertUniqueValues(collections.orders, 'orderNo', '商单号');
+  const normalizedTemplateNames = collections.orderTemplates.map(template => ({
+    name: String(template.name).trim().toLocaleLowerCase('zh-CN'),
+  }));
+  assertUniqueValues(normalizedTemplateNames, 'name', '商单模板名称');
 
   let idConflicts = 0;
   for (const name of IMPORT_COLLECTIONS) {
@@ -356,6 +370,7 @@ router.get('/export', (req, res) => {
     const paidPromotions = db.prepare('SELECT * FROM paid_promotions WHERE userId = ? ORDER BY createdAt DESC').all(userId);
     const comments = db.prepare('SELECT * FROM comments WHERE userId = ? ORDER BY createdAt DESC').all(userId);
     const assets = db.prepare('SELECT * FROM assets WHERE userId = ? ORDER BY createdAt DESC').all(userId);
+    const orderTemplates = db.prepare('SELECT * FROM order_templates WHERE userId = ? ORDER BY updatedAt DESC, createdAt DESC').all(userId);
 
     return res.json({
       backupVersion: BACKUP_VERSION,
@@ -369,6 +384,10 @@ router.get('/export', (req, res) => {
       paidPromotions,
       comments,
       assets,
+      orderTemplates: orderTemplates.map((template: any) => ({
+        ...template,
+        platforms: safeJsonParse(template.platforms, []),
+      })),
     });
   } catch (error) {
     console.error('导出数据错误:', error);
@@ -387,6 +406,7 @@ router.post('/clear', (req, res) => {
       db.prepare('DELETE FROM activity_logs WHERE userId = ?').run(userId);
       db.prepare('DELETE FROM todos WHERE userId = ?').run(userId);
       db.prepare('DELETE FROM payments WHERE userId = ?').run(userId);
+      db.prepare('DELETE FROM order_templates WHERE userId = ?').run(userId);
       db.prepare('DELETE FROM assets WHERE userId = ?').run(userId);
       db.prepare('DELETE FROM orders WHERE userId = ?').run(userId);
       db.prepare('DELETE FROM brands WHERE userId = ?').run(userId);
@@ -418,7 +438,7 @@ router.post('/import', (req, res) => {
   try {
     const userId = getUserId(req);
     const preview = analyzeImportPayload(userId, req.body);
-    const { orders, brands, payments, todos, settings: importedSettings, publishLinks, paidPromotions, comments, assets, operationDate } = req.body;
+    const { orders, brands, payments, todos, settings: importedSettings, publishLinks, paidPromotions, comments, assets, orderTemplates, operationDate } = req.body;
 
     const importData = db.transaction(() => {
       const brandIdMap = new Map<string, string>();
@@ -454,6 +474,7 @@ router.post('/import', (req, res) => {
       db.prepare('DELETE FROM activity_logs WHERE userId = ?').run(userId);
       db.prepare('DELETE FROM todos WHERE userId = ?').run(userId);
       db.prepare('DELETE FROM payments WHERE userId = ?').run(userId);
+      db.prepare('DELETE FROM order_templates WHERE userId = ?').run(userId);
       db.prepare('DELETE FROM assets WHERE userId = ?').run(userId);
       db.prepare('DELETE FROM orders WHERE userId = ?').run(userId);
       db.prepare('DELETE FROM brands WHERE userId = ?').run(userId);
@@ -496,6 +517,40 @@ router.post('/import', (req, res) => {
             orderIdMap.set(sourceOrderId, orderId);
           }
           importedOrderIds.add(orderId);
+        });
+      }
+
+      if (Array.isArray(orderTemplates)) {
+        const templateStmt = db.prepare(`
+          INSERT INTO order_templates (
+            id, userId, name, title, type, actualAmount, brandName, platforms,
+            productName, productValue, createdAt, updatedAt
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        orderTemplates.forEach((template: any) => {
+          const rawPlatforms = Array.isArray(template.platforms)
+            ? template.platforms
+            : safeJsonParse(template.platforms, []);
+          const platforms = Array.from(new Set(
+            rawPlatforms.map((platform: unknown) => String(platform).trim()).filter(Boolean),
+          )).slice(0, 10);
+          const type = ['paid', 'product_exchange', 'direct', 'ecard'].includes(template.type)
+            ? template.type
+            : 'paid';
+          templateStmt.run(
+            allocateImportedId('order_templates', userId, template.id),
+            userId,
+            String(template.name).trim().slice(0, 50),
+            String(template.title).trim().slice(0, 100),
+            type,
+            Math.max(0, Number(template.actualAmount) || 0),
+            String(template.brandName || '').trim().slice(0, 50) || null,
+            JSON.stringify(platforms),
+            String(template.productName || '').trim().slice(0, 100) || null,
+            Math.max(0, Number(template.productValue) || 0),
+            template.createdAt || new Date().toISOString(),
+            template.updatedAt || template.createdAt || new Date().toISOString(),
+          );
         });
       }
 

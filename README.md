@@ -51,6 +51,7 @@
 |---------|------|
 | 📊 Dashboard | 📊 仪表盘 |
 | 📦 Order Management | 📦 商单管理 |
+| 🧩 Order Templates | 🧩 商单模板与一键创建 |
 | ✅ Todo & Calendar | ✅ 待办/日历 |
 | 💰 Billing | 💰 账单管理 |
 | 🏢 Brand Management | 🏢 品牌管理 |
@@ -69,6 +70,7 @@ KOLFlow 以商单详情作为主数据。商单会向下同步待办、账单和
 | Action | 操作 | Effect | 效果 |
 |--------|------|--------|------|
 | Create Order | 创建商单 | Auto-create Todo | 自动创建待办 |
+| Create from Template | 从模板创建商单 | Generate a fresh order number/date and Todo | 生成全新商单号、当天接单日期和待办 |
 | Complete Order (Paid/Direct) | 商单完成（付费/直发） | Create or update Bill | 创建或更新关联账单 |
 | Complete Order (Exchange/E-card) | 商单完成（置换/E卡） | Create or update Asset | 创建或更新关联资产 |
 | Edit completed Order | 修改已完成商单 | Sync Bill/Asset from order fields | 按商单详情同步账单/资产的品牌、金额、商品信息 |
@@ -239,6 +241,7 @@ docker run -d -p 3000:3000 \
 | Tag | 说明 |
 |-----|------|
 | `latest` | 最新版（多架构） |
+| `1.4.0` | v1.4.0 固定版本（多架构） |
 | `arm64` | ARM64 架构专用 |
 | `amd64` | x86_64 架构专用 |
 
@@ -400,6 +403,16 @@ PUT    /api/settings/display    # 更新显示设置
 GET    /api/report/:type        # 获取指定类型统计报表
 ```
 
+### Order Templates | 商单模板
+
+```bash
+GET    /api/order-templates                    # 获取模板列表
+POST   /api/order-templates                    # 创建模板
+PUT    /api/order-templates/:id                # 更新模板
+DELETE /api/order-templates/:id                # 删除模板
+POST   /api/order-templates/:id/create-order   # 一键创建全新商单
+```
+
 ### External API | 外部 API（API Key 鉴权）
 
 ```bash
@@ -437,6 +450,15 @@ External order create/update supports `productName` and `productValue`. When an 
 ---
 
 ## 📝 更新日志 | Changelog
+
+### 2026-08-26
+
+- **周期数据通知修复**: 周报/月报通知会随商单、账单、资产和推广费变化刷新，展示报告起止日期、完成商单数、已结算收入、待收金额与推广费；接口失败时显示可重试提示，不再静默为空。
+- **精确周期统计**: 点击周期通知会携带周/月起止日期进入统计页，所有概览、趋势、平台、状态和品牌数据按同一周期筛选。
+- **商单模板**: 新增模板创建、编辑、删除和一键创建商单；重复使用模板时生成独立商单号、当天接单日期与待办，并保持品牌数据联动。
+- **旧数据兼容**: 完整备份升级为 v3 并包含商单模板；仍可导入不含模板的 v1/v2 备份，缺失模板按空集合处理。
+- **发布与验证**: 版本升级至 `1.4.0`，Android `versionCode` 升级为 `7`，UGOS Pro 升级为 `1.4.0.0009`；新增可复跑的 Playwright 发布测试及 Android Release 工作流。
+- **依赖安全更新**: 升级 React Router、PostCSS、brace-expansion 等依赖的安全补丁，npm 官方 registry 审计结果为 `0 vulnerabilities`。
 
 ### 2026-07-26
 
