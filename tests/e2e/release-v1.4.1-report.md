@@ -19,6 +19,7 @@
 ## 3. 失败与阻塞
 
 - Android 本地 Gradle：Windows 报 Unable to establish loopback connection，属于构建环境阻塞；使用 GitHub Linux 工作流构建，签名校验通过后才上传 APK。
+- 首轮 Android CI 被签名保护阻止发布：Gradle 默认从 `/home/runner/.config/.android/debug.keystore` 取密钥，而恢复步骤写入 `$HOME/.android/debug.keystore`。改为提前校验证书、显式指定签名文件后重建通过；未上传不兼容的首轮 APK。
 - 初次依赖审计：配置的 npm 镜像站审计接口返回 404；改用 npm 源站执行。
 - npm 源站生产依赖审计：0 个高危/严重问题，4 个中危问题（xmldom、qs 及依赖链）；这些依赖版本与旧版相同，本次不执行可能破坏兼容性的框架强制升级。
 - 未连接 NAS 或 Android 真机，因此没有将真机安装、真机覆盖升级和全部硬件环境标记为通过。
@@ -41,3 +42,16 @@
 - 本地日志：`.tmp-release-v1.4.1/`；页面截图：`test-results/branding-1440.png`、`test-results/branding-390.png`；E2E 报告：`test-results/e2e-report/`。
 - 自动化脚本：`tests/regressions.test.ts`、`tests/weekly-report.test.ts`、`tests/e2e/release-v1.4.0.spec.ts`、`tests/e2e/release-v1.4.1.spec.ts`。
 - 双架构镜像、UPK 和 Android 构建证据在对应 GitHub Actions 记录；Release 附带 SHA256 校验清单。
+
+## 7. 发布产物验证
+
+- [Docker 双架构构建](https://github.com/Panda-995/KOLFlow/actions/runs/34110534243)：amd64、arm64 和多架构清单成功。GHCR 与 Docker Hub 的 v1.4.1 对应架构摘要一致。
+- amd64：`sha256:a4eddf487efae56628041af1528a9213e6e4e878e7ed820e1c3694a19c541378`。
+- arm64：`sha256:6c9d128c7c7f52818008c94c8eee35620877d937916b6ec0332cd07648047f01`。
+- 两个镜像均为 Linux，启动命令 `node build/server.js`，数据卷 `/app/data`。
+- [Android 构建](https://github.com/Panda-995/KOLFlow/actions/runs/34111038870)：成功；工作流使用修正后的签名流程，检出 v1.4.1 标签源码进行构建。
+- 下载 APK 后再次验证：包名 `com.kolflow.app`，versionName `1.4.1`，versionCode `8`，minSdk `22`、targetSdk `36` 保持不变；证书 SHA256 与下载的 v1.4.0 APK 一致。
+- APK SHA256 与发布清单一致；包内 Web 图标、六张详情图与原文件逐字节一致，15 个 Android 启动器图标资源与新图标像素一致。
+- [UGOS Pro 双架构打包](https://github.com/Panda-995/KOLFlow/actions/runs/34111041769)：包含两个 `1.4.1.0010` UPK、素材 ZIP 与 UPK 校验清单。
+- 两份 UPK 均完整下载并通过 SHA256 校验。逐层读取 UPK、UGB 及内嵌 Docker 镜像，确认应用 ID、版本、架构、289 字中文描述、数据挂载及图标正确；每个架构镜像内的 public / dist 共 14 份图标与详情资源均与原图逐字节一致。
+- 下载的上架素材 ZIP 中全部文件通过内部校验清单；六张详情图和图标与提供的原图一致，描述文本一致（仅 Windows / Linux 换行符不同）。

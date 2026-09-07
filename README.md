@@ -168,7 +168,7 @@ Use an HTTPS address that the phone can actually reach and whose certificate is 
 | Android emulator / test device | `https://kolflow-test.example.com` |
 | Real Android phone | `https://kolflow.example.com` |
 
-The Android app rejects HTTP, `localhost`, `127.0.0.1`, and `0.0.0.0` to prevent email, password, invite-code, and business data from being sent in clear text. Configure a trusted TLS certificate and use its HTTPS domain.
+The Android app supports reachable HTTP and HTTPS server addresses. Authentication payloads are encrypted over HTTP; HTTPS with a trusted certificate is recommended to protect the complete connection. On a real phone, use the server's LAN IP or domain instead of `localhost`, `127.0.0.1`, or `0.0.0.0`.
 
 ### Build APK | 构建 APK
 
