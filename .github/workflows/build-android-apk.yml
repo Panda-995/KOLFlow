@@ -22,6 +22,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -57,6 +59,10 @@ jobs:
               | base64 --decode \
               > "$HOME/.android/debug.keystore"
             chmod 600 "$HOME/.android/debug.keystore"
+            KEY_SHA256="$(keytool -exportcert -alias androiddebugkey \
+              -keystore "$HOME/.android/debug.keystore" -storepass android \
+              | sha256sum | awk '{print $1}')"
+            test "$KEY_SHA256" = "$EXPECTED_SIGNER_SHA256"
           else
             echo "::warning::ANDROID_DEBUG_KEYSTORE_BASE64 is not configured. The artifact will use an ephemeral debug key and cannot be published as an in-place update."
           fi
@@ -77,7 +83,16 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew signingReport --no-daemon
+          if [ -f "$HOME/.android/debug.keystore" ]; then
+            ./gradlew assembleDebug --no-daemon --stacktrace \
+              -Pandroid.injected.signing.store.file="$HOME/.android/debug.keystore" \
+              -Pandroid.injected.signing.store.password=android \
+              -Pandroid.injected.signing.key.alias=androiddebugkey \
+              -Pandroid.injected.signing.key.password=android
+          else
+            ./gradlew assembleDebug --no-daemon --stacktrace
+          fi
 
       - name: Verify and stage APK
         run: |
