@@ -4,6 +4,7 @@ node_modules/
 # 构建产物
 dist/
 build/
+release-artifacts/
 
 # 测试
 coverage/

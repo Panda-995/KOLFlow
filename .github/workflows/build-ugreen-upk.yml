@@ -6,7 +6,7 @@ on:
       build_number:
         description: UGOS Pro package build number
         required: true
-        default: "9"
+        default: "10"
       release_tag:
         description: Optional GitHub Release tag to publish the UPK files to
         required: false
@@ -17,7 +17,7 @@ permissions:
   packages: read
 
 env:
-  APP_VERSION: 1.4.0
+  APP_VERSION: 1.4.1
   GHCR_IMAGE: ghcr.io/panda-995/kolflow
 
 jobs:
@@ -84,12 +84,15 @@ jobs:
           ugcli pack --arch all --build "${{ inputs.build_number }}"
 
       - name: Generate checksums
-        working-directory: ugreen/kolflow-app
+        working-directory: ugreen/kolflow-app/build_dir/pkgs/upk
         run: |
-          find build_dir/pkgs/upk -type f -name '*.upk' -print0 \
+          find . -maxdepth 1 -type f -name '*.upk' -printf '%f\0' \
             | sort -z \
             | xargs -0 sha256sum \
-            > build_dir/pkgs/upk/SHA256SUMS-UPK
+            > SHA256SUMS-UPK
+
+      - name: Package store artwork and description
+        run: python3 scripts/package-store-assets.py
 
       - name: Upload UPK packages
         uses: actions/upload-artifact@v4
@@ -103,6 +106,7 @@ jobs:
             ugreen/kolflow-app/rootfs_common/icon.png
             ugreen/README.md
             ugreen/STORE_LISTING.md
+            release-artifacts/KOLFlow-v${{ env.APP_VERSION }}-ugreen-store-assets.zip
           if-no-files-found: error
           retention-days: 30
 
@@ -116,5 +120,6 @@ jobs:
           gh release upload "$RELEASE_TAG" \
             ugreen/kolflow-app/build_dir/pkgs/upk/*.upk \
             ugreen/kolflow-app/build_dir/pkgs/upk/SHA256SUMS-UPK \
+            release-artifacts/KOLFlow-v${APP_VERSION}-ugreen-store-assets.zip \
             --clobber \
             --repo "$GITHUB_REPOSITORY"

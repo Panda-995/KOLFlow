@@ -1,6 +1,6 @@
 services:
   kolflow:
-    image: ghcr.io/panda-995/kolflow:1.4.0
+    image: ghcr.io/panda-995/kolflow:1.4.1
     container_name: kolflow
     ports:
       - "3441:3000"

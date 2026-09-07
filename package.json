@@ -1,7 +1,7 @@
 {
   "name": "kolflow",
   "private": true,
-  "version": "1.4.0",
+  "version": "1.4.1",
   "license": "AGPL-3.0-only",
   "author": "熊猫不是猫QAQ",
   "type": "module",

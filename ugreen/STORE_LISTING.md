@@ -2,7 +2,7 @@
 
 - 应用名称：KOLFlow
 - 应用 ID：`com.panda.kolflow`
-- 当前版本：`1.4.0.0009`
+- 当前版本：`1.4.1.0010`
 - 分类：实用工具
 - 支持架构：amd64、arm64
 - 开发者：熊猫不是猫QAQ
@@ -17,28 +17,19 @@
 
 ## 中文描述
 
-KOLFlow 是面向 KOL、内容创作者与达人团队的自托管商单管理系统，可集中管理商单进度、品牌与联系人、账单结算、置换资产、待办日历、发布链接、付费推广成本、数据统计、操作日志以及数据导入导出，并支持 Android 客户端连接。1.4.0 修复每周数据通知无实际数据的问题，并新增可一键创建重复商单的商单模板；HTTP 认证载荷加密与最大 100 MB 的完整备份导入能力保持兼容。项目采用 GNU AGPL v3.0 开源。
+KOLFlow 是面向内容创作者和达人的自托管商单管理套件，可部署在个人服务器或 NAS 上，通过电脑浏览器、手机浏览器和 Android 客户端访问。套件支持记录商单信息、合作类型、交付日期与执行状态，使用模板创建重复商单，管理品牌联系人、待办日历、发布链接和付费推广费用；可跟踪账单结算、置换商品及资产出售情况，并通过仪表盘、数据统计和周期通知查看业务进展。支持操作日志、数据导入导出和备份恢复，便于整理合作记录与维护历史数据。Android 客户端需连接用户自行部署的服务。本项目独立开发，采用 GNU AGPL v3.0 开源，与所提及的第三方品牌不存在隶属或合作关系。
 
 ## English Description
 
-KOLFlow is a self-hosted business collaboration manager designed for creators and KOL teams. Version 1.4.0 restores real data in weekly notifications and adds reusable order templates for one-click creation of recurring collaborations. HTTP authentication payload encryption and full-backup import up to 100 MB remain supported. The project is open source under GNU AGPL v3.0.
+KOLFlow is an independently developed, self-hosted collaboration manager for content creators. Deploy it on a personal server or NAS and access it through desktop and mobile browsers or an Android client connected to your server. Track orders, delivery dates and progress; reuse order templates; manage brand contacts, tasks, calendars, publication links and paid promotion costs. Record bill settlements, exchanged products and asset sales, and review dashboards, statistics, periodic notifications and activity logs. Data import, export and backup restoration help maintain historical records. Licensed under GNU AGPL v3.0. The project is not affiliated with or partnered with the third-party brands mentioned.
 
 ## 更新说明
 
-- 修复每周数据通知只有通知框架、没有实际数据内容的问题。
-- 新增商单模板，可保存常用商单字段并一键创建重复商单。
-- 重新构建 amd64、arm64 镜像、`1.4.0` 多架构清单及 UGOS Pro `1.4.0.0009` 双架构应用包。
-- 应用“关于”页新增隐私政策、个人信息“双清单”、投诉举报、隐私负责人邮箱和 Android APP 下载入口。
-- “账号安全”新增永久注销账号途径，要求当前密码及二次确认，并删除账号全部关联数据。
-- 隐私政策按业务功能逐项说明收集目的、方式、范围和必要性，并补充运营者基本情况。
-- 恢复 HTTP 页面、注册、登录和全部业务功能，不再强制切换 HTTPS。
-- 登录、注册、修改邮箱/密码及账号注销载荷使用 RSA-OAEP-256 与 AES-256-GCM 混合加密。
-- 请求体不再出现邮箱、密码或邀请码明文，并通过一次性挑战值阻止密文重放。
-- Android 客户端恢复 HTTP 服务地址连接，并在 HTTP 下使用加密认证载荷完成注册、登录和账号安全操作。
-- 完整备份预检与导入的 JSON 请求体上限提升至 `100 MB`，普通 JSON API 继续保持 `10 MB` 上限。
-- 登录与注册必须确认隐私政策，前端和服务端双重校验。
-- 登录与注册失败限流调整为 15 分钟最多 60 次，成功请求不计数。
-- 资产库列表不再一次性传输全部原图，图片进入可视区域后按需加载。
-- 新上传资产图片自动缩放并压缩为 WebP。
-- 项目许可证更新为 GNU AGPL v3.0，作者名称统一为“熊猫不是猫QAQ”。
-- 修复依赖安全漏洞，构建时 `npm audit` 为 0 vulnerabilities。
+- 更新应用图标，统一网页、Android 桌面及启动画面、UGOS Pro 应用图标。
+- 更新 PC 端三张及移动端三张详情图，按实际功能重写上架描述。
+- 保持应用 ID、数据目录、数据库结构及备份格式不变，保留历史版本镜像以支持回退。
+- Android 版本为 1.4.1（versionCode 8），使用与已发布版本一致的签名。
+
+## 上架素材
+
+原图保存在 `public/store-listing/pc` 和 `public/store-listing/mobile`，随 Docker 镜像包含在双架构 UPK 内。Release 同时提供 `KOLFlow-v1.4.1-ugreen-store-assets.zip`，包含图标、六张详情图、本说明和素材校验清单，供应用中心提交使用。详情图仍需在上架时提交，UPK 内包含图片不会自动更新应用中心展示。

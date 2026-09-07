@@ -19,3 +19,13 @@ Thumbs.db
 .vscode
 uploads
 kolflow-data
+.tmp*
+.hsk
+design
+PRODUCT.md
+test-results
+android
+ugreen
+build
+**/*.keystore
+**/*.apk

@@ -35,6 +35,7 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
       )}>
         <div className="h-14 flex items-center justify-between border-b border-white/10 px-4">
           <div className="flex items-center gap-2">
+            <img src="/app-icon.png" alt="" width={28} height={28} className="rounded-md" />
             <div className="font-bold text-xl tracking-tight">
               <span className="text-white">KOL</span>
               <span className="text-white/60">Flow</span>
@@ -103,7 +104,8 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
             "flex flex-col transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
             collapsed ? "opacity-0 scale-75 absolute" : "opacity-100 scale-100"
           )}>
-            <div className="font-bold text-xl tracking-tight">
+            <div className="font-bold text-xl tracking-tight flex items-center gap-1">
+              <img src="/app-icon.png" alt="" width={28} height={28} className="rounded-md mr-1" />
               <span className="text-white">KOL</span>
               <span className="text-white/60">Flow</span>
             </div>
@@ -115,7 +117,7 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
             "font-bold text-lg tracking-tight text-white transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
             collapsed ? "opacity-100 scale-100" : "opacity-0 scale-75 absolute"
           )}>
-            KOL
+            <img src="/app-icon.png" alt="KOLFlow" width={32} height={32} className="rounded-lg" />
           </div>
         </div>
 

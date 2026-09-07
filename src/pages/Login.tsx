@@ -185,6 +185,7 @@ export default function Login() {
       
       <div className="card w-full max-w-md p-8 animate-in fade-in slide-in-from-bottom-4 duration-500 relative z-10 bg-white/95 backdrop-blur-sm shadow-2xl rounded-2xl border border-white/20">
         <div className="text-center mb-8">
+          <img src="/app-icon.png" alt="KOLFlow" width={56} height={56} className="mx-auto mb-3 rounded-xl" />
           <h1 className="text-3xl font-bold text-panda-black mb-2 tracking-tight">
             <span className="text-panda-black">KOL</span>
             <span className="text-gray-400">Flow</span>

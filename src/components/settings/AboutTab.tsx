@@ -27,7 +27,7 @@ export function AboutTab({ previewImage, setPreviewImage }: AboutTabProps) {
           {/* 项目介绍 */}
           <div className="p-6 bg-gradient-to-br from-gray-50 to-white rounded-2xl border border-border/30">
             <h3 className="text-xl font-bold text-panda-black mb-4 flex items-center gap-2">
-              🐼 KOLFlow
+              <img src="/app-icon.png" alt="" width={32} height={32} className="rounded-lg" /> KOLFlow
               <span className="text-sm font-normal text-gray-400">达人商单流管理系统</span>
             </h3>
             <p className="text-sm text-gray-600 leading-relaxed mb-4">
