@@ -11,7 +11,7 @@ on:
         default: ""
 
 env:
-  APP_VERSION: 1.4.2
+  APP_VERSION: 1.4.3
   GHCR_IMAGE: ghcr.io/panda-995/kolflow
   DOCKERHUB_IMAGE: panda995/kolflow
   HAS_DOCKERHUB: ${{ secrets.DOCKER_HUB_USERNAME != '' && secrets.DOCKER_HUB_TOKEN != '' }}
@@ -90,6 +90,9 @@ jobs:
           }
           console.log('Native production image startup, database and static resources verified.');
           JS
+
+      - name: Verify old data and custom folder persistence
+        run: bash scripts/verify-container-storage.sh "${GHCR_IMAGE}:1.4.2-${{ matrix.suffix }}" "${GHCR_IMAGE}:${APP_VERSION}-${{ matrix.suffix }}"
 
       - name: Log in to Docker Hub
         if: env.HAS_DOCKERHUB == 'true'

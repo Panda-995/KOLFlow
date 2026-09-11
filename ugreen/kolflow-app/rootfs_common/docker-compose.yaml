@@ -1,11 +1,18 @@
 services:
   kolflow:
-    image: ghcr.io/panda-995/kolflow:1.4.2
+    image: ghcr.io/panda-995/kolflow:1.4.3
     container_name: kolflow
     ports:
       - "3441:3000"
     volumes:
+      # {{ if and .DATA_PATH (index .DATA_PATH 0) }}
+      - type: bind
+        source: |-
+          ${DATA_PATH}
+        target: /app/data
+      # {{ else }}
       - ./data:/app/data
+      # {{ end }}
     environment:
       TZ: Asia/Shanghai
       NODE_ENV: production

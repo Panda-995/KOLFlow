@@ -1,6 +1,6 @@
 spec_version: "2.1"
 app_id: com.panda.kolflow
-version: 1.4.2
+version: 1.4.3
 support_arch:
   - amd64
   - arm64
@@ -22,6 +22,18 @@ source_code_link:
 privacy_policy_link:
   - https://github.com/Panda-995/KOLFlow/blob/main/public/privacy-policy.html
 parameters:
+  - key: DATA_PATH
+    type: path
+    multi: false
+    required: false
+    changeable: true
+    i18n:
+      en-US:
+        name: Data folder
+        description: Choose a folder for the database and business data. Leave blank to use the existing data directory. Stop the app and copy existing data before switching folders, or restore a backup.
+      zh-CN:
+        name: 数据文件夹
+        description: 选择用于保存数据库和业务数据的文件夹；留空沿用原数据目录。更换文件夹前请停用应用并迁移原数据，或导入备份。
   - key: JWT_SECRET
     type: password
     required: true
@@ -44,7 +56,7 @@ parameters:
     i18n:
       en-US:
         name: Registration invite code
-        description: Enter a 6 to 64 character invite code. New users must provide this code when registering.
+        description: Please define your own 6-64 character invite code. New users must provide this code when registering.
       zh-CN:
         name: 注册邀请码
         description: 请自定义6-64位邀请码，新用户注册 KOLFlow 账号时必须填写此邀请码。

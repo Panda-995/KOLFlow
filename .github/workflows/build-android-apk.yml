@@ -12,8 +12,8 @@ permissions:
   contents: write
 
 env:
-  APP_VERSION: 1.4.2
-  ANDROID_VERSION_CODE: "9"
+  APP_VERSION: 1.4.3
+  ANDROID_VERSION_CODE: "10"
   EXPECTED_SIGNER_SHA256: 1372e14bf045bcfd156698b574912a89a9c6df15b82b1379b5d7cca2a0df27fa
 
 jobs:
