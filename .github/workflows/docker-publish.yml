@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Optional source tag or commit to build with this workflow
+        required: false
+        default: ""
 
 env:
   APP_VERSION: 1.4.2
@@ -13,7 +18,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
@@ -23,14 +28,18 @@ jobs:
         include:
           - platform: linux/amd64
             suffix: amd64
+            runner: ubuntu-latest
           - platform: linux/arm64
             suffix: arm64
+            runner: ubuntu-24.04-arm
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - name: Verify source version
+        run: test "$(node -p "require('./package.json').version")" = "$APP_VERSION"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -55,6 +64,32 @@ jobs:
             ${{ env.GHCR_IMAGE }}:${{ env.APP_VERSION }}-${{ matrix.suffix }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Verify native image startup
+        run: |
+          docker pull ${GHCR_IMAGE}:${APP_VERSION}-${{ matrix.suffix }}
+          docker run -d --name kolflow-smoke \
+            -e JWT_SECRET=kolflow-release-smoke-isolated-secret \
+            -e INVITE_CODE=smoke-invite \
+            ${GHCR_IMAGE}:${APP_VERSION}-${{ matrix.suffix }}
+          trap 'docker logs kolflow-smoke; docker rm -fv kolflow-smoke' EXIT
+          docker exec -i kolflow-smoke node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          let ready = false;
+          for (let i = 0; i < 30; i++) {
+            try { ready = (await fetch('http://127.0.0.1:3000/api/health')).ok; } catch {}
+            if (ready) break;
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+          assert(ready, 'Production image did not become healthy');
+          const users = await fetch('http://127.0.0.1:3000/api/auth/check-users');
+          assert.equal(users.status, 200);
+          assert.equal((await users.json()).hasUsers, false);
+          for (const path of ['/', '/app-icon.png', '/privacy-policy.html']) {
+            assert.equal((await fetch(`http://127.0.0.1:3000${path}`)).status, 200);
+          }
+          console.log('Native production image startup, database and static resources verified.');
+          JS
 
       - name: Log in to Docker Hub
         if: env.HAS_DOCKERHUB == 'true'
