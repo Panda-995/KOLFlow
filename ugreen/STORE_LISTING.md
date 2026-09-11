@@ -2,7 +2,7 @@
 
 - 应用名称：KOLFlow
 - 应用 ID：`com.panda.kolflow`
-- 当前版本：`1.4.1.0010`
+- 当前版本：`1.4.2.0011`
 - 分类：实用工具
 - 支持架构：amd64、arm64
 - 开发者：熊猫不是猫QAQ
@@ -25,11 +25,11 @@ KOLFlow is an independently developed, self-hosted collaboration manager for con
 
 ## 更新说明
 
-- 更新应用图标，统一网页、Android 桌面及启动画面、UGOS Pro 应用图标。
-- 更新 PC 端三张及移动端三张详情图，按实际功能重写上架描述。
-- 保持应用 ID、数据目录、数据库结构及备份格式不变，保留历史版本镜像以支持回退。
-- Android 版本为 1.4.1（versionCode 8），使用与已发布版本一致的签名。
+- 安装页注册邀请码说明调整为“请自定义6-64位邀请码，新用户注册 KOLFlow 账号时必须填写此邀请码。”
+- 邀请码长度规则仍为 6 至 64 位，后半句及实际注册逻辑保持不变。
+- Web、镜像与 Android 版本更新为 1.4.2，Android versionCode 9，UGOS Pro 版本 1.4.2.0011。
+- 沿用现有图标和详情素材、应用 ID、数据路径、数据库结构与备份格式，Android 使用与旧版本相同的签名。
 
 ## 上架素材
 
-原图保存在 `public/store-listing/pc` 和 `public/store-listing/mobile`，随 Docker 镜像包含在双架构 UPK 内。Release 同时提供 `KOLFlow-v1.4.1-ugreen-store-assets.zip`，包含图标、六张详情图、本说明和素材校验清单，供应用中心提交使用。详情图仍需在上架时提交，UPK 内包含图片不会自动更新应用中心展示。
+原图保存在 `public/store-listing/pc` 和 `public/store-listing/mobile`，随 Docker 镜像包含在双架构 UPK 内。Release 同时提供 `KOLFlow-v1.4.2-ugreen-store-assets.zip`，包含图标、六张详情图、本说明和素材校验清单，供应用中心提交使用。详情图仍需在上架时提交，UPK 内包含图片不会自动更新应用中心展示。

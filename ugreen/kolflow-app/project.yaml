@@ -1,6 +1,6 @@
 spec_version: "2.1"
 app_id: com.panda.kolflow
-version: 1.4.1
+version: 1.4.2
 support_arch:
   - amd64
   - arm64
@@ -47,7 +47,7 @@ parameters:
         description: Enter a 6 to 64 character invite code. New users must provide this code when registering.
       zh-CN:
         name: 注册邀请码
-        description: 请输入 6 至 64 位邀请码，新用户注册 KOLFlow 账号时必须填写此邀请码。
+        description: 请自定义6-64位邀请码，新用户注册 KOLFlow 账号时必须填写此邀请码。
 i18n:
   en-US:
     name: KOLFlow

@@ -1,6 +1,6 @@
 # KOLFlow 绿联 UGOS Pro 应用包
 
-此目录保存 KOLFlow 的绿联 UGOS Pro 打包配置，支持 `amd64` 与 `arm64`。应用包基于项目公开的多架构 Docker 镜像制作，应用 ID 保持为 `com.panda.kolflow`，当前版本为 `1.4.1`（构建号 `0010`）。
+此目录保存 KOLFlow 的绿联 UGOS Pro 打包配置，支持 `amd64` 与 `arm64`。应用包基于项目公开的多架构 Docker 镜像制作，应用 ID 保持为 `com.panda.kolflow`，当前版本为 `1.4.2`（构建号 `0011`）。
 
 ## 应用信息
 
@@ -25,10 +25,10 @@ KOLFlow 保留 UGOS Pro 的 HTTP 与 HTTPS 访问方式。`1.3.0.0007` 起，HTT
 
 ## 构建方式
 
-在 GitHub Actions 中手动运行 `Build UGOS Pro UPK` 工作流。工作流会分别拉取 `1.4.1-amd64`、`1.4.1-arm64` 不可变镜像，使用绿联官方 `ugcli` 校验项目并生成两个 UPK 安装包，同时生成 `SHA256SUMS-UPK`。
+在 GitHub Actions 中手动运行 `Build UGOS Pro UPK` 工作流。工作流会分别拉取 `1.4.2-amd64`、`1.4.2-arm64` 不可变镜像，使用绿联官方 `ugcli` 校验项目并生成两个 UPK 安装包，同时生成 `SHA256SUMS-UPK`。
 
 本地生成的镜像归档和 UPK 文件属于构建产物，不提交到 Git 仓库。
 
 ## 详情素材
 
-PC 详情图（1854×1236）和移动端详情图（1125×2436）各三张，原图位于 `public/store-listing/`，随应用镜像进入 UPK。商店提交素材另见 Release 中的 `KOLFlow-v1.4.1-ugreen-store-assets.zip`。Docker UPK 的 `rootfs_common` 仅保留规范允许的图标和 Compose 文件。
+PC 详情图（1854×1236）和移动端详情图（1125×2436）各三张，原图位于 `public/store-listing/`，随应用镜像进入 UPK。商店提交素材另见 Release 中的 `KOLFlow-v1.4.2-ugreen-store-assets.zip`。Docker UPK 的 `rootfs_common` 仅保留规范允许的图标和 Compose 文件。

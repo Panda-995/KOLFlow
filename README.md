@@ -241,7 +241,7 @@ docker run -d -p 3000:3000 \
 | Tag | 说明 |
 |-----|------|
 | `latest` | 最新版（多架构） |
-| `1.4.1` | v1.4.1 固定版本（多架构） |
+| `1.4.2` | v1.4.2 固定版本（多架构） |
 | `arm64` | ARM64 架构专用 |
 | `amd64` | x86_64 架构专用 |
 
@@ -450,6 +450,12 @@ External order create/update supports `productName` and `productValue`. When an 
 ---
 
 ## 📝 更新日志 | Changelog
+
+### 2026-09-11
+
+- **安装说明**：注册邀请码提示改为“请自定义6-64位邀请码”，后半句保持不变。
+- **版本**：Web / Docker / Android `1.4.2`，Android `versionCode 9`，UGOS Pro `1.4.2.0011`。
+- **兼容性**：邀请码规则、业务逻辑、数据库、备份格式、应用 ID 及数据路径保持不变。
 
 ### 2026-09-07
 
