@@ -25,40 +25,18 @@ process.env.NODE_ENV = 'test';
 let db: typeof import('../src/server/db.ts').default;
 let server: Server;
 let baseUrl: string;
-let token: string;
+let generateToken: typeof import('../src/server/routes/utils/index.ts').generateToken;
 const userId = uuidv4();
 const otherUserId = uuidv4();
 
-const formatDate = (date: Date): string => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-const getCurrentWeekDates = () => {
-  const now = new Date();
-  const start = new Date(now);
-  const day = start.getDay() || 7;
-  start.setDate(start.getDate() - day + 1);
-  const before = new Date(start);
-  before.setDate(before.getDate() - 1);
-  return {
-    start: formatDate(start),
-    end: formatDate(now),
-    before: formatDate(before),
-  };
-};
-
 const internalRequest = (path: string) => fetch(`${baseUrl}/api${path}`, {
-  headers: { Authorization: `Bearer ${token}` },
+  headers: { Authorization: `Bearer ${generateToken(userId, 'weekly@example.com')}` },
 });
 
 before(async () => {
   db = (await import('../src/server/db.ts')).default;
   const apiRoutes = (await import('../src/server/api.ts')).default;
-  const { generateToken } = await import('../src/server/routes/utils/index.ts');
-  token = generateToken(userId, 'weekly@example.com');
+  ({ generateToken } = await import('../src/server/routes/utils/index.ts'));
 
   const app = express();
   app.use(express.json());
@@ -93,8 +71,9 @@ after(async () => {
   rmSync(testDataDir, { recursive: true, force: true });
 });
 
-test('周期报告接口返回当前周的完整汇总并隔离其他周期和用户', async () => {
-  const dates = getCurrentWeekDates();
+test('周期报告接口返回上一整周的汇总并隔离其他周期和用户', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-09-21T02:00:00Z') });
+  const dates = { start: '2026-09-14', end: '2026-09-20', before: '2026-09-13' };
   const orderId = uuidv4();
   db.prepare(`
     INSERT INTO orders (id, userId, orderNo, title, type, status, acceptDate, brandName)
@@ -108,6 +87,10 @@ test('周期报告接口返回当前周的完整汇总并隔离其他周期和�
     INSERT INTO orders (id, userId, orderNo, title, type, status, acceptDate)
     VALUES (?, ?, ?, ?, 'paid', 'completed', ?)
   `).run(uuidv4(), otherUserId, `ORD-${uuidv4()}`, '其他用户商单', dates.start);
+  db.prepare(`
+    INSERT INTO orders (id, userId, orderNo, title, type, status, acceptDate)
+    VALUES (?, ?, ?, ?, 'paid', 'completed', ?)
+  `).run(uuidv4(), userId, `ORD-${uuidv4()}`, '本周尚未结算的商单', '2026-09-21');
 
   db.prepare(`
     INSERT INTO payments (id, userId, brand, amount, type, date, settledDate)
@@ -139,6 +122,24 @@ test('周期报告接口返回当前周的完整汇总并隔离其他周期和�
   });
 });
 
+for (const [instant, type, start, end] of [
+  ['2026-09-20T15:59:59Z', 'weekly', '2026-09-07', '2026-09-13'],
+  ['2026-09-20T16:00:00Z', 'weekly', '2026-09-14', '2026-09-20'],
+  ['2026-09-23T04:00:00Z', 'weekly', '2026-09-14', '2026-09-20'],
+  ['2026-01-04T16:00:00Z', 'weekly', '2025-12-29', '2026-01-04'],
+  ['2026-09-30T15:59:59Z', 'monthly', '2026-08-01', '2026-08-31'],
+  ['2026-09-30T16:00:00Z', 'monthly', '2026-09-01', '2026-09-30'],
+  ['2026-01-01T00:00:00Z', 'monthly', '2025-12-01', '2025-12-31'],
+  ['2024-03-01T00:00:00Z', 'monthly', '2024-02-01', '2024-02-29'],
+]) {
+  test(`${type} 在北京时间 ${instant} 返回上个完整周期`, async (t) => {
+    t.mock.timers.enable({ apis: ['Date'], now: new Date(instant) });
+    const response = await internalRequest(`/report/${type}`);
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json() as any).period, { type, start, end });
+  });
+}
+
 test('报告通知展示周期和关键指标，并把精确日期写入统计链接', () => {
   const parsed = parseReportPayload({
     period: { start: '2030-01-01', end: '2030-01-07', type: 'weekly' },
@@ -163,6 +164,7 @@ test('报告通知展示周期和关键指标，并把精确日期写入统计�
   });
 
   assert.equal(notifications.length, 1);
+  assert.equal(notifications[0].title, '上周数据汇总已生成');
   assert.match(notifications[0].message, /2030-01-01 至 2030-01-07/);
   assert.match(notifications[0].message, /1\/2 个商单已完成/);
   assert.match(notifications[0].message, /推广费 ¥20/);
@@ -174,6 +176,23 @@ test('报告通知展示周期和关键指标，并把精确日期写入统计�
   assert.equal(url.searchParams.get('end'), '2030-01-07');
   assert.ok(parsed.period);
   assert.equal(notifications[0].link, buildReportAnalyticsLink(parsed.period));
+});
+
+test('报告已读标识绑定实际报告周期，浏览器跨周不改变旧报告标识', () => {
+  const input = {
+    orders: [], payments: [], dismissedIds: [],
+    settings: { id: 'settings-1', orderReminder: false, weeklyReport: true } as any,
+    reportSummary: { totalOrders: 0, completedOrders: 0, totalIncome: 0, pendingIncome: 0 },
+    reportPeriod: { type: 'weekly' as const, start: '2026-09-14', end: '2026-09-20' },
+  };
+  const old = buildBusinessNotifications({ ...input, now: new Date('2026-09-21T00:00:00Z') })[0];
+  const later = buildBusinessNotifications({ ...input, now: new Date('2026-09-28T00:00:00Z') })[0];
+  assert.equal(old.id, later.id);
+  assert.equal(buildBusinessNotifications({ ...input, now: new Date(), dismissedIds: [old.id] }).length, 0);
+  const next = buildBusinessNotifications({ ...input, now: new Date(), dismissedIds: [old.id],
+    reportPeriod: { type: 'weekly', start: '2026-09-21', end: '2026-09-27' },
+  });
+  assert.equal(next.length, 1);
 });
 
 test('统计页周期参数只接受有效日期范围并精确匹配日期', () => {

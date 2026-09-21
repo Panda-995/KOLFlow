@@ -173,7 +173,7 @@ export default function Analytics() {
   const monthlyData = useMemo(() => {
     if (reportPeriod) {
       return [{
-        name: reportPeriod.type === 'weekly' ? '本周' : '本月',
+        name: reportPeriod.type === 'weekly' ? '报告周' : '报告月',
         收入: filteredPayments.reduce((sum, payment) => sum + payment.amount, 0)
           + filteredAssets.reduce((sum, asset) => sum + asset.soldAmount, 0),
         推广费: filteredPaidPromotions.reduce((sum, record) => sum + record.amount, 0),

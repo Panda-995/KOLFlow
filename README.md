@@ -241,7 +241,7 @@ docker run -d -p 3000:3000 \
 | Tag | 说明 |
 |-----|------|
 | `latest` | 最新版（多架构） |
-| `1.4.3` | v1.4.3 固定版本（多架构） |
+| `1.4.4` | v1.4.4 固定版本（多架构） |
 | `arm64` | ARM64 架构专用 |
 | `amd64` | x86_64 架构专用 |
 
@@ -400,7 +400,7 @@ PUT    /api/settings/display    # 更新显示设置
 ### Reports | 报表
 
 ```bash
-GET    /api/report/:type        # 获取指定类型统计报表
+GET    /api/report/:type        # 获取上一个完整周/月的统计报表（weekly/monthly，北京时间）
 ```
 
 ### Order Templates | 商单模板
@@ -450,6 +450,13 @@ External order create/update supports `productName` and `productValue`. When an 
 ---
 
 ## 📝 更新日志 | Changelog
+
+### 2026-09-21 · v1.4.4
+
+- **依赖安全**：更新上传、CSV/XML 解析及查询参数解析依赖，修复依赖审计发现的已知漏洞。
+- **周期通知**：周报统计上一完整周（周一至周日），月报统计上一个完整月，统一按北京时间切换周期。
+- **通知与统计**：修正标题、实际报告周期的已读标识和统计图标签；页面保持打开时自动检查周期变化，重新聚焦时补查。关闭应用时不会发送系统推送。
+- **版本**：Web / Docker / Android `1.4.4`，Android `versionCode 11`，UGOS Pro `1.4.4.0013`。数据库结构、备份格式及应用 ID 保持不变。
 
 ### 2026-09-11 · v1.4.3
 

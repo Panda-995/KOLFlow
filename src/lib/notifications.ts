@@ -1,6 +1,7 @@
 import type { Order, Payment, Settings } from '../types';
-import { formatLocalDate, parseLocalDate } from './dateFilter';
+import { parseLocalDate } from './dateFilter';
 import { buildReportAnalyticsLink, parseReportPeriod, type ReportPeriod } from './reportPeriod';
+import { getCompletedReportPeriod } from './reportSchedule';
 
 export type BusinessNotification = {
   id: string;
@@ -66,11 +67,8 @@ export const parseReportPayload = (value: unknown): ReportPayload | null => {
 };
 
 const getReportPeriodKey = (frequency: 'weekly' | 'monthly', now: Date): string => {
-  if (frequency === 'monthly') return formatLocalDate(now).slice(0, 7);
-  const monday = new Date(now);
-  const day = monday.getDay() || 7;
-  monday.setDate(monday.getDate() - day + 1);
-  return formatLocalDate(monday);
+  const period = getCompletedReportPeriod(frequency, now);
+  return `${period.start}-${period.end}`;
 };
 
 export const buildBusinessNotifications = ({
@@ -139,15 +137,17 @@ export const buildBusinessNotifications = ({
   });
 
   if (settings?.weeklyReport && reportSummary) {
-    const frequency = settings.reportFrequency === 'monthly' ? 'monthly' : 'weekly';
-    const periodKey = getReportPeriodKey(frequency, now);
+    const frequency = reportPeriod?.type || (settings.reportFrequency === 'monthly' ? 'monthly' : 'weekly');
+    const periodKey = reportPeriod
+      ? `${reportPeriod.start}-${reportPeriod.end}`
+      : getReportPeriodKey(frequency, now);
     const promotionMessage = typeof reportSummary.paidPromotionTotal === 'number'
       ? `，推广费 ¥${reportSummary.paidPromotionTotal.toLocaleString()}`
       : '';
     const periodMessage = reportPeriod ? `${reportPeriod.start} 至 ${reportPeriod.end}：` : '';
     notifications.push({
       id: `report-${frequency}-${periodKey}-${settings.id || 'current'}`,
-      title: frequency === 'weekly' ? '本周数据汇总已生成' : '本月数据汇总已生成',
+      title: frequency === 'weekly' ? '上周数据汇总已生成' : '上月数据汇总已生成',
       message: `${periodMessage}${reportSummary.completedOrders}/${reportSummary.totalOrders} 个商单已完成，已结算收入 ¥${reportSummary.totalIncome.toLocaleString()}，待收 ¥${reportSummary.pendingIncome.toLocaleString()}${promotionMessage}`,
       type: 'info',
       link: reportPeriod ? buildReportAnalyticsLink(reportPeriod) : '/analytics',
@@ -157,7 +157,7 @@ export const buildBusinessNotifications = ({
     const periodKey = getReportPeriodKey(frequency, now);
     notifications.push({
       id: `report-error-${frequency}-${periodKey}-${settings.id || 'current'}`,
-      title: frequency === 'weekly' ? '本周数据汇总加载失败' : '本月数据汇总加载失败',
+      title: frequency === 'weekly' ? '上周数据汇总加载失败' : '上月数据汇总加载失败',
       message: '暂时无法获取周期数据，请点击重试',
       type: 'warning',
       link: '/analytics',

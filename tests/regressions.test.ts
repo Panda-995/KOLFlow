@@ -114,6 +114,22 @@ test('API Key 在多用户之间必须唯一', () => {
   });
 });
 
+test('升级解析依赖后 CSV 上传保留中文、引号、金额和日期', async () => {
+  const form = new FormData();
+  form.append('file', new Blob(['\uFEFF标题,类型,金额,品牌,接单日期,状态\n"带,逗号的商单",付费,321.5,测试品牌,2026-09-14,已完成\n'], { type: 'text/csv' }), 'orders.csv');
+  const response = await fetch(`${baseUrl}/api/data/orders/file`, {
+    method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form,
+  });
+  assert.equal(response.status, 200);
+  const result = await response.json() as any;
+  assert.equal(result.success, 1);
+  assert.equal(result.failed, 0);
+  const order = db.prepare('SELECT * FROM orders WHERE userId = ?').get(primaryUserId) as any;
+  assert.equal(order.title, '带,逗号的商单');
+  assert.equal(order.actualAmount, 321.5);
+  assert.equal(order.acceptDate, '2026-09-14');
+});
+
 test('商单模板按用户隔离并可重复一键创建全新商单', async () => {
   const createTemplateResponse = await internalRequest('/order-templates', {
     method: 'POST',

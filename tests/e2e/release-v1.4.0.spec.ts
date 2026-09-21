@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { getCompletedReportPeriod } from '../../src/lib/reportSchedule';
 
 type ApiOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
@@ -80,9 +81,15 @@ test('v1.4.0 商单模板、周期通知、旧数据兼容与核心页面', asyn
   const brands = await api<Array<{ name: string }>>(page, '/api/brands');
   expect(brands.some(brand => brand.name === 'E2E 品牌')).toBe(true);
 
+  const reportPeriod = getCompletedReportPeriod('weekly');
+  for (const order of orders) {
+    await api(page, `/api/orders/${order.id}`, {
+      method: 'PUT', data: { acceptDate: reportPeriod.start },
+    });
+  }
   await api(page, `/api/orders/${orders[0].id}`, {
     method: 'PUT',
-    data: { status: 'completed', operationDate: orders[0].acceptDate },
+    data: { status: 'completed', operationDate: reportPeriod.start },
   });
   await api(page, '/api/paid-promotions', {
     method: 'POST',
@@ -97,7 +104,8 @@ test('v1.4.0 商单模板、周期通知、旧数据兼容与核心页面', asyn
   await page.reload();
   await expect(page.getByRole('button', { name: /通知中心/ })).toBeVisible();
   await page.getByRole('button', { name: /通知中心/ }).click();
-  await expect(page.getByText('本周数据汇总已生成').first()).toBeVisible();
+  await expect(page.getByText('上周数据汇总已生成').first()).toBeVisible();
+  await expect(page.getByText(new RegExp(`${reportPeriod.start} 至 ${reportPeriod.end}`)).first()).toBeVisible();
   const reportMessage = page.getByText(/1\/2 个商单已完成.*待收 ¥3,888.*推广费 ¥88/).first();
   await expect(reportMessage).toBeVisible();
   await reportMessage.click();

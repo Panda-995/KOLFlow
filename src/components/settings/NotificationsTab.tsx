@@ -24,8 +24,8 @@ export function NotificationsTab({ formData, setFormData, reportFrequency, setRe
 
           <div className="flex items-center justify-between p-4 bg-bg-tertiary rounded-xl">
             <div>
-              <div className="font-medium text-panda-black">每周数据汇总</div>
-              <div className="text-sm text-gray-500">在通知中心生成当前周期的收入与商单汇总</div>
+              <div className="font-medium text-panda-black">周期数据汇总</div>
+              <div className="text-sm text-gray-500">打开应用时，在通知中心查看上一个完整周期的收入与商单汇总</div>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
               <input
@@ -47,7 +47,7 @@ export function NotificationsTab({ formData, setFormData, reportFrequency, setRe
             <div className="flex items-center justify-between">
               <div>
                 <div className="font-medium text-panda-black">自动报告频率</div>
-                <div className="text-sm text-gray-500">设置通知中心自动生成汇总的周期</div>
+                <div className="text-sm text-gray-500">按北京时间，每周一汇总上周一至周日，每月1日汇总上月</div>
               </div>
               <select
                 value={reportFrequency}

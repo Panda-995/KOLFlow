@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useStore } from '../store/useStore';
 import { clsx } from 'clsx';
 import { authFetch } from '../lib/api';
+import { getCompletedReportPeriod } from '../lib/reportSchedule';
 import {
   buildBusinessNotifications,
   parseReportPayload,
@@ -61,6 +62,25 @@ export default function Header({ onMenuClick }: HeaderProps) {
       reportRequestId.current += 1;
     };
   }, [assets, loadReport, orders, paidPromotions, payments, settings?.weeklyReport]);
+
+  useEffect(() => {
+    if (!settings?.weeklyReport) return;
+    const frequency = settings.reportFrequency === 'monthly' ? 'monthly' : 'weekly';
+    let periodStart = getCompletedReportPeriod(frequency).start;
+    const checkPeriod = () => {
+      const nextStart = getCompletedReportPeriod(frequency).start;
+      if (nextStart !== periodStart) {
+        periodStart = nextStart;
+        void loadReport();
+      }
+    };
+    const timer = window.setInterval(checkPeriod, 60_000);
+    window.addEventListener('focus', checkPeriod);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', checkPeriod);
+    };
+  }, [loadReport, settings?.reportFrequency, settings?.weeklyReport]);
 
   const notifications = useMemo(() => buildBusinessNotifications({
     now: new Date(),

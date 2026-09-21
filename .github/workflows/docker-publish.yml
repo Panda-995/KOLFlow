@@ -11,10 +11,14 @@ on:
         default: ""
 
 env:
-  APP_VERSION: 1.4.3
+  APP_VERSION: 1.4.4
   GHCR_IMAGE: ghcr.io/panda-995/kolflow
   DOCKERHUB_IMAGE: panda995/kolflow
   HAS_DOCKERHUB: ${{ secrets.DOCKER_HUB_USERNAME != '' && secrets.DOCKER_HUB_TOKEN != '' }}
+
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -92,7 +96,21 @@ jobs:
           JS
 
       - name: Verify old data and custom folder persistence
-        run: bash scripts/verify-container-storage.sh "${GHCR_IMAGE}:1.4.2-${{ matrix.suffix }}" "${GHCR_IMAGE}:${APP_VERSION}-${{ matrix.suffix }}"
+        run: bash scripts/verify-container-storage.sh "${GHCR_IMAGE}:1.4.3-${{ matrix.suffix }}" "${GHCR_IMAGE}:${APP_VERSION}-${{ matrix.suffix }}"
+
+      - name: Verify Compose authentication, reports and restart persistence
+        env:
+          JWT_SECRET: kolflow-compose-release-isolated-secret
+          INVITE_CODE: compose-release-invite
+        run: |
+          override="$(mktemp --suffix=.yaml)"
+          printf 'services:\n  kolflow:\n    image: %s\n' "${GHCR_IMAGE}:${APP_VERSION}-${{ matrix.suffix }}" > "$override"
+          compose=(docker compose -p kolflow-release-check -f docker-compose.yml -f "$override")
+          trap '"${compose[@]}" logs; "${compose[@]}" down -v; rm -f "$override"' EXIT
+          "${compose[@]}" up -d --wait
+          "${compose[@]}" exec -T kolflow node scripts/verify-release-runtime.mjs seed
+          "${compose[@]}" restart
+          "${compose[@]}" exec -T kolflow node scripts/verify-release-runtime.mjs verify
 
       - name: Log in to Docker Hub
         if: env.HAS_DOCKERHUB == 'true'
