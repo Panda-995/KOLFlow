@@ -5,6 +5,7 @@ import bcrypt from 'bcrypt';
 import { logActivity, getUserId } from './utils/index.js';
 import { validateEmail, validatePassword } from './utils/helpers.js';
 import { readEncryptedSensitiveBody } from '../services/authEncryptionService.js';
+import type { SettingsRow, TableInfoRow } from '../dbRows.js';
 
 const router = Router();
 
@@ -22,14 +23,17 @@ const verifyPassword = async (password: string, hashedPassword: string): Promise
 // 获取设置
 router.get('/', (req, res) => {
   const userId = getUserId(req);
-  let settings = db.prepare('SELECT * FROM settings WHERE userId = ?').get(userId) as any;
+  let settings = db.prepare('SELECT * FROM settings WHERE userId = ?').get(userId) as SettingsRow | undefined;
   if (!settings) {
     const id = uuidv4();
     db.prepare(`
       INSERT INTO settings (id, userId, displayName, email, bio, orderReminder, weeklyReport)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(id, userId, '博主账号', '', '', 1, 0);
-    settings = db.prepare('SELECT * FROM settings WHERE userId = ?').get(userId);
+    settings = db.prepare('SELECT * FROM settings WHERE userId = ?').get(userId) as SettingsRow | undefined;
+  }
+  if (!settings) {
+    return res.status(500).json({ error: '获取设置失败，请稍后重试' });
   }
 
   return res.json({
@@ -41,10 +45,17 @@ router.get('/', (req, res) => {
 
 // 更新设置
 router.put('/', (req, res) => {
-  const userId = getUserId(req);
-  const { displayName, bio, orderReminder, weeklyReport, avatar, reportFrequency } = req.body;
+  try {
+    const userId = getUserId(req);
+    const { displayName, bio, orderReminder, weeklyReport, avatar, reportFrequency } = req.body;
+    if (displayName !== undefined && typeof displayName !== 'string') {
+      return res.status(400).json({ error: '昵称格式无效' });
+    }
+    if (bio !== undefined && typeof bio !== 'string') {
+      return res.status(400).json({ error: '个人简介格式无效' });
+    }
 
-  const existing = db.prepare('SELECT * FROM settings WHERE userId = ?').get(userId) as any;
+    const existing = db.prepare('SELECT * FROM settings WHERE userId = ?').get(userId) as SettingsRow | undefined;
   if (!existing) {
     return res.status(404).json({ error: 'Settings not found' });
   }
@@ -52,22 +63,36 @@ router.put('/', (req, res) => {
   if (!user) {
     return res.status(404).json({ error: 'User not found' });
   }
+  // 缺省字段保留原值（而不是写成 NULL / 默认值），与导入路径的合并语义一致
   const newAvatar = avatar !== undefined ? avatar : existing.avatar;
-  const normalizedFrequency = reportFrequency === 'monthly' ? 'monthly' : 'weekly';
+  const newDisplayName = displayName !== undefined ? displayName : existing.displayName;
+  const newBio = bio !== undefined ? bio : existing.bio;
+  const newOrderReminder = orderReminder !== undefined ? (orderReminder ? 1 : 0) : existing.orderReminder;
+  const newWeeklyReport = weeklyReport !== undefined ? (weeklyReport ? 1 : 0) : existing.weeklyReport;
+  const normalizedFrequency = reportFrequency === 'monthly'
+    ? 'monthly'
+    : (reportFrequency === 'weekly' ? 'weekly' : (existing.reportFrequency || 'weekly'));
 
   db.prepare(`
     UPDATE settings
     SET displayName = ?, email = ?, bio = ?, orderReminder = ?, weeklyReport = ?, avatar = ?, reportFrequency = ?
     WHERE userId = ?
-  `).run(displayName, user.email, bio, orderReminder ? 1 : 0, weeklyReport ? 1 : 0, newAvatar, normalizedFrequency, userId);
+  `).run(newDisplayName, user.email, newBio, newOrderReminder, newWeeklyReport, newAvatar, normalizedFrequency, userId);
 
-  const updatedSettings = db.prepare('SELECT * FROM settings WHERE userId = ?').get(userId) as any;
+  const updatedSettings = db.prepare('SELECT * FROM settings WHERE userId = ?').get(userId) as SettingsRow | undefined;
+  if (!updatedSettings) {
+    return res.status(500).json({ error: '更新设置失败，请稍后重试' });
+  }
 
-  return res.json({
-    ...updatedSettings,
-    orderReminder: Boolean(updatedSettings.orderReminder),
-    weeklyReport: Boolean(updatedSettings.weeklyReport)
-  });
+    return res.json({
+      ...updatedSettings,
+      orderReminder: Boolean(updatedSettings.orderReminder),
+      weeklyReport: Boolean(updatedSettings.weeklyReport)
+    });
+  } catch (error) {
+    console.error('更新设置错误:', error instanceof Error ? error.message : error);
+    return res.status(500).json({ error: '更新设置失败，请稍后重试' });
+  }
 });
 
 // 安全设置
@@ -81,12 +106,23 @@ router.put('/security', async (req, res) => {
       return res.status(400).json({ error: '请输入有效的邮箱地址' });
     }
 
-    const currentUser = db.prepare('SELECT email, password FROM users WHERE id = ?').get(userId) as any;
+    const currentUser = db.prepare('SELECT email, password FROM users WHERE id = ?').get(userId) as { email: string; password: string } | undefined;
     if (!currentUser) {
       return res.status(404).json({ error: '用户不存在' });
     }
 
+    const isChangingEmail = newEmail !== currentUser.email;
     const isChangingPassword = typeof password === 'string' && password.length > 0;
+    if (isChangingEmail) {
+      // 邮箱是登录凭据：改邮箱同样需要原密码，避免 token 泄露后被永久夺号
+      if (!oldPassword || typeof oldPassword !== 'string') {
+        return res.status(400).json({ error: '修改邮箱需要输入原密码' });
+      }
+      const isValidOldPassword = await verifyPassword(oldPassword, currentUser.password);
+      if (!isValidOldPassword) {
+        return res.status(400).json({ error: '原密码错误' });
+      }
+    }
     if (isChangingPassword) {
       const passwordValidation = validatePassword(password);
       if (!passwordValidation.valid) {
@@ -107,7 +143,9 @@ router.put('/security', async (req, res) => {
     const updateSecurity = db.transaction(() => {
       db.prepare('UPDATE settings SET email = ? WHERE userId = ?').run(newEmail, userId);
       if (hashedPassword) {
-        db.prepare('UPDATE users SET email = ?, password = ? WHERE id = ?').run(newEmail, hashedPassword, userId);
+        // 递增 tokenVersion 撤销所有旧会话，其他设备需重新登录
+        db.prepare('UPDATE users SET email = ?, password = ?, tokenVersion = COALESCE(tokenVersion, 0) + 1 WHERE id = ?')
+          .run(newEmail, hashedPassword, userId);
         logActivity(userId, 'update_security', 'user', userId, '更新安全设置');
       } else {
         db.prepare('UPDATE users SET email = ? WHERE id = ?').run(newEmail, userId);
@@ -186,7 +224,7 @@ router.post('/apikey', (req, res) => {
     // 生成 API Key - 24字符安全token
     const newApiKey = generateUniqueApiKey();
 
-    const tableInfo = db.prepare("PRAGMA table_info(settings)").all() as any[];
+    const tableInfo = db.prepare("PRAGMA table_info(settings)").all() as TableInfoRow[];
     const hasApiKeyColumn = tableInfo.some(col => col.name === 'apiKey');
 
     if (!hasApiKeyColumn) {
@@ -195,34 +233,11 @@ router.post('/apikey', (req, res) => {
 
     db.prepare("UPDATE settings SET apiKey = ? WHERE userId = ?").run(newApiKey, userId);
 
-    res.json({ apiKey: newApiKey });
+    return res.json({ apiKey: newApiKey });
   } catch (error) {
-    res.status(500).json({
-      error: '生成 API Key 失败',
-      details: error instanceof Error ? error.message : String(error)
-    });
+    console.error('生成 API Key 失败:', error instanceof Error ? error.message : error);
+    return res.status(500).json({ error: '生成 API Key 失败' });
   }
-});
-
-// 显示设置
-router.put('/display', (req, res) => {
-  const userId = getUserId(req);
-  const { darkMode, reportFrequency } = req.body;
-
-  db.prepare(`
-    UPDATE settings
-    SET darkMode = ?, reportFrequency = ?
-    WHERE userId = ?
-  `).run(darkMode ? 1 : 0, reportFrequency || 'weekly', userId);
-
-  const updatedSettings = db.prepare('SELECT * FROM settings WHERE userId = ?').get(userId) as any;
-
-  res.json({
-    ...updatedSettings,
-    orderReminder: Boolean(updatedSettings.orderReminder),
-    weeklyReport: Boolean(updatedSettings.weeklyReport),
-    darkMode: Boolean(updatedSettings.darkMode)
-  });
 });
 
 export default router;

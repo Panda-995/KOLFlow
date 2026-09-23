@@ -1,4 +1,8 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { useProgressiveList } from '../hooks/useProgressiveList';
+import { usePageLoad } from '../hooks/usePageLoad';
+import { useFormSessionGuard } from '../hooks/useFormSessionGuard';
 import { useStore, Brand } from '../store/useStore';
 import type { BrandContact } from '../types';
 import {
@@ -21,6 +25,7 @@ import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
 import { clsx } from 'clsx';
+import { sumMoney } from '../lib/money';
 
 export default function Brands() {
   const { brands, addBrand, updateBrand, deleteBrand, orders, payments, todos, assets, fetchBrands, fetchTodos, fetchOrders, fetchPayments, fetchAssets } = useStore();
@@ -38,13 +43,10 @@ export default function Brands() {
     brand: null
   });
 
-  useEffect(() => {
-    fetchBrands();
-    fetchTodos();
-    fetchOrders();
-    fetchPayments();
-    fetchAssets();
-  }, [fetchBrands, fetchTodos, fetchOrders, fetchPayments, fetchAssets]);
+  const { state: loadState, retry: retryLoad } = usePageLoad(useCallback(
+    () => Promise.all([fetchBrands(), fetchTodos(), fetchOrders(), fetchPayments(), fetchAssets()]),
+    [fetchBrands, fetchTodos, fetchOrders, fetchPayments, fetchAssets],
+  ));
   const [formData, setFormData] = useState({
     name: '',
     industry: '',
@@ -122,7 +124,10 @@ export default function Brands() {
     return stats;
   }, [brands, orders, payments, assets]);
 
-  const handleOpenModal = (brand?: Brand) => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { invalidateFormSession, captureFormSession, isFormSessionCurrent } = useFormSessionGuard();
+
+  const handleOpenModal = useCallback((brand?: Brand) => {
     if (brand) {
       setEditingBrandId(brand.id);
       setFormData({
@@ -136,22 +141,54 @@ export default function Brands() {
       setEditingBrandId(null);
       setFormData({ name: '', industry: '', contact: '', phone: '', contacts: [] });
     }
+    invalidateFormSession();
     setIsModalOpen(true);
+  }, [invalidateFormSession]);
+
+  const handleCloseModal = () => {
+    invalidateFormSession();
+    setIsModalOpen(false);
+  };
+
+  // 快捷键/深链：?new=1 直接打开新建品牌表单（依赖 handleOpenModal，故置于其后）
+  useEffect(() => {
+    if (searchParams.get('new')) {
+      handleOpenModal();
+      const next = new URLSearchParams(searchParams);
+      next.delete('new');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams, handleOpenModal]);
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // crypto.randomUUID 仅在安全上下文可用，局域网 http 访问时需要回退方案
+  const generateContactId = (): string => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return `contact-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    const formSession = captureFormSession();
+    setIsSubmitting(true);
     try {
       if (editingBrandId) {
         await updateBrand(editingBrandId, formData);
-        showToast('品牌信息已更新', 'success');
       } else {
         await addBrand(formData);
-        showToast('新品牌已添加', 'success');
       }
+      // 表单已关闭/换成另一张：不再改动弹窗状态
+      if (!isFormSessionCurrent(formSession)) return;
+      invalidateFormSession();
       setIsModalOpen(false);
-    } catch (error) {
-      showToast('操作失败，请重试', 'error');
+    } catch {
+      // store 已弹出具体错误提示
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -161,13 +198,8 @@ export default function Brands() {
 
   const confirmDeleteBrand = async () => {
     if (deleteConfirm.brand) {
-      try {
-        await deleteBrand(deleteConfirm.brand.id);
-        showToast('品牌已删除', 'success');
-      } catch (error) {
-        showToast('删除失败', 'error');
-        throw error;
-      }
+      // store 已弹出删除失败提示；异常抛出让确认弹窗保持打开
+      await deleteBrand(deleteConfirm.brand.id);
     }
   };
 
@@ -187,6 +219,13 @@ export default function Brands() {
     }
   };
 
+  // 渐进渲染：数据全量加载（统计需要），但列表只渲染前若干条
+  const brandsView = useProgressiveList(filteredBrands, undefined, `${searchTerm}|${industryFilter}`);
+
+
+  if (loadState === 'loading') return <div role="status" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">品牌/客户管理</h1>正在加载品牌…</div>;
+  if (loadState === 'error') return <div role="alert" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">品牌/客户管理</h1>品牌数据加载失败，请检查连接后重试。<button type="button" className="ml-3 underline" onClick={() => void retryLoad()}>重试</button></div>;
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-7xl mx-auto pb-10">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -205,31 +244,34 @@ export default function Brands() {
         <div className="lg:col-span-1 space-y-6">
           <div className="card-sketch p-5 space-y-6">
             <div>
-              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3">搜索</h3>
+              <h3 className="text-sm font-bold text-gray-600 uppercase tracking-wider mb-3">搜索</h3>
               <div className="relative">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input 
-                  type="text" 
-                  placeholder="品牌名/联系人..." 
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
+                <input
+                  aria-label="搜索品牌"
+                  type="text"
+                  placeholder="品牌名/联系人..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-transparent focus:border-accent focus:bg-white rounded-xl outline-none transition-all text-sm"
+                  className="w-full form-control pl-9"
                 />
               </div>
             </div>
 
             <div>
-              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3">行业分类</h3>
+              <h3 className="text-sm font-bold text-gray-600 uppercase tracking-wider mb-3">行业分类</h3>
               <div className="space-y-1">
                 <button
+                  type="button"
+                  aria-pressed={industryFilter === 'all'}
                   onClick={() => setIndustryFilter('all')}
                   className={clsx(
                     "w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all",
-                    industryFilter === 'all' ? "bg-panda-black text-white" : "text-gray-600 hover:bg-gray-100"
+                    industryFilter === 'all' ? "bg-panda-black text-panda-white" : "text-gray-600 hover:bg-panda-black/10"
                   )}
                 >
                   <span>全部行业</span>
-                  <span className={clsx("px-2 py-0.5 rounded-full text-[10px]", industryFilter === 'all' ? "bg-white/20" : "bg-gray-100")}>
+                  <span className={clsx("px-2 py-0.5 rounded-full text-[10px]", industryFilter === 'all' ? "bg-panda-white/20" : "bg-bg-tertiary")}>
                     {brands.length}
                   </span>
                 </button>
@@ -243,21 +285,21 @@ export default function Brands() {
                         onClick={() => setIndustryFilter(ind)}
                         className={clsx(
                           "w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all pr-8",
-                          industryFilter === ind ? "bg-panda-black text-white" : "text-gray-600 hover:bg-gray-100"
+                          industryFilter === ind ? "bg-panda-black text-panda-white" : "text-gray-600 hover:bg-panda-black/10"
                         )}
                       >
                         <span className="truncate">{ind}</span>
-                        <span className={clsx("px-2 py-0.5 rounded-full text-[10px]", industryFilter === ind ? "bg-white/20" : "bg-gray-100")}>
+                        <span className={clsx("px-2 py-0.5 rounded-full text-[10px]", industryFilter === ind ? "bg-panda-white/20" : "bg-bg-tertiary")}>
                           {count}
                         </span>
                       </button>
                       {!isDefault && (
-                        <button 
+                        <button
                           onClick={(e) => {
                             e.stopPropagation();
                             handleDeleteIndustry(ind);
                           }}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-danger opacity-0 group-hover/item:opacity-100 transition-all"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-600 hover:text-danger opacity-0 group-hover/item:opacity-100 transition-all"
                           title="删除分类"
                         >
                           <Trash2 size={12} />
@@ -280,7 +322,7 @@ export default function Brands() {
                 <span className="text-sm text-gray-500">平均客单价</span>
                 <span className="font-bold text-panda-black">
                   ¥{(() => {
-                    const totalIncome = Object.values(brandStats).reduce((acc, curr) => acc + curr.totalIncome, 0);
+                    const totalIncome = sumMoney(Object.values(brandStats), stat => stat.totalIncome);
                     const totalOrders = Object.values(brandStats).reduce((acc, curr) => acc + curr.totalOrders, 0);
                     return totalOrders > 0 ? (totalIncome / totalOrders).toFixed(0) : '0';
                   })()}
@@ -299,40 +341,50 @@ export default function Brands() {
         {/* Brands Grid */}
         <div className="lg:col-span-3">
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {filteredBrands.map(brand => {
+            {brandsView.visibleItems.map(brand => {
               const stats = brandStats[brand.name] || { totalOrders: 0, totalIncome: 0, avgOrderValue: 0, lastOrderDate: null };
 
               return (
-                <div key={brand.id} className="card-sketch p-3 group relative bg-white">
+                <div key={brand.id} className="card-sketch p-3 group relative bg-panda-white">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-panda-black text-white flex items-center justify-center font-bold text-sm">
+                      <div className="w-8 h-8 rounded-lg bg-panda-black text-panda-white flex items-center justify-center font-bold text-sm">
                         {brand.name.charAt(0)}
                       </div>
                       <div>
                         <h3 className="font-bold text-sm text-panda-black truncate">{brand.name}</h3>
-                        <span className="text-[10px] text-gray-400">{brand.industry || '未分类'}</span>
+                        <span className="text-[10px] text-gray-600">{brand.industry || '未分类'}</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1 max-md:opacity-100 opacity-0 group-hover:opacity-100 hover-visible transition-opacity">
                       <button
                         onClick={() => setViewingBrandTodos(brand)}
-                        className="p-1 text-gray-400 hover:text-success hover:bg-success/10 rounded transition-colors"
+                        className="p-2 min-w-9 min-h-9 touch-target text-gray-600 hover:text-success hover:bg-success/10 rounded-lg transition-colors"
                         title="查看关联任务"
                       >
                         <CheckCircle2 size={12} />
                       </button>
                       <button
                         onClick={() => setViewingBrandOrders(brand)}
-                        className="p-1 text-gray-400 hover:text-accent hover:bg-accent/10 rounded transition-colors"
+                        className="p-2 min-w-9 min-h-9 touch-target text-gray-600 hover:text-accent hover:bg-accent/10 rounded-lg transition-colors"
                         title="查看关联商单"
                       >
                         <Eye size={12} />
                       </button>
-                      <button onClick={() => handleOpenModal(brand)} className="p-1 text-gray-400 hover:text-panda-black hover:bg-gray-100 rounded transition-colors">
+                      <button
+                        type="button"
+                        aria-label={`编辑品牌 ${brand.name}`}
+                        onClick={() => handleOpenModal(brand)}
+                        className="p-2 min-w-9 min-h-9 touch-target text-gray-600 hover:text-panda-black hover:bg-panda-black/10 rounded-lg transition-colors"
+                      >
                         <Edit2 size={12} />
                       </button>
-                      <button onClick={() => handleDelete(brand)} className="p-1 text-gray-400 hover:text-danger hover:bg-danger/10 rounded transition-colors">
+                      <button
+                        type="button"
+                        aria-label={`删除品牌 ${brand.name}`}
+                        onClick={() => handleDelete(brand)}
+                        className="p-2 min-w-9 min-h-9 touch-target text-gray-600 hover:text-danger hover:bg-danger/10 rounded-lg transition-colors"
+                      >
                         <Trash2 size={12} />
                       </button>
                     </div>
@@ -341,18 +393,18 @@ export default function Brands() {
                   <div className="space-y-1.5 mb-2">
                     {(brand.contacts && brand.contacts.length > 0 ? brand.contacts : (brand.contact || brand.phone ? [{ id: '0', name: brand.contact || '', phone: brand.phone || '', note: '' }] : [])).map((c, idx) => (
                       <div key={c.id || idx} className="flex items-center gap-1.5 text-xs">
-                        <User size={10} className="text-gray-400 flex-shrink-0" />
+                        <User size={10} className="text-gray-600 flex-shrink-0" />
                         <span className="font-medium truncate">{c.name || '-'}</span>
-                        {c.phone && <span className="text-gray-400 truncate">{c.phone}</span>}
+                        {c.phone && <span className="text-gray-600 truncate">{c.phone}</span>}
                         {c.note && (
-                          <span className="text-gray-400 flex items-center gap-0.5" title={c.note}>
+                          <span className="text-gray-600 flex items-center gap-0.5" title={c.note}>
                             <MessageSquare size={9} />
                           </span>
                         )}
                       </div>
                     ))}
                     {(!brand.contacts || brand.contacts.length === 0) && !brand.contact && !brand.phone && (
-                      <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                      <div className="flex items-center gap-1.5 text-xs text-gray-600">
                         <User size={10} />
                         <span>暂无联系人</span>
                       </div>
@@ -361,11 +413,11 @@ export default function Brands() {
 
                   <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border/50 text-xs">
                     <div>
-                      <span className="text-gray-400 text-[10px] block">商单</span>
+                      <span className="text-gray-600 text-[10px] block">商单</span>
                       <span className="font-bold text-panda-black">{stats.totalOrders} 单</span>
                     </div>
                     <div>
-                      <span className="text-gray-400 text-[10px] block">收益</span>
+                      <span className="text-gray-600 text-[10px] block">收益</span>
                       <span className="font-bold text-success">¥{stats.totalIncome.toLocaleString()}</span>
                     </div>
                   </div>
@@ -373,8 +425,21 @@ export default function Brands() {
               );
             })}
 
+            {brandsView.windowed && (
+                <div className="flex flex-col items-center gap-1 py-4">
+                  {brandsView.hasMore && (
+                    <button type="button" onClick={brandsView.loadMore} className="btn-secondary text-sm">
+                      加载更多
+                    </button>
+                  )}
+                  <span className="text-xs text-gray-500">
+                    已显示 {brandsView.visibleCount} / {brandsView.total} 条
+                  </span>
+                </div>
+              )}
+
             {filteredBrands.length === 0 && (
-              <div className="col-span-full py-16 flex flex-col items-center justify-center text-gray-400 card-sketch">
+              <div className="col-span-full py-16 flex flex-col items-center justify-center text-gray-600 card-sketch">
                 <AlertCircle size={32} className="text-gray-200 mb-2" />
                 <p className="text-sm">未找到品牌</p>
               </div>
@@ -383,30 +448,32 @@ export default function Brands() {
         </div>
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingBrandId ? "编辑品牌信息" : "添加新品牌"}>
+      <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={editingBrandId ? "编辑品牌信息" : "添加新品牌"}>
         <form onSubmit={handleSubmit} className="space-y-5 p-1">
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2 sm:col-span-1">
-              <label className="block text-sm font-bold text-gray-700 mb-2">品牌名称</label>
-              <input 
-                required 
-                type="text" 
-                value={formData.name} 
-                onChange={e => setFormData({...formData, name: e.target.value})} 
+              <label htmlFor="brand-name" className="block text-sm font-bold text-gray-700 mb-2">品牌名称</label>
+              <input
+                id="brand-name"
+                required
+                type="text"
+                value={formData.name}
+                onChange={e => setFormData({...formData, name: e.target.value})}
                 placeholder="例如: 完美日记"
-                className="w-full px-4 py-2.5 border border-border rounded-xl outline-none focus:border-accent transition-all" 
+                className="w-full form-control"
               />
             </div>
             <div className="col-span-2 sm:col-span-1">
-              <label className="block text-sm font-bold text-gray-700 mb-2">所属行业</label>
+              <label htmlFor="brand-industry" className="block text-sm font-bold text-gray-700 mb-2">所属行业</label>
               <div className="relative">
-                <input 
-                  type="text" 
+                <input
+                  id="brand-industry"
+                  type="text"
                   list="industry-list"
-                  value={formData.industry} 
-                  onChange={e => setFormData({...formData, industry: e.target.value})} 
+                  value={formData.industry}
+                  onChange={e => setFormData({...formData, industry: e.target.value})}
                   placeholder="选择或输入行业"
-                  className="w-full px-4 py-2.5 border border-border rounded-xl outline-none focus:border-accent transition-all bg-white"
+                  className="w-full form-control"
                 />
                 <datalist id="industry-list">
                   {allIndustries.map(ind => <option key={ind} value={ind} />)}
@@ -417,12 +484,12 @@ export default function Brands() {
 
           <div className="space-y-4">
             <div className="flex items-center justify-between border-b border-border/50 pb-2">
-              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">联系人信息</h3>
+              <h3 className="text-sm font-bold text-gray-600 uppercase tracking-wider">联系人信息</h3>
               <button
                 type="button"
                 onClick={() => setFormData({
                   ...formData,
-                  contacts: [...formData.contacts, { id: crypto.randomUUID(), name: '', phone: '', note: '' }]
+                  contacts: [...formData.contacts, { id: generateContactId(), name: '', phone: '', note: '' }]
                 })}
                 className="text-xs text-accent hover:text-accent/80 font-medium flex items-center gap-1"
               >
@@ -431,7 +498,7 @@ export default function Brands() {
               </button>
             </div>
             {formData.contacts.length === 0 && (
-              <p className="text-sm text-gray-400 text-center py-4">暂无联系人，点击上方按钮添加</p>
+              <p className="text-sm text-gray-600 text-center py-4">暂无联系人，点击上方按钮添加</p>
             )}
             {formData.contacts.map((contact, index) => (
               <div key={contact.id} className="p-3 bg-gray-50 rounded-xl border border-border/50 space-y-3">
@@ -443,17 +510,18 @@ export default function Brands() {
                       ...formData,
                       contacts: formData.contacts.filter(c => c.id !== contact.id)
                     })}
-                    className="p-0.5 text-gray-400 hover:text-danger rounded transition-colors"
+                    className="p-0.5 text-gray-600 hover:text-danger rounded transition-colors"
                   >
                     <X size={14} />
                   </button>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">姓名</label>
+                    <label htmlFor={`contact-name-${index}`} className="block text-xs font-medium text-gray-600 mb-1">姓名</label>
                     <div className="relative">
-                      <User size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <User size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-600" />
                       <input
+                        id={`contact-name-${index}`}
                         type="text"
                         value={contact.name}
                         onChange={e => {
@@ -462,15 +530,16 @@ export default function Brands() {
                           setFormData({ ...formData, contacts: newContacts });
                         }}
                         placeholder="姓名"
-                        className="w-full pl-8 pr-3 py-2 border border-border rounded-lg outline-none focus:border-accent transition-all text-sm"
+                        className="w-full form-control pl-8"
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">电话</label>
+                    <label htmlFor={`contact-phone-${index}`} className="block text-xs font-medium text-gray-600 mb-1">电话</label>
                     <div className="relative">
-                      <Phone size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <Phone size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-600" />
                       <input
+                        id={`contact-phone-${index}`}
                         type="text"
                         value={contact.phone}
                         onChange={e => {
@@ -479,16 +548,17 @@ export default function Brands() {
                           setFormData({ ...formData, contacts: newContacts });
                         }}
                         placeholder="手机号/微信"
-                        className="w-full pl-8 pr-3 py-2 border border-border rounded-lg outline-none focus:border-accent transition-all text-sm"
+                        className="w-full form-control pl-8"
                       />
                     </div>
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">备注</label>
+                  <label htmlFor={`contact-note-${index}`} className="block text-xs font-medium text-gray-600 mb-1">备注</label>
                   <div className="relative">
-                    <MessageSquare size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
+                    <MessageSquare size={14} className="absolute left-2.5 top-2.5 text-gray-600" />
                     <input
+                      id={`contact-note-${index}`}
                       type="text"
                       value={contact.note}
                       onChange={e => {
@@ -497,7 +567,7 @@ export default function Brands() {
                         setFormData({ ...formData, contacts: newContacts });
                       }}
                       placeholder="如：负责商务对接、周一联系等"
-                      className="w-full pl-8 pr-3 py-2 border border-border rounded-lg outline-none focus:border-accent transition-all text-sm"
+                      className="w-full form-control pl-8"
                     />
                   </div>
                 </div>
@@ -506,16 +576,16 @@ export default function Brands() {
           </div>
 
           <div className="pt-6 flex justify-end gap-3">
-            <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-2.5 text-gray-600 hover:bg-gray-100 rounded-2xl transition-all font-bold">取消</button>
-            <button type="submit" className="btn-sketch px-8 py-2.5">
-              {editingBrandId ? "保存修改" : "确认添加"}
+            <button type="button" onClick={handleCloseModal} className="px-6 py-2.5 text-gray-600 hover:bg-panda-black/10 rounded-2xl transition-all font-bold">取消</button>
+            <button type="submit" disabled={isSubmitting} className="btn-sketch px-8 py-2.5 disabled:opacity-50">
+              {isSubmitting ? '保存中...' : editingBrandId ? '保存修改' : '确认添加'}
             </button>
           </div>
         </form>
       </Modal>
-      <Modal 
-        isOpen={!!viewingBrandTodos} 
-        onClose={() => setViewingBrandTodos(null)} 
+      <Modal
+        isOpen={!!viewingBrandTodos}
+        onClose={() => setViewingBrandTodos(null)}
         title={`${viewingBrandTodos?.name} - 关联任务`}
       >
         <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
@@ -524,16 +594,16 @@ export default function Brands() {
               <div key={todo.id} className="p-3 bg-gray-50 rounded-xl border border-border/50 flex items-start gap-3">
                 <div className={clsx(
                   "mt-1 w-5 h-5 rounded flex items-center justify-center flex-shrink-0",
-                  todo.completed ? "bg-success text-white" : "bg-white border border-gray-300 text-transparent"
+                  todo.completed ? "bg-success text-white" : "bg-panda-white border border-gray-300 text-transparent"
                 )}>
                   <CheckCircle2 size={14} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className={clsx("text-sm font-medium", todo.completed && "line-through text-gray-400")}>
+                  <p className={clsx("text-sm font-medium", todo.completed && "line-through text-gray-600")}>
                     {todo.content}
                   </p>
                   <div className="flex items-center gap-3 mt-1">
-                    <span className="text-[10px] text-gray-400 flex items-center gap-1">
+                    <span className="text-[10px] text-gray-600 flex items-center gap-1">
                       <Clock size={10} />
                       {todo.dueDate || '无日期'}
                     </span>
@@ -547,7 +617,7 @@ export default function Brands() {
               </div>
             ))
           ) : (
-            <div className="py-10 text-center text-gray-400">
+            <div className="py-10 text-center text-gray-600">
               <AlertCircle size={32} className="mx-auto mb-2 opacity-20" />
               <p>该品牌暂无关联任务</p>
             </div>
@@ -565,13 +635,13 @@ export default function Brands() {
         <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2">
           {viewingBrandOrders && orders.filter(o => o.brandName === viewingBrandOrders.name).length > 0 ? (
             orders.filter(o => o.brandName === viewingBrandOrders.name).map(order => (
-              <div key={order.id} className="p-2.5 bg-gray-50 rounded-lg border border-border/50 hover:bg-gray-100 transition-colors">
+              <div key={order.id} className="p-2.5 bg-gray-50 rounded-lg border border-border/50 hover:bg-panda-black/10 transition-colors">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     <FileText size={14} className="text-accent flex-shrink-0" />
                     <div className="min-w-0">
                       <p className="text-xs font-medium text-panda-black truncate">{order.title}</p>
-                      <span className="text-[10px] text-gray-400">{order.orderNo}</span>
+                      <span className="text-[10px] text-gray-600">{order.orderNo}</span>
                     </div>
                   </div>
                   <span className={clsx(
@@ -588,12 +658,12 @@ export default function Brands() {
                     {order.type === 'paid' ? '付费' : order.type === 'product_exchange' ? '置换' : '直发'}
                   </span>
                   <span className="font-bold text-success">¥{order.actualAmount.toLocaleString()}</span>
-                  {order.submitDate && <span className="text-gray-400">{order.submitDate}</span>}
+                  {order.submitDate && <span className="text-gray-600">{order.submitDate}</span>}
                 </div>
               </div>
             ))
           ) : (
-            <div className="py-8 text-center text-gray-400">
+            <div className="py-8 text-center text-gray-600">
               <AlertCircle size={24} className="mx-auto mb-2 opacity-20" />
               <p className="text-xs">该品牌暂无关联商单</p>
             </div>

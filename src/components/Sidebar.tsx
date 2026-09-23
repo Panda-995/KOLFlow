@@ -29,19 +29,23 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
   return (
     <>
       {/* Mobile sidebar */}
-      <aside className={clsx(
-        "fixed inset-y-0 left-0 z-40 w-[280px] bg-panda-black text-panda-white flex flex-col transform transition-transform duration-300 ease-in-out md:hidden",
-        isOpen ? "translate-x-0" : "-translate-x-full"
-      )}>
-        <div className="h-14 flex items-center justify-between border-b border-white/10 px-4">
+      <aside
+        inert={!isOpen}
+        aria-hidden={!isOpen}
+        className={clsx(
+          "fixed inset-y-0 left-0 z-40 w-[280px] bg-[#1a1a1a] text-[#f5f5f5] flex flex-col transform transition-transform duration-300 ease-in-out md:hidden",
+          isOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        <div className="h-14 flex items-center justify-between border-b border-[#f5f5f5]/10 px-4">
           <div className="flex items-center gap-2">
             <img src="/app-icon.png" alt="" width={28} height={28} className="rounded-md" />
             <div className="font-bold text-xl tracking-tight">
-              <span className="text-white">KOL</span>
-              <span className="text-white/60">Flow</span>
+              <span className="text-[#f5f5f5]">KOL</span>
+              <span className="text-[#f5f5f5]/60">Flow</span>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 text-white/60 hover:text-white rounded-lg hover:bg-white/10 transition-colors">
+          <button type="button" onClick={onClose} aria-label="关闭侧边栏" className="p-2 text-[#f5f5f5]/60 hover:text-[#f5f5f5] rounded-lg hover:bg-[#f5f5f5]/10 transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -59,8 +63,8 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
                 className={clsx(
                   "flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-200",
                   isActive
-                    ? "bg-white text-panda-black shadow-md"
-                    : "text-gray-400 hover:bg-white/10 hover:text-white"
+                    ? "bg-[#f5f5f5] text-[#1a1a1a]"
+                    : "text-[#f5f5f5]/60 hover:bg-[#f5f5f5]/10 hover:text-[#f5f5f5]"
                 )}
               >
                 <Icon size={22} />
@@ -70,9 +74,9 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
           })}
         </nav>
 
-        <div className="p-4 border-t border-white/10">
+        <div className="p-4 border-t border-[#f5f5f5]/10">
           <div className="flex items-center gap-3 px-2 py-2">
-            <div className="w-10 h-10 rounded-full bg-white text-panda-black flex items-center justify-center text-sm font-bold overflow-hidden">
+            <div className="w-10 h-10 rounded-full bg-[#f5f5f5] text-[#1a1a1a] flex items-center justify-center text-sm font-bold overflow-hidden">
               {settings?.avatar ? (
                 <img src={settings.avatar} alt="Avatar" className="w-full h-full object-cover" />
               ) : (
@@ -81,7 +85,7 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
             </div>
             <div className="flex flex-col">
               <span className="text-sm font-medium">{settings?.displayName || '博主账号'}</span>
-              <span className="text-xs text-gray-500">达人商单流</span>
+              <span className="text-xs text-[#f5f5f5]/60">达人商单流</span>
             </div>
           </div>
         </div>
@@ -90,13 +94,13 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
       {/* Desktop sidebar */}
       <aside 
         className={clsx(
-          "hidden md:flex h-screen bg-panda-black text-panda-white flex-col fixed left-0 top-0 z-20",
+          "hidden md:flex h-screen bg-[#1a1a1a] text-[#f5f5f5] flex-col fixed left-0 top-0 z-20",
           "transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
           collapsed ? "w-[72px]" : "w-[240px]"
         )}
       >
         <div className={clsx(
-          "h-20 flex items-center border-b border-white/10 overflow-hidden",
+          "h-20 flex items-center border-b border-[#f5f5f5]/10 overflow-hidden",
           "transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
           collapsed ? "justify-center px-2" : "justify-between px-4"
         )}>
@@ -106,15 +110,15 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
           )}>
             <div className="font-bold text-xl tracking-tight flex items-center gap-1">
               <img src="/app-icon.png" alt="" width={28} height={28} className="rounded-md mr-1" />
-              <span className="text-white">KOL</span>
-              <span className="text-white/60">Flow</span>
+              <span className="text-[#f5f5f5]">KOL</span>
+              <span className="text-[#f5f5f5]/60">Flow</span>
             </div>
-            <div className="text-[10px] text-white/40 tracking-wide mt-0.5">
+            <div className="text-[10px] text-[#f5f5f5]/40 tracking-wide mt-0.5">
               达人商单流
             </div>
           </div>
           <div className={clsx(
-            "font-bold text-lg tracking-tight text-white transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
+            "font-bold text-lg tracking-tight text-[#f5f5f5] transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
             collapsed ? "opacity-100 scale-100" : "opacity-0 scale-75 absolute"
           )}>
             <img src="/app-icon.png" alt="KOLFlow" width={32} height={32} className="rounded-lg" />
@@ -135,8 +139,8 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
                   "transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]",
                   collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5",
                   isActive
-                    ? "bg-white text-panda-black shadow-md"
-                    : "text-gray-400 hover:bg-white/10 hover:text-white"
+                    ? "bg-[#f5f5f5] text-[#1a1a1a]"
+                    : "text-[#f5f5f5]/60 hover:bg-[#f5f5f5]/10 hover:text-[#f5f5f5]"
                 )}
                 title={collapsed ? item.name : undefined}
               >
@@ -150,8 +154,8 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
                     <span className={clsx(
                       "text-[10px] px-1.5 py-0.5 rounded font-mono whitespace-nowrap",
                       isActive
-                        ? "text-panda-black/60 bg-white/80"
-                        : "text-gray-500 bg-white/10"
+                        ? "text-[#1a1a1a]/70 bg-[#f5f5f5]/80"
+                        : "text-[#f5f5f5]/60 bg-[#f5f5f5]/10"
                     )}>{item.shortcut}</span>
                   )}
                 </div>
@@ -160,17 +164,17 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
           })}
         </nav>
 
-        <div className="border-t border-white/10">
+        <div className="border-t border-[#f5f5f5]/10">
           {/* Collapse toggle button */}
           <div className={clsx(
-            "px-3 py-3 border-b border-white/10",
+            "px-3 py-3 border-b border-[#f5f5f5]/10",
             collapsed && "flex justify-center"
           )}>
             <button
               onClick={onToggleCollapse}
               className={clsx(
                 "w-full p-2 rounded-lg flex items-center gap-2",
-                "bg-white/10 hover:bg-white/20 text-white/70 hover:text-white",
+                "bg-[#f5f5f5]/10 hover:bg-[#f5f5f5]/20 text-[#f5f5f5]/70 hover:text-[#f5f5f5]",
                 "transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
                 collapsed && "justify-center w-auto"
               )}
@@ -187,7 +191,7 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
               collapsed ? "justify-center" : "gap-3 px-1"
             )}>
               <div 
-                className="w-8 h-8 rounded-full bg-white text-panda-black flex items-center justify-center text-sm font-bold overflow-hidden border border-white/20 flex-shrink-0"
+                className="w-8 h-8 rounded-full bg-[#f5f5f5] text-[#1a1a1a] flex items-center justify-center text-sm font-bold overflow-hidden border border-[#f5f5f5]/20 flex-shrink-0"
                 title={collapsed ? settings?.displayName || '博主账号' : undefined}
               >
                 {settings?.avatar ? (

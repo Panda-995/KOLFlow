@@ -1,5 +1,6 @@
 import { Cloud, Upload, Download, Settings2, RefreshCw as Sync } from 'lucide-react';
 import type { SyncTabProps } from './types';
+import Select from '../common/Select';
 
 export function SyncTab({ 
   webdavConfig, 
@@ -7,10 +8,11 @@ export function SyncTab({
   lastSyncTime, 
   isSyncing, 
   handleSaveWebdavConfig, 
-  handleWebdavSync 
+  handleWebdavSync,
+  lastError
 }: SyncTabProps) {
   return (
-    <div className="card-sketch p-6 bg-white">
+    <div className="card-sketch p-6 bg-panda-white">
       <h2 className="text-lg font-bold mb-6">云端同步</h2>
       <div className="space-y-6">
         <div className="p-4 bg-info/5 border border-info/20 rounded-xl">
@@ -19,66 +21,84 @@ export function SyncTab({
             <span className="font-bold">WebDAV 同步</span>
           </div>
           <p className="text-xs text-gray-500">
-            通过 WebDAV 协议将数据同步到坚果云、NextCloud 等云存储服务，实现多设备数据同步。
+            通过 WebDAV 协议将数据整包备份到坚果云、NextCloud 等云存储服务。上传前会检测云端备份是否被其他设备更新，冲突时会提示确认；每次覆盖云端备份前都会保留最近 10 份历史版本（kolflow_backups/ 目录）。
           </p>
         </div>
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-gray-700">WebDAV 服务器地址</label>
+            <label htmlFor="webdav-url" className="text-sm font-medium text-gray-700">WebDAV 服务器地址</label>
             <input
+              id="webdav-url"
               type="url"
               value={webdavConfig.url}
               onChange={(e) => setWebdavConfig({ ...webdavConfig, url: e.target.value })}
-              className="w-full px-4 py-2.5 bg-bg-tertiary border border-transparent focus:border-accent focus:bg-white rounded-xl outline-none transition-all text-sm"
+              className="w-full form-control"
               placeholder="https://dav.jianguoyun.com/dav/"
             />
-            <p className="text-xs text-gray-400">例如：坚果云 https://dav.jianguoyun.com/dav/</p>
+            <p className="text-xs text-gray-500">例如：坚果云 https://dav.jianguoyun.com/dav/</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700">用户名</label>
+              <label htmlFor="webdav-username" className="text-sm font-medium text-gray-700">用户名</label>
               <input
+                id="webdav-username"
                 type="text"
                 value={webdavConfig.username}
                 onChange={(e) => setWebdavConfig({ ...webdavConfig, username: e.target.value })}
-                className="w-full px-4 py-2.5 bg-bg-tertiary border border-transparent focus:border-accent focus:bg-white rounded-xl outline-none transition-all text-sm"
+                className="w-full form-control"
                 placeholder="WebDAV 用户名"
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700">密码/应用密码</label>
+              <label htmlFor="webdav-password" className="text-sm font-medium text-gray-700">密码/应用密码</label>
               <input
+                id="webdav-password"
                 type="password"
+                autoComplete="off"
                 value={webdavConfig.password}
                 onChange={(e) => setWebdavConfig({ ...webdavConfig, password: e.target.value })}
-                className="w-full px-4 py-2.5 bg-bg-tertiary border border-transparent focus:border-accent focus:bg-white rounded-xl outline-none transition-all text-sm"
+                className="w-full form-control"
                 placeholder="WebDAV 密码"
               />
-              <p className="text-xs text-gray-400">密码仅保存在当前浏览器会话，关闭浏览器后需要重新输入。</p>
+              <p className="text-xs text-gray-500">密码仅保存在当前浏览器会话，关闭浏览器后需要重新输入。</p>
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-gray-700">自动同步周期</label>
-            <select
+            <label htmlFor="webdav-interval" className="text-sm font-medium text-gray-700">自动同步周期</label>
+            <Select
+              id="webdav-interval"
               value={webdavConfig.syncInterval}
-              onChange={(e) => setWebdavConfig({ ...webdavConfig, syncInterval: e.target.value })}
-              className="w-full px-4 py-2.5 bg-bg-tertiary border border-transparent focus:border-accent focus:bg-white rounded-xl outline-none transition-all text-sm"
-            >
-              <option value="0">手动同步</option>
-              <option value="1">每小时</option>
-              <option value="24">每天</option>
-              <option value="168">每周</option>
-            </select>
-            <p className="text-xs text-gray-400">应用保持打开时，会在所有页面按该周期自动上传备份。</p>
+              onChange={(value) => setWebdavConfig({ ...webdavConfig, syncInterval: value })}
+              className="w-full"
+              options={[
+                { value: '0', label: '手动同步' },
+                { value: '1', label: '每小时' },
+                { value: '24', label: '每天' },
+                { value: '168', label: '每周' },
+              ]}
+            />
+            <p className="text-xs text-gray-500">应用保持打开时，会在所有页面按该周期自动上传备份。</p>
           </div>
 
           {lastSyncTime && (
             <div className="flex items-center gap-2 text-xs text-gray-500">
               <Sync size={14} />
               上次同步：{new Date(lastSyncTime).toLocaleString('zh-CN')}
+            </div>
+          )}
+
+          {lastError && (
+            <div className="p-3 border-2 border-danger/40 bg-danger/5 rounded-xl space-y-1" role="alert">
+              <div className="text-xs font-bold text-danger">
+                最近一次{lastError.source === 'auto' ? '自动' : '手动'}同步未完成
+              </div>
+              <p className="text-xs text-gray-600">{lastError.reason}</p>
+              <p className="text-[10px] text-gray-500">
+                {new Date(lastError.at).toLocaleString('zh-CN')}
+              </p>
             </div>
           )}
         </div>

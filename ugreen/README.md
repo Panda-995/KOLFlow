@@ -1,6 +1,6 @@
 # KOLFlow 绿联 UGOS Pro 应用包
 
-此目录保存 KOLFlow 的绿联 UGOS Pro 打包配置，支持 `amd64` 与 `arm64`。应用包基于项目公开的多架构 Docker 镜像制作，应用 ID 保持为 `com.panda.kolflow`，当前版本为 `1.4.4`（构建号 `0013`）。
+此目录保存 KOLFlow 的绿联 UGOS Pro 打包配置，支持 `amd64` 与 `arm64`。应用包基于项目公开的多架构 Docker 镜像制作，应用 ID 保持为 `com.panda.kolflow`，当前版本为 `1.4.5`（构建号 `0014`）。
 
 ## 应用信息
 
@@ -34,6 +34,10 @@ To change folders, export a full backup, stop the app, copy the entire existing 
 
 The Compose source contains Go template directives in YAML comments for UGOS Pro packaging. Use the UPK for this installation flow; for plain Docker deployments, use the repository's normal Compose file and set its host-side bind path.
 
+## v1.4.5 升级说明
+
+本版保留原有数据库表和记录，自动新增会话撤销字段及待办索引。容器启动会调整本应用数据库文件的属主，再以非 root 用户运行；仍需保证所选 NAS 文件夹允许应用读写。升级前请保留旧版完整备份。新版导出格式为 v4，支持导入旧 v2/v3 备份；若回退旧程序，请使用升级前备份，不要直接导入 v4 文件。
+
 ## HTTP 与敏感信息保护
 
 KOLFlow 保留 UGOS Pro 的 HTTP 与 HTTPS 访问方式。`1.3.0.0007` 起，HTTP 下可正常注册、登录和使用全部功能；登录、注册、修改邮箱/密码及账号注销的敏感载荷使用 RSA-OAEP-256 与 AES-256-GCM 混合加密，请求体不再出现邮箱、密码或邀请码明文。HTTPS 仍是推荐方式，用于抵御 HTTP 页面被主动中间人篡改。
@@ -44,10 +48,10 @@ KOLFlow 保留 UGOS Pro 的 HTTP 与 HTTPS 访问方式。`1.3.0.0007` 起，HTT
 
 ## 构建方式
 
-在 GitHub Actions 中手动运行 `Build UGOS Pro UPK` 工作流。工作流会分别拉取 `1.4.4-amd64`、`1.4.4-arm64` 不可变镜像，使用绿联官方 `ugcli` 校验项目并生成两个 UPK 安装包，同时生成 `SHA256SUMS-UPK`。
+在 GitHub Actions 中手动运行 `Build UGOS Pro UPK` 工作流。工作流会分别拉取 `1.4.5-amd64`、`1.4.5-arm64` 不可变镜像，使用绿联官方 `ugcli` 校验项目并生成两个 UPK 安装包，同时生成 `SHA256SUMS-UPK`。
 
 本地生成的镜像归档和 UPK 文件属于构建产物，不提交到 Git 仓库。
 
 ## 详情素材
 
-PC 详情图（1854×1236）和移动端详情图（1125×2436）各三张，原图位于 `public/store-listing/`，随应用镜像进入 UPK。商店提交素材另见 Release 中的 `KOLFlow-v1.4.4-ugreen-store-assets.zip`。Docker UPK 的 `rootfs_common` 仅保留规范允许的图标和 Compose 文件。
+PC 详情图（1854×1236）和移动端详情图（1125×2436）各三张，原图位于 `public/store-listing/`，随应用镜像进入 UPK。商店提交素材另见 Release 中的 `KOLFlow-v1.4.5-ugreen-store-assets.zip`。Docker UPK 的 `rootfs_common` 仅保留规范允许的图标和 Compose 文件。

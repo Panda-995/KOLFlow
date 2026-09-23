@@ -65,6 +65,9 @@ export interface BackupTabProps {
   handleImportData: (e: React.ChangeEvent<HTMLInputElement>) => void;
   importInputRef: RefObject<HTMLInputElement | null>;
   setClearDataConfirm: React.Dispatch<React.SetStateAction<boolean>>;
+  /** 最近一次备份的可恢复性风险（提示条读不完，留在数据管理页回看） */
+  backupRisk?: { warnings: string[]; at: string; source: 'export' | 'webdav' } | null;
+  onDismissBackupRisk?: () => void;
 }
 
 // ApiTab Props
@@ -97,6 +100,7 @@ export interface SyncTabProps {
   isSyncing: boolean;
   handleSaveWebdavConfig: () => void;
   handleWebdavSync: (direction: 'upload' | 'download') => void;
+  lastError?: { reason: string; at: string; source: 'auto' | 'manual' } | null;
   showToast: (message: string, type?: 'success' | 'error' | 'warning') => void;
 }
 

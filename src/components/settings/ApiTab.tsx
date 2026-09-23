@@ -2,6 +2,7 @@ import { Copy, RefreshCw, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { useState } from 'react';
 import type { ApiTabProps } from './types';
 import { getActiveServerUrl } from '../../lib/api';
+import ConfirmDialog from '../ConfirmDialog';
 
 const API_ENDPOINTS = [
   { category: '商单', endpoints: [
@@ -58,34 +59,35 @@ export function ApiTab({
   const serverUrl = getActiveServerUrl();
 
   return (
-    <div className="card-sketch p-6 bg-white">
+    <div className="card-sketch p-6 bg-panda-white">
       <h2 className="text-lg font-bold mb-4">API 设置</h2>
       
       <div className="space-y-4">
         <div className="flex items-center gap-3">
           <div className="flex-1">
-            <label className="text-xs font-medium text-gray-500 mb-1 block">API Key</label>
+            <label htmlFor="settings-api-key" className="text-xs font-medium text-gray-500 mb-1 block">API Key</label>
             <input
+              id="settings-api-key"
               type="text"
               readOnly
               value={settings?.apiKey || '尚未生成'}
-              className="w-full px-3 py-2 bg-gray-50 border border-border rounded-lg text-sm font-mono"
+              className="w-full form-control font-mono"
             />
           </div>
           {settings?.apiKey && (
-            <button onClick={() => copyToClipboard(settings?.apiKey || '')} className="p-2 border border-border rounded-lg text-gray-500 hover:bg-gray-50" title="复制">
+            <button onClick={() => copyToClipboard(settings?.apiKey || '')} className="p-2 border border-border rounded-lg text-gray-500 hover:bg-panda-black/10" title="复制">
               <Copy size={16} />
             </button>
           )}
           <button
             onClick={testApiConnection}
             disabled={isTestingApi || !settings?.apiKey}
-            className="px-3 py-2 border border-border rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1"
+            className="px-3 py-2 border border-border rounded-lg text-sm hover:bg-panda-black/5 disabled:opacity-50 flex items-center gap-1"
           >
             {isTestingApi ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />}
             测试
           </button>
-          <button onClick={handleGenerateApiKey} className="px-3 py-2 bg-panda-black text-white rounded-lg text-sm hover:bg-panda-black/90 flex items-center gap-1">
+          <button onClick={handleGenerateApiKey} className="px-3 py-2 bg-panda-black text-panda-white rounded-lg text-sm hover:bg-panda-black/90 flex items-center gap-1">
             <RefreshCw size={14} />
             {settings?.apiKey ? '重新生成' : '生成'}
           </button>
@@ -93,15 +95,16 @@ export function ApiTab({
 
         <div className="flex items-center gap-3">
           <div className="flex-1">
-            <label className="text-xs font-medium text-gray-500 mb-1 block">服务器地址</label>
+            <label htmlFor="settings-server-url" className="text-xs font-medium text-gray-500 mb-1 block">服务器地址</label>
             <input
+              id="settings-server-url"
               type="text"
               readOnly
               value={serverUrl}
-              className="w-full px-3 py-2 bg-gray-50 border border-border rounded-lg text-sm font-mono"
+              className="w-full form-control font-mono"
             />
           </div>
-          <button onClick={() => copyToClipboard(serverUrl)} className="p-2 border border-border rounded-lg text-gray-500 hover:bg-gray-50" title="复制">
+          <button onClick={() => copyToClipboard(serverUrl)} className="p-2 border border-border rounded-lg text-gray-500 hover:bg-panda-black/10" title="复制">
             <Copy size={16} />
           </button>
         </div>
@@ -115,17 +118,14 @@ export function ApiTab({
             </button>
           </div>
           <code className="text-xs text-gray-500 block">
-            curl "{serverUrl}/api/external/orders?token={settings?.apiKey || 'YOUR_KEY'}"
+            curl -H "Authorization: Bearer {settings?.apiKey || 'YOUR_KEY'}" "{serverUrl}/api/external/orders"
           </code>
         </div>
 
         <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
           <div className="flex items-center gap-2 text-xs">
-            <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded font-medium">URL参数</span>
-            <code className="bg-white px-2 py-0.5 rounded">?token=YOUR_KEY</code>
-            <span className="text-gray-400">或</span>
-            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-medium">Header</span>
-            <code className="bg-white px-2 py-0.5 rounded">Bearer YOUR_KEY</code>
+            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-medium">请求头</span>
+            <code className="bg-panda-white px-2 py-0.5 rounded">Authorization: Bearer YOUR_KEY</code>
           </div>
         </div>
 
@@ -144,13 +144,13 @@ export function ApiTab({
               
               {API_ENDPOINTS.map(({ category, endpoints }) => (
                 <div key={category}>
-                  <h4 className="text-xs font-bold text-gray-400 mb-1">{category}</h4>
+                  <h4 className="text-xs font-bold text-gray-600 mb-1">{category}</h4>
                   <div className="grid gap-1">
                     {endpoints.map(([method, path, desc]) => (
                       <div key={`${category}-${method}-${path}`} className="flex items-center gap-2 text-xs py-0.5">
                         <span className={`px-1.5 py-0.5 rounded font-medium w-8 text-center ${METHOD_COLORS[method]}`}>{method}</span>
                         <code className="text-gray-600">{path}</code>
-                        <span className="text-gray-400">{desc}</span>
+                        <span className="text-gray-500">{desc}</span>
                       </div>
                     ))}
                   </div>
@@ -161,28 +161,15 @@ export function ApiTab({
         </div>
       </div>
 
-      {apiKeyConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-md mx-4 shadow-xl">
-            <h3 className="text-lg font-bold mb-2">确认生成新 API Key</h3>
-            <p className="text-sm text-gray-600 mb-4">生成新的 API Key 将导致旧的 API Key 失效。确定要继续吗？</p>
-            <div className="flex gap-3 justify-end">
-              <button 
-                onClick={() => setApiKeyConfirm(false)}
-                className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-gray-50"
-              >
-                取消
-              </button>
-              <button 
-                onClick={confirmGenerateApiKey}
-                className="px-4 py-2 bg-panda-black text-white rounded-lg text-sm hover:bg-panda-black/90"
-              >
-                确认生成
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        isOpen={apiKeyConfirm}
+        onClose={() => setApiKeyConfirm(false)}
+        onConfirm={confirmGenerateApiKey}
+        title="确认生成新 API Key"
+        message="生成新的 API Key 将导致旧的 API Key 失效。确定要继续吗？"
+        confirmText="确认生成"
+        type="warning"
+      />
     </div>
   );
 }

@@ -5,6 +5,9 @@ import { useStore } from '../store/useStore';
 import { clsx } from 'clsx';
 import { authFetch } from '../lib/api';
 import { getCompletedReportPeriod } from '../lib/reportSchedule';
+import { formatLocalDate } from '../lib/dateFilter';
+import { getSessionEpoch, isSessionCurrent } from '../store/cache';
+import type { Order, Payment } from '../types';
 import {
   buildBusinessNotifications,
   parseReportPayload,
@@ -20,10 +23,34 @@ export default function Header({ onMenuClick }: HeaderProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [report, setReport] = useState<ReportPayload | null>(null);
   const [reportError, setReportError] = useState(false);
+  const [candidates, setCandidates] = useState<{ orders: Order[]; payments: Payment[] }>({ orders: [], payments: [] });
+  const [candidateError, setCandidateError] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
   const reportRequestId = useRef(0);
   const { logout, orders, payments, assets, paidPromotions, settings, dismissedNotifications, dismissNotification, clearNotifications } = useStore();
   const navigate = useNavigate();
+
+  const loadCandidates = useCallback(async () => {
+    const epoch = getSessionEpoch();
+    try {
+      const response = await authFetch(`/api/dashboard/notification-candidates?today=${formatLocalDate()}`);
+      if (!response.ok) throw new Error('提醒加载失败');
+      const data = await response.json() as { orders: Order[]; payments: Payment[] };
+      if (isSessionCurrent(epoch)) {
+        setCandidates(data);
+        setCandidateError(false);
+      }
+    } catch (error) {
+      console.error('提醒加载失败:', error instanceof Error ? error.message : error);
+      if (isSessionCurrent(epoch)) setCandidateError(true);
+    }
+  }, []);
+  useEffect(() => { void loadCandidates(); }, [loadCandidates, orders, payments, showNotifications]);
+  useEffect(() => {
+    const refresh = () => { void loadCandidates(); };
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, [loadCandidates]);
 
   const loadReport = useCallback(async () => {
     const requestId = ++reportRequestId.current;
@@ -82,16 +109,29 @@ export default function Header({ onMenuClick }: HeaderProps) {
     };
   }, [loadReport, settings?.reportFrequency, settings?.weeklyReport]);
 
-  const notifications = useMemo(() => buildBusinessNotifications({
-    now: new Date(),
-    orders,
-    payments,
-    settings,
-    dismissedIds: dismissedNotifications,
-    reportSummary: report?.summary,
-    reportPeriod: report?.period,
-    reportError,
-  }), [orders, payments, settings, dismissedNotifications, report, reportError]);
+  const notifications = useMemo(() => {
+    const items = buildBusinessNotifications({
+      now: new Date(),
+      orders: candidates.orders,
+      payments: candidates.payments,
+      settings,
+      dismissedIds: dismissedNotifications,
+      reportSummary: report?.summary,
+      reportPeriod: report?.period,
+      reportError,
+    });
+    if (candidateError && !dismissedNotifications.includes('notification-load-error')) {
+      items.unshift({
+        id: 'notification-load-error',
+        title: '业务提醒加载失败',
+        message: '到期商单与逾期账单提醒可能不完整，点击重试',
+        type: 'warning',
+        link: '/dashboard',
+        action: 'retry-candidates',
+      });
+    }
+    return items;
+  }, [candidates, candidateError, settings, dismissedNotifications, report, reportError]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -104,6 +144,10 @@ export default function Header({ onMenuClick }: HeaderProps) {
   }, []);
 
   const handleNotificationClick = (notification: BusinessNotification) => {
+    if (notification.action === 'retry-candidates') {
+      void loadCandidates();
+      return;
+    }
     if (notification.action === 'retry-report') {
       void loadReport();
       return;
@@ -127,6 +171,8 @@ export default function Header({ onMenuClick }: HeaderProps) {
       <div className="flex items-center gap-2 md:gap-3">
         {/* Mobile menu button */}
         <button
+          type="button"
+          aria-label="打开导航菜单"
           onClick={onMenuClick}
           className="p-1.5 md:p-2 text-gray-500 hover:text-panda-black transition-colors rounded-lg hover:bg-bg-tertiary md:hidden"
         >
@@ -136,7 +182,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
         {/* Mobile brand */}
         <div className="font-bold text-base tracking-tight md:hidden">
           <span className="text-panda-black">KOL</span>
-          <span className="text-gray-400">Flow</span>
+          <span className="text-gray-500">Flow</span>
         </div>
       </div>
 
@@ -159,7 +205,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
           <div className="hidden md:block">
             {showNotifications && (
               <div
-                className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-border/50 overflow-hidden z-[100] animate-in fade-in slide-in-from-top-2"
+                className="absolute right-0 mt-2 w-80 dropdown-panel overflow-hidden z-[100] animate-in fade-in slide-in-from-top-2"
                 onMouseDown={e => e.stopPropagation()}
               >
                 <div className="p-3 border-b border-border/50 bg-gray-50/50 flex items-center justify-between gap-3">
@@ -169,7 +215,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
                     {notifications.length > 0 && (
                       <button
                         onClick={handleClearNotifications}
-                        className="p-1.5 text-gray-400 hover:text-panda-black hover:bg-white rounded-lg transition-colors"
+                        className="p-1.5 text-gray-600 hover:text-panda-black hover:bg-panda-black/10 rounded-lg transition-colors"
                         title="一键清除通知"
                       >
                         <CheckCheck size={14} />
@@ -186,13 +232,14 @@ export default function Header({ onMenuClick }: HeaderProps) {
                   ) : (
                     <div className="divide-y divide-border/50">
                       {notifications.map(notif => (
-                        <div key={notif.id} className="p-4 hover:bg-gray-50 transition-colors relative group">
+                        <div key={notif.id} className="p-4 hover:bg-panda-black/5 transition-colors relative group">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               dismissNotification(notif.id);
                             }}
-                            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                            aria-label="忽略该通知"
+                            className="absolute top-4 right-4 text-gray-600 hover:text-gray-600 max-md:opacity-100 opacity-0 group-hover:opacity-100 hover-visible transition-opacity"
                           >
                             <X size={14} />
                           </button>
@@ -222,14 +269,16 @@ export default function Header({ onMenuClick }: HeaderProps) {
         </div>
 
         {/* Mobile: just show + button, Desktop: show full button */}
-        <Link to="/orders" className="btn-primary py-2 px-3 md:px-4 text-sm flex items-center gap-1 md:gap-2">
+        <Link to="/orders?new=1" className="btn-primary py-2 px-3 md:px-4 text-sm flex items-center gap-1 md:gap-2">
           <Plus size={16} />
           <span className="hidden md:inline">新建商单</span>
         </Link>
 
         <button
+          type="button"
+          aria-label="退出登录"
           onClick={() => logout()}
-          className="p-2 text-gray-400 hover:text-danger hover:bg-danger/10 rounded-xl transition-colors"
+          className="p-2 text-gray-600 hover:text-danger hover:bg-danger/10 rounded-xl transition-colors"
           title="退出登录"
         >
           <LogOut size={20} />
@@ -238,9 +287,9 @@ export default function Header({ onMenuClick }: HeaderProps) {
 
       {/* Mobile notification panel - fullscreen overlay */}
       {showNotifications && (
-        <div className="md:hidden fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm animate-in fade-in" onClick={() => setShowNotifications(false)}>
+        <div className="md:hidden fixed inset-0 z-[100] bg-black/45 animate-in fade-in" onClick={() => setShowNotifications(false)}>
           <div 
-            className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[80vh] overflow-hidden animate-in slide-in-from-bottom duration-300"
+            className="absolute bottom-0 left-0 right-0 bg-panda-white rounded-t-3xl max-h-[80vh] overflow-hidden animate-in slide-in-from-bottom duration-300"
             onMouseDown={e => e.stopPropagation()}
             onClick={e => e.stopPropagation()}
           >
@@ -259,7 +308,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
                 {notifications.length > 0 && (
                   <button
                     onClick={handleClearNotifications}
-                    className="p-2 text-gray-400 hover:text-panda-black hover:bg-gray-100 rounded-full transition-colors"
+                    className="p-2 text-gray-600 hover:text-panda-black hover:bg-panda-black/10 rounded-full transition-colors"
                     title="一键清除通知"
                   >
                     <CheckCheck size={18} />
@@ -267,7 +316,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
                 )}
                 <button
                   onClick={() => setShowNotifications(false)}
-                  className="p-2 text-gray-400 hover:text-panda-black hover:bg-gray-100 rounded-full transition-colors"
+                  className="p-2 text-gray-600 hover:text-panda-black hover:bg-panda-black/10 rounded-full transition-colors"
                 >
                   <X size={20} />
                 </button>
@@ -280,7 +329,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
                 <div className="py-12 text-center text-sm text-gray-500 flex flex-col items-center">
                   <div className="text-5xl mb-3 opacity-50">🎉</div>
                   <p className="font-medium">暂无新通知</p>
-                  <p className="text-xs text-gray-400 mt-1">所有消息都已查看</p>
+                  <p className="text-xs text-gray-500 mt-1">所有消息都已查看</p>
                 </div>
               ) : (
                 <div className="divide-y divide-border/50">
@@ -319,7 +368,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
                           e.stopPropagation();
                           dismissNotification(notif.id);
                         }}
-                        className="mt-3 ml-13 pl-[52px] text-xs text-gray-400 hover:text-danger transition-colors flex items-center gap-1"
+                        className="mt-3 ml-13 pl-[52px] text-xs text-gray-500 hover:text-danger transition-colors flex items-center gap-1"
                       >
                         <X size={12} />
                         忽略此通知

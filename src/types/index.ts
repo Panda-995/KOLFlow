@@ -108,7 +108,6 @@ export interface Settings {
   weeklyReport: boolean;
   avatar?: string;
   apiKey?: string;
-  darkMode?: boolean;
   reportFrequency?: 'weekly' | 'monthly';
 }
 

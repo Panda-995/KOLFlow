@@ -26,6 +26,16 @@ export const parseLocalDate = (value: string | null | undefined): Date | null =>
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+// 解析数据库时间字符串。旧数据的 DATETIME 列是 SQLite 的无时区 UTC 格式
+// （"YYYY-MM-DD HH:MM:SS"），必须显式按 UTC 解析，否则会在东八区出现约 8 小时偏差。
+export const parseDatabaseDate = (value: string | null | undefined): Date | null => {
+  if (!value) return null;
+  const legacyUtc = value.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+  const normalized = legacyUtc ? `${value.replace(' ', 'T')}Z` : value;
+  const parsed = new Date(normalized);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 export const monthOptions = Array.from({ length: 12 }, (_, index) => {
   const value = String(index + 1).padStart(2, '0');
   return { value, label: `${index + 1}月` };

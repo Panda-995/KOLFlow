@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
-import { clsx } from 'clsx';
 import { Server } from 'lucide-react';
 import {
   apiFetch,
@@ -166,7 +165,7 @@ export default function Login() {
       <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
         <div 
           className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{ backgroundImage: 'url(/login-bg.png)' }
+          style={{ backgroundImage: 'url(/login-bg.webp)' }
         }
         />
         <div className="absolute inset-0 bg-gradient-to-br from-black/40 via-black/20 to-transparent" />
@@ -179,44 +178,44 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: 'url(/login-bg.png)' }}
+        style={{ backgroundImage: 'url(/login-bg.webp)' }}
       />
       <div className="absolute inset-0 bg-gradient-to-br from-black/40 via-black/20 to-transparent" />
       
-      <div className="card w-full max-w-md p-8 animate-in fade-in slide-in-from-bottom-4 duration-500 relative z-10 bg-white/95 backdrop-blur-sm shadow-2xl rounded-2xl border border-white/20">
+      <div className="w-full max-w-md p-8 animate-in fade-in slide-in-from-bottom-4 duration-500 relative z-10 bg-panda-white border-2 border-panda-black rounded-2xl shadow-[6px_6px_0_0_var(--shadow-hard)]">
         <div className="text-center mb-8">
           <img src="/app-icon.png" alt="KOLFlow" width={56} height={56} className="mx-auto mb-3 rounded-xl" />
           <h1 className="text-3xl font-bold text-panda-black mb-2 tracking-tight">
             <span className="text-panda-black">KOL</span>
-            <span className="text-gray-400">Flow</span>
+            <span className="text-gray-500">Flow</span>
           </h1>
           <p className="text-gray-500 text-sm">
             达人商单流 · 轻松管理每一笔合作
           </p>
-          <p className="text-gray-400 text-xs mt-1">
+          <p className="text-gray-600 text-xs mt-1">
             {mode === 'login' ? '请输入您的账号信息登录' : '请填写信息完成注册'}
           </p>
         </div>
 
         {/* 模式切换 */}
-        <div className="flex bg-gray-100 rounded-xl p-1 mb-6">
+        <div className="segment-group w-full mb-6" role="tablist" aria-label="登录或注册">
           <button
             type="button"
+            role="tab"
+            aria-selected={mode === 'login'}
+            aria-pressed={mode === 'login'}
             onClick={() => switchMode('login')}
-            className={clsx(
-              "flex-1 py-2.5 rounded-lg text-sm font-medium transition-all",
-              mode === 'login' ? "bg-panda-black text-white shadow-sm" : "text-gray-500 hover:text-panda-black"
-            )}
+            className="segment flex-1 py-2.5 text-sm"
           >
             登录
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={mode === 'register'}
+            aria-pressed={mode === 'register'}
             onClick={() => switchMode('register')}
-            className={clsx(
-              "flex-1 py-2.5 rounded-lg text-sm font-medium transition-all",
-              mode === 'register' ? "bg-panda-black text-white shadow-sm" : "text-gray-500 hover:text-panda-black"
-            )}
+            className="segment flex-1 py-2.5 text-sm"
           >
             注册
           </button>
@@ -247,7 +246,7 @@ export default function Login() {
             <div>
               <label htmlFor="server-url" className="block text-sm font-medium text-gray-700 mb-1.5">服务端地址</label>
               <div className="relative">
-                <Server size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <Server size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
                 <input
                   id="server-url"
                   type="text"
@@ -256,7 +255,7 @@ export default function Login() {
                   onBlur={() => {
                     if (serverUrl.trim()) void checkUsers(serverUrl);
                   }}
-                  className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-panda-black focus:bg-white rounded-xl outline-none transition-all text-sm"
+                  className="w-full form-control pl-9"
                   placeholder="https://kolflow.example.com"
                 />
               </div>
@@ -264,11 +263,11 @@ export default function Login() {
                 type="button"
                 onClick={handleTestServer}
                 disabled={isTestingServer}
-                className="mt-2 w-full px-3 py-2 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 rounded-xl text-sm font-medium text-gray-700 transition-colors"
+                className="mt-2 w-full px-3 py-2 bg-gray-100 hover:bg-panda-black/15 disabled:opacity-50 rounded-xl text-sm font-medium text-gray-700 transition-colors"
               >
                 {isTestingServer ? '正在测试连接...' : '测试服务端连接'}
               </button>
-              <p className="text-xs text-gray-400 mt-1">
+              <p className="text-xs text-gray-500 mt-1">
                 为保护邮箱、密码和邀请码等个人信息，APP 仅支持使用有效 HTTPS 证书的服务地址。
               </p>
             </div>
@@ -282,7 +281,7 @@ export default function Login() {
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-panda-black focus:bg-white rounded-xl outline-none transition-all text-sm"
+              className="w-full form-control"
               placeholder="your@email.com"
             />
           </div>
@@ -295,7 +294,7 @@ export default function Login() {
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-panda-black focus:bg-white rounded-xl outline-none transition-all text-sm"
+              className="w-full form-control"
               placeholder="请输入密码"
             />
           </div>
@@ -308,10 +307,10 @@ export default function Login() {
                 type="text"
                 value={inviteCode}
                 onChange={e => setInviteCode(e.target.value)}
-                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-panda-black focus:bg-white rounded-xl outline-none transition-all text-sm"
+                className="w-full form-control"
                 placeholder="请输入邀请码（必填）"
               />
-              <p className="text-xs text-gray-400 mt-1">注册需要邀请码，请联系管理员获取</p>
+              <p className="text-xs text-gray-500 mt-1">注册需要邀请码，请联系管理员获取</p>
             </div>
           )}
 
@@ -350,7 +349,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={isLoading || !hasAcceptedPrivacy}
-            className="w-full bg-panda-black text-white py-3 mt-2 rounded-xl font-medium hover:bg-gray-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-panda-black focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full bg-panda-black text-panda-white py-3 mt-2 rounded-xl font-medium hover:bg-primary-dark transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-panda-black focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isLoading
               ? (mode === 'login' ? '登录中...' : '注册中...')

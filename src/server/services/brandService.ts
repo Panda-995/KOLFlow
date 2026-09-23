@@ -58,8 +58,8 @@ const normalizeContacts = (contacts: unknown): Array<{ id: string; name: string;
   });
 };
 
-export const parseBrandForClient = (brand: BrandRow | undefined): any => {
-  if (!brand) return brand;
+export const parseBrandForClient = (brand: BrandRow | undefined) => {
+  if (!brand) return undefined;
   const contacts = safeJsonParse<unknown>(brand.contacts, []);
   const normalizedContacts = Array.isArray(contacts) ? contacts : [];
   const firstContact = normalizedContacts[0] as { name?: string; phone?: string } | undefined;
@@ -106,10 +106,17 @@ const ensureBrandNameAvailable = (userId: string, name: string, excludedId?: str
   if (duplicate) throw new ApiError('该品牌已存在');
 };
 
-export const listBrands = (userId: string) => (
-  (db.prepare('SELECT * FROM brands WHERE userId = ? ORDER BY createdAt DESC').all(userId) as BrandRow[])
-    .map(brand => parseBrandForClient(brand))
+export const countBrands = (userId: string): number => (
+  (db.prepare('SELECT COUNT(*) AS count FROM brands WHERE userId = ?').get(userId) as { count: number }).count
 );
+
+export const listBrands = (userId: string, paging?: { limit?: number; offset?: number }) => {
+  const rows = paging?.limit
+    ? db.prepare('SELECT * FROM brands WHERE userId = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?')
+        .all(userId, paging.limit, paging.offset ?? 0)
+    : db.prepare('SELECT * FROM brands WHERE userId = ? ORDER BY createdAt DESC').all(userId);
+  return (rows as BrandRow[]).map(brand => parseBrandForClient(brand));
+};
 
 export const getBrand = (userId: string, id: string) => {
   const brand = db.prepare('SELECT * FROM brands WHERE id = ? AND userId = ?').get(id, userId) as BrandRow | undefined;
@@ -144,6 +151,8 @@ export const updateBrand = (userId: string, id: string, input: BrandInput) => {
       `).run(values.name, id, userId, id, existing.name);
       db.prepare('UPDATE payments SET brand = ? WHERE brand = ? AND userId = ?').run(values.name, existing.name, userId);
       db.prepare('UPDATE assets SET brandName = ? WHERE brandName = ? AND userId = ?').run(values.name, existing.name, userId);
+      // 商单模板同步改名，避免之后从模板创建商单带回旧品牌名
+      db.prepare('UPDATE order_templates SET brandName = ? WHERE brandName = ? AND userId = ?').run(values.name, existing.name, userId);
     }
 
     db.prepare(`
@@ -176,6 +185,7 @@ export const deleteBrand = (userId: string, id: string) => {
     db.prepare('UPDATE todos SET category = NULL, brandId = NULL WHERE (brandId = ? OR category = ?) AND userId = ?').run(id, existing.name, userId);
     db.prepare('UPDATE payments SET brand = NULL WHERE brand = ? AND userId = ?').run(existing.name, userId);
     db.prepare('UPDATE assets SET brandName = NULL WHERE brandName = ? AND userId = ?').run(existing.name, userId);
+    db.prepare('UPDATE order_templates SET brandName = NULL WHERE brandName = ? AND userId = ?').run(existing.name, userId);
     db.prepare('DELETE FROM brands WHERE id = ? AND userId = ?').run(id, userId);
     logActivity(userId, 'delete', 'brand', id, `删除品牌: ${existing.name}`);
   });

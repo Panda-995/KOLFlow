@@ -8,7 +8,6 @@
   font-display: swap;
 }
 
-@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --font-sans: "Pixel12", "Inter", "Noto Sans SC", "PingFang SC", sans-serif;
@@ -28,10 +27,10 @@
   --color-accent: #ff6b6b;
   --color-accent-hover: #ff8787;
 
-  --color-success: #22c55e;
-  --color-warning: #eab308;
-  --color-danger: #ef4444;
-  --color-info: #3b82f6;
+  --color-success: #15803d;
+  --color-warning: #a16207;
+  --color-danger: #dc2626;
+  --color-info: #2563eb;
 
   --color-paid: #22c55e;
   --color-exchange: #a855f7;
@@ -56,31 +55,39 @@
   --shadow-hover: 0 6px 20px rgba(0, 0, 0, 0.1);
 }
 
-/* Dark Mode Variables */
-.dark {
-  --color-panda-black: #f5f5f5;
-  --color-panda-white: #1a1a1a;
-  --color-panda-gray: #2d2d2d;
-  --color-panda-dark: #e5e5e5;
 
-  --color-primary: #f5f5f5;
-  --color-primary-light: #a3a3a3;
-  --color-primary-dark: #ffffff;
+/* 主题色块：通过 html[data-theme] 切换主色与强调色。 */
+[data-theme='ocean'] {
+  --color-panda-black: #0d47a1;
+  --color-accent: #00bcd4;
+  --color-accent-hover: #26c6da;
+}
+[data-theme='forest'] {
+  --color-panda-black: #2e7d32;
+  --color-accent: #81c784;
+  --color-accent-hover: #a5d6a7;
+}
+[data-theme='sunset'] {
+  --color-panda-black: #e65100;
+  --color-accent: #ffb74d;
+  --color-accent-hover: #ffcc80;
+}
+[data-theme='lavender'] {
+  --color-panda-black: #7b1fa2;
+  --color-accent: #ce93d8;
+  --color-accent-hover: #e1bee7;
+}
 
-  --color-accent: #f5f5f5;
-  --color-accent-hover: #a3a3a3;
-
-  --color-bg-primary: #1a1a1a;
-  --color-bg-secondary: #0f0f0f;
-  --color-bg-tertiary: #2d2d2d;
-
-  --color-border: #3a3a3a;
-
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
-  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.3);
-  --shadow-hover: 0 6px 20px rgba(0, 0, 0, 0.4);
+/* 尊重系统"减少动态效果"设置（PRODUCT.md 无障碍承诺） */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 @layer base {
@@ -134,29 +141,100 @@
       visibility: visible !important;
     }
   }
-
-  .dark body {
-    background-image:
-      radial-gradient(circle at 20% 80%, rgba(255, 255, 255, 0.02) 0%, transparent 50%),
-      radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.02) 0%, transparent 50%);
-  }
 }
 
 @layer components {
+  /* ---------- 按钮：统一为像素手绘语言（2px 实心边 + 硬偏移阴影 + 阶梯位移） ---------- */
+  .btn-primary,
+  .btn-secondary,
+  .btn-accent,
+  .btn-danger,
+  .btn-sketch,
+  .btn-pixel {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    padding: 0.625rem 1.25rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.25;
+    border: 2px solid var(--color-primary);
+    border-radius: 0.75rem;
+    cursor: pointer;
+    box-shadow: 3px 3px 0 0 var(--shadow-hard);
+    transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  }
+
+  .btn-primary:hover,
+  .btn-secondary:hover,
+  .btn-accent:hover,
+  .btn-danger:hover,
+  .btn-sketch:hover,
+  .btn-pixel:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 5px 5px 0 0 var(--shadow-hard);
+  }
+
+  .btn-primary:active,
+  .btn-secondary:active,
+  .btn-accent:active,
+  .btn-danger:active,
+  .btn-sketch:active,
+  .btn-pixel:active {
+    transform: translate(1px, 1px);
+    box-shadow: 1px 1px 0 0 var(--shadow-hard);
+  }
+
+  .btn-primary:disabled,
+  .btn-secondary:disabled,
+  .btn-accent:disabled,
+  .btn-danger:disabled,
+  .btn-sketch:disabled,
+  .btn-pixel:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: 2px 2px 0 0 var(--shadow-hard-soft);
+  }
+
   .btn-primary {
-    @apply bg-panda-black text-panda-white rounded-xl px-5 py-2.5 font-medium transition-all hover:bg-primary-light hover:shadow-md active:scale-[0.98] border border-panda-black/10;
+    background-color: var(--color-primary);
+    color: var(--color-bg-primary);
+  }
+
+  .btn-secondary,
+  .btn-sketch {
+    background-color: var(--color-bg-primary);
+    color: var(--color-primary);
+    border-color: var(--color-primary);
   }
 
   .btn-secondary {
-    @apply bg-transparent text-panda-black rounded-xl px-5 py-2.5 font-medium transition-all hover:bg-panda-black/5 border border-panda-black/20 active:scale-[0.98];
+    box-shadow: 2px 2px 0 0 var(--shadow-hard-soft);
+  }
+  .btn-secondary:hover {
+    box-shadow: 4px 4px 0 0 var(--shadow-hard-soft);
   }
 
   .btn-accent {
-    @apply bg-accent text-panda-white rounded-xl px-5 py-2.5 font-medium transition-all hover:bg-accent-hover hover:shadow-md active:scale-[0.98];
+    background-color: var(--color-accent);
+    /* 珊瑚红/暗色近白底上白字对比不足，统一用深色文字 */
+    color: #1a1a1a;
+    border-color: var(--color-accent);
   }
 
   .btn-danger {
-    @apply bg-danger text-panda-white rounded-xl px-5 py-2.5 font-medium transition-all hover:bg-danger/90 hover:shadow-md active:scale-[0.98];
+    background-color: var(--color-danger);
+    color: #ffffff;
+    border-color: var(--color-danger);
+  }
+
+  .btn-pixel {
+    background-color: var(--color-primary);
+    color: var(--color-bg-primary);
+    border-radius: 0;
+    box-shadow: 4px 4px 0 0 var(--shadow-hard);
   }
 
   .card {
@@ -167,70 +245,16 @@
     @apply bg-bg-primary rounded-2xl border-2 border-panda-black/10 transition-all hover:border-panda-black/20;
   }
 
-  /* 黑白简笔动漫风按钮 */
-  .btn-sketch {
-    @apply relative bg-white text-panda-black rounded-xl px-5 py-2.5 font-medium transition-all border-2 border-panda-black;
-    box-shadow: 3px 3px 0 0 rgba(0, 0, 0, 1);
-  }
-
-  .btn-sketch:hover {
-    transform: translate(-2px, -2px);
-    box-shadow: 5px 5px 0 0 rgba(0, 0, 0, 1);
-  }
-
-  .btn-sketch:active {
-    transform: translate(1px, 1px);
-    box-shadow: 1px 1px 0 0 rgba(0, 0, 0, 1);
-  }
-
-  .dark .btn-sketch {
-    @apply bg-panda-dark border-panda-white;
-    box-shadow: 3px 3px 0 0 rgba(255, 255, 255, 0.8);
-  }
-
-  .dark .btn-sketch:hover {
-    box-shadow: 5px 5px 0 0 rgba(255, 255, 255, 0.8);
-  }
-
-  .dark .btn-sketch:active {
-    box-shadow: 1px 1px 0 0 rgba(255, 255, 255, 0.8);
-  }
 
   /* 卡片简笔风格 */
   .card-sketch {
     @apply bg-bg-primary rounded-2xl border-2 border-panda-black/80 transition-all;
-    box-shadow: 4px 4px 0 0 rgba(0, 0, 0, 0.8);
+    box-shadow: 4px 4px 0 0 var(--shadow-hard);
   }
 
   .card-sketch:hover {
     transform: translate(-2px, -2px);
-    box-shadow: 6px 6px 0 0 rgba(0, 0, 0, 0.8);
-  }
-
-  .dark .card-sketch {
-    @apply border-panda-white/60;
-    box-shadow: 4px 4px 0 0 rgba(255, 255, 255, 0.4);
-  }
-
-  .dark .card-sketch:hover {
-    box-shadow: 6px 6px 0 0 rgba(255, 255, 255, 0.4);
-  }
-
-  /* 输入框简笔风格 */
-  .input-sketch {
-    @apply w-full px-4 py-2.5 bg-white border-2 border-panda-black/80 rounded-xl outline-none transition-all;
-  }
-
-  .input-sketch:focus {
-    box-shadow: 3px 3px 0 0 rgba(0, 0, 0, 0.8);
-  }
-
-  .dark .input-sketch {
-    @apply bg-panda-dark border-panda-white/60;
-  }
-
-  .dark .input-sketch:focus {
-    box-shadow: 3px 3px 0 0 rgba(255, 255, 255, 0.4);
+    box-shadow: 6px 6px 0 0 var(--shadow-hard);
   }
 
   /* 状态标签 */
@@ -258,52 +282,21 @@
     @apply bg-success/10 text-success border-success/30;
   }
 
-  /* 像素风格按钮 */
-  .btn-pixel {
-    @apply relative bg-panda-black text-panda-white px-5 py-2.5 font-medium transition-all border-2 border-panda-black;
-    box-shadow: 4px 4px 0 0 rgba(0, 0, 0, 1);
-    image-rendering: pixelated;
-  }
-
-  .btn-pixel:hover {
-    transform: translate(-2px, -2px);
-    box-shadow: 6px 6px 0 0 rgba(0, 0, 0, 1);
-  }
-
-  .btn-pixel:active {
-    transform: translate(2px, 2px);
-    box-shadow: 2px 2px 0 0 rgba(0, 0, 0, 1);
-  }
-
-  .btn-pixel-accent {
-    @apply relative bg-accent text-panda-white px-5 py-2.5 font-medium transition-all border-2 border-accent;
-    box-shadow: 4px 4px 0 0 rgba(255, 107, 107, 1);
-  }
-
-  .btn-pixel-accent:hover {
-    transform: translate(-2px, -2px);
-    box-shadow: 6px 6px 0 0 rgba(255, 107, 107, 1);
-  }
-
-  .btn-pixel-accent:active {
-    transform: translate(2px, 2px);
-    box-shadow: 2px 2px 0 0 rgba(255, 107, 107, 1);
-  }
 
   /* 像素风格卡片 */
   .card-pixel {
     @apply bg-bg-primary border-2 border-panda-black transition-all;
-    box-shadow: 4px 4px 0 0 rgba(0, 0, 0, 1);
+    box-shadow: 4px 4px 0 0 var(--shadow-hard);
   }
 
   .card-pixel:hover {
     transform: translate(-2px, -2px);
-    box-shadow: 6px 6px 0 0 rgba(0, 0, 0, 1);
+    box-shadow: 6px 6px 0 0 var(--shadow-hard);
   }
 
   /* 像素风格输入框 */
   .input-pixel {
-    @apply w-full px-4 py-2.5 bg-white border-2 border-panda-black outline-none transition-all;
+    @apply w-full px-4 py-2.5 bg-panda-white border-2 border-panda-black outline-none transition-all;
   }
 
   .input-pixel:focus {
@@ -384,7 +377,7 @@
 
   .tooltip-container::after {
     content: attr(data-tooltip);
-    @apply absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-panda-black text-white text-xs rounded-lg opacity-0 pointer-events-none transition-opacity duration-200 whitespace-nowrap z-50;
+    @apply absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-panda-black text-panda-white text-xs rounded-lg opacity-0 pointer-events-none transition-opacity duration-200 whitespace-nowrap z-50;
   }
 
   .tooltip-container:hover::after {
@@ -392,23 +385,9 @@
   }
 
   /* 滚动条美化 */
-  .custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
 
-  .custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
 
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #d1d5db;
-    border-radius: 3px;
-  }
 
-  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #9ca3af;
-  }
 
   /* 加载动画 */
   .loading-dots {
@@ -433,72 +412,450 @@
     40% { transform: scale(1); }
   }
 
-  /* 移动端优化 - 像素风格适配 */
+  /* 移动端优化：减小硬阴影偏移量（沿用统一 token） */
   @media (max-width: 640px) {
-    /* 减小阴影偏移量 */
-    .btn-sketch {
-      box-shadow: 2px 2px 0 0 rgba(0, 0, 0, 1);
+    .btn-primary,
+    .btn-secondary,
+    .btn-accent,
+    .btn-danger,
+    .btn-sketch,
+    .btn-pixel {
+      box-shadow: 2px 2px 0 0 var(--shadow-hard);
     }
-    .btn-sketch:hover {
+    .btn-primary:hover,
+    .btn-secondary:hover,
+    .btn-accent:hover,
+    .btn-danger:hover,
+    .btn-sketch:hover,
+    .btn-pixel:hover {
       transform: translate(-1px, -1px);
-      box-shadow: 3px 3px 0 0 rgba(0, 0, 0, 1);
+      box-shadow: 3px 3px 0 0 var(--shadow-hard);
     }
-    .btn-sketch:active {
+    .btn-primary:active,
+    .btn-secondary:active,
+    .btn-accent:active,
+    .btn-danger:active,
+    .btn-sketch:active,
+    .btn-pixel:active {
       transform: translate(1px, 1px);
-      box-shadow: 1px 1px 0 0 rgba(0, 0, 0, 1);
+      box-shadow: 1px 1px 0 0 var(--shadow-hard);
     }
-
     .card-sketch {
-      box-shadow: 3px 3px 0 0 rgba(0, 0, 0, 0.8);
+      box-shadow: 3px 3px 0 0 var(--shadow-hard);
     }
     .card-sketch:hover {
       transform: translate(-1px, -1px);
-      box-shadow: 4px 4px 0 0 rgba(0, 0, 0, 0.8);
+      box-shadow: 4px 4px 0 0 var(--shadow-hard);
     }
+  }
+}
 
-    .input-sketch:focus {
-      box-shadow: 2px 2px 0 0 rgba(0, 0, 0, 0.8);
-    }
+/* ============================================================
+   像素手绘控件体系（与 card-pixel / btn-sketch 同一语言）
+   语言规则：2px 实心粗边 + 硬偏移阴影 + 阶梯式位移反馈
+   ============================================================ */
+@theme {
+  --shadow-hard: rgba(0, 0, 0, 0.9);
+  --shadow-hard-soft: rgba(0, 0, 0, 0.55);
+  /* 焦点色独立于 accent，保证在浅色底上的对比度 */
+  --focus-ring: #dc2626;
+}
 
-    .btn-pixel {
-      box-shadow: 3px 3px 0 0 rgba(0, 0, 0, 1);
-    }
-    .btn-pixel:hover {
-      transform: translate(-1px, -1px);
-      box-shadow: 4px 4px 0 0 rgba(0, 0, 0, 1);
-    }
-    .btn-pixel:active {
-      transform: translate(1px, 1px);
-      box-shadow: 2px 2px 0 0 rgba(0, 0, 0, 1);
-    }
+@layer components {
+  /* ---------- 输入框 / 文本域 ---------- */
+  .form-control {
+    background-color: var(--color-bg-primary);
+    color: var(--color-primary);
+    border: 2px solid var(--color-primary);
+    border-radius: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    outline: none;
+    box-shadow: 2px 2px 0 0 var(--shadow-hard);
+    transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+  }
 
-    .card-pixel {
-      box-shadow: 3px 3px 0 0 rgba(0, 0, 0, 1);
-    }
-    .card-pixel:hover {
-      transform: translate(-1px, -1px);
-      box-shadow: 4px 4px 0 0 rgba(0, 0, 0, 1);
-    }
+  .form-control::placeholder {
+    color: var(--color-border);
+    color: color-mix(in srgb, var(--color-primary) 38%, transparent);
+  }
 
-    .input-pixel:focus {
-      box-shadow: 3px 3px 0 0 rgba(0, 0, 0, 1);
-    }
+  .form-control:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0 0 var(--shadow-hard);
+  }
 
-    /* 暗色模式移动端适配 */
-    .dark .btn-sketch {
-      box-shadow: 2px 2px 0 0 rgba(255, 255, 255, 0.8);
+  .form-control:focus {
+    border-color: var(--focus-ring);
+    box-shadow: 3px 3px 0 0 var(--focus-ring);
+    transform: translate(-1px, -1px);
+  }
+
+  .form-control:disabled {
+    opacity: 0.55;
+    box-shadow: none;
+    transform: none;
+  }
+
+  /* 紧凑尺寸（筛选工具条） */
+  .form-control-sm {
+    height: 2rem;
+    padding: 0 0.5rem;
+    font-size: 0.75rem;
+    border-radius: 0.5rem;
+    box-shadow: 2px 2px 0 0 var(--shadow-hard-soft);
+  }
+  .form-control-sm:hover,
+  .form-control-sm:focus {
+    box-shadow: 3px 3px 0 0 var(--shadow-hard-soft);
+  }
+  .form-control-sm:focus {
+    box-shadow: 3px 3px 0 0 var(--focus-ring);
+  }
+
+
+  /* 行内编辑尺寸（表格内） */
+  .form-control-xs {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8125rem;
+    border-radius: 0.5rem;
+    box-shadow: 1px 1px 0 0 var(--shadow-hard-soft);
+  }
+  .form-control-xs:hover,
+  .form-control-xs:focus {
+    box-shadow: 2px 2px 0 0 var(--shadow-hard-soft);
+  }
+  .form-control-xs:focus {
+    box-shadow: 2px 2px 0 0 var(--focus-ring);
+  }
+
+  /* ---------- 下拉触发器（自定义 Select 组件） ---------- */
+  .select-trigger {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    background-color: var(--color-bg-primary);
+    color: var(--color-primary);
+    border: 2px solid var(--color-primary);
+    border-radius: 0.75rem;
+    padding: 0.5rem 2.25rem 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    outline: none;
+    box-shadow: 2px 2px 0 0 var(--shadow-hard);
+    transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+  }
+
+  /* 硬边像素箭头：用边框绘制，随主题色自动适配 */
+  .select-trigger::after {
+    content: '';
+    position: absolute;
+    right: 0.85rem;
+    top: 50%;
+    width: 0.45rem;
+    height: 0.45rem;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: translateY(-75%) rotate(45deg);
+    transition: transform 0.12s steps(2, end);
+  }
+
+  .select-trigger:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0 0 var(--shadow-hard);
+  }
+
+  .select-trigger[aria-expanded='true'],
+  .select-trigger:focus-visible {
+    border-color: var(--focus-ring);
+    box-shadow: 3px 3px 0 0 var(--focus-ring);
+    transform: translate(-1px, -1px);
+    outline: none;
+  }
+
+  .select-trigger[aria-expanded='true']::after {
+    transform: translateY(-25%) rotate(-135deg);
+  }
+
+  .select-trigger:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+  }
+
+  .select-trigger-sm {
+    height: 2rem;
+    padding: 0 1.9rem 0 0.5rem;
+    font-size: 0.75rem;
+    border-radius: 0.5rem;
+    box-shadow: 2px 2px 0 0 var(--shadow-hard-soft);
+  }
+  .select-trigger-sm:hover,
+  .select-trigger-sm[aria-expanded='true'] {
+    box-shadow: 3px 3px 0 0 var(--shadow-hard-soft);
+  }
+  .select-trigger-sm[aria-expanded='true'] {
+    box-shadow: 3px 3px 0 0 var(--focus-ring);
+  }
+  .select-trigger-sm::after {
+    right: 0.6rem;
+    width: 0.35rem;
+    height: 0.35rem;
+  }
+
+  .select-trigger-xs {
+    padding: 0.25rem 1.75rem 0.25rem 0.5rem;
+    font-size: 0.8125rem;
+    border-radius: 0.5rem;
+    box-shadow: 1px 1px 0 0 var(--shadow-hard-soft);
+  }
+  .select-trigger-xs::after {
+    right: 0.55rem;
+    width: 0.35rem;
+    height: 0.35rem;
+  }
+
+  /* ---------- 下拉面板（自定义弹层） ---------- */
+  .select-panel {
+    position: fixed;
+    z-index: 60;
+    min-width: 8rem;
+    max-height: 17rem;
+    overflow-y: auto;
+    padding: 0.25rem;
+    background-color: var(--color-bg-primary);
+    color: var(--color-primary);
+    border: 2px solid var(--color-primary);
+    border-radius: 0.75rem;
+    box-shadow: 4px 4px 0 0 var(--shadow-hard);
+    animation: select-panel-in 0.14s steps(3, end);
+  }
+
+  @keyframes select-panel-in {
+    from { opacity: 0.35; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .select-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.45rem 0.625rem;
+    font-size: 0.8125rem;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .select-option[data-size='sm'] {
+    padding: 0.35rem 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  .select-option[data-highlighted='true'] {
+    background-color: var(--color-bg-tertiary);
+    background-color: color-mix(in srgb, var(--color-primary) 22%, transparent);
+  }
+
+  .select-option[aria-selected='true'] {
+    background-color: var(--color-primary);
+    color: var(--color-bg-primary);
+    font-weight: 700;
+  }
+
+  /* 选中态像素方块标记 */
+  .select-option[aria-selected='true']::after {
+    content: '';
+    width: 0.4rem;
+    height: 0.4rem;
+    background-color: currentColor;
+    flex-shrink: 0;
+  }
+
+  .select-option[data-disabled='true'] {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* ---------- 入场动画（替代未安装的 tailwindcss-animate，用阶梯节拍贴合像素语言） ---------- */
+  .animate-in {
+    animation-duration: 0.18s;
+    animation-timing-function: steps(4, end);
+    /* 关键：动画结束后不保留 keyframe 状态。若用 both/forwards，元素会长期带着
+       transform: translateY(0)，从而成为 position: fixed 后代的包含块，
+       使弹窗、下拉等相对"内容板块"定位（滚动板块还会带着它们移动）。 */
+    animation-fill-mode: backwards;
+  }
+  .animate-in.fade-in,
+  .fade-in.animate-in {
+    animation-name: kolflow-fade-in;
+  }
+  .animate-in.zoom-in-95 {
+    animation-name: kolflow-zoom-in-95;
+  }
+  .animate-in.slide-in-from-bottom-4 {
+    animation-name: kolflow-slide-up;
+  }
+  .animate-in.slide-in-from-top-2 {
+    animation-name: kolflow-slide-down;
+  }
+  .animate-in.slide-in-from-right-full {
+    animation-name: kolflow-slide-left;
+  }
+  @keyframes kolflow-fade-in {
+    from { opacity: 0.2; }
+    to { opacity: 1; }
+  }
+  @keyframes kolflow-zoom-in-95 {
+    from { opacity: 0.2; transform: scale(0.96); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes kolflow-slide-up {
+    from { opacity: 0.2; transform: translateY(0.75rem); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes kolflow-slide-down {
+    from { opacity: 0.2; transform: translateY(-0.5rem); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes kolflow-slide-left {
+    from { opacity: 0.2; transform: translateX(1.5rem); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  /* ---------- 通用弹出面板（通知中心/状态菜单） ---------- */
+  .dropdown-panel {
+    background-color: var(--color-bg-primary);
+    color: var(--color-primary);
+    border: 2px solid var(--color-primary);
+    border-radius: 0.75rem;
+    box-shadow: 4px 4px 0 0 var(--shadow-hard);
+  }
+
+  /* ---------- 分段控件（视图切换 / 状态筛选） ---------- */
+  .segment-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    background-color: var(--color-bg-tertiary);
+    border: 2px solid var(--color-primary);
+    border-radius: 0.75rem;
+    box-shadow: 2px 2px 0 0 var(--shadow-hard-soft);
+  }
+
+  .segment {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--color-primary);
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: background-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+  }
+
+  .segment:hover {
+    background-color: var(--color-primary);
+    color: var(--color-bg-primary);
+  }
+
+  /* 未选中项悬停时轻微淡化，已选中项保持实心 */
+  .segment[aria-pressed='false']:hover {
+    opacity: 0.8;
+  }
+
+  .segment[aria-pressed='true'] {
+    background-color: var(--color-primary);
+    color: var(--color-bg-primary);
+    font-weight: 700;
+    box-shadow: 2px 2px 0 0 var(--shadow-hard-soft);
+  }
+
+  .segment:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* ---------- 像素风开关 ---------- */
+  .switch {
+    position: relative;
+    display: inline-flex;
+    width: 2.75rem;
+    height: 1.5rem;
+    flex-shrink: 0;
+    background-color: var(--color-bg-tertiary);
+    border: 2px solid var(--color-primary);
+    border-radius: 0.4rem;
+    box-shadow: 2px 2px 0 0 var(--shadow-hard-soft);
+    transition: background-color 0.14s steps(2, end), border-color 0.14s steps(2, end);
+  }
+
+  .switch::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1.05rem;
+    height: 100%;
+    background-color: var(--color-primary);
+    transition: transform 0.14s steps(3, end), background-color 0.14s steps(2, end);
+  }
+
+  .peer:checked + .switch {
+    background-color: var(--color-accent);
+    border-color: var(--color-accent);
+    box-shadow: 2px 2px 0 0 var(--color-accent);
+  }
+
+  .peer:checked + .switch::after {
+    transform: translateX(1.2rem);
+    background-color: var(--color-bg-primary);
+  }
+
+  .peer:focus-visible + .switch {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
+
+@layer base {
+  /* 统一键盘焦点环（与硬阴影语言一致：描边 + 偏移） */
+  :where(button, a, [role='button'], [role='option'], input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+  button:disabled { cursor: not-allowed; }
+
+  /* 像素风滚动条：硬边方块滑块 + 留白轨道。
+     注意：Chromium ≥121 一旦声明 scrollbar-width/color 就会忽略 ::-webkit-scrollbar，
+     因此标准属性只在 Firefox（不支持 ::-webkit-scrollbar）下生效。 */
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: var(--color-border) transparent;
+      scrollbar-color: color-mix(in srgb, var(--color-primary) 65%, transparent) transparent;
     }
-    .dark .btn-sketch:hover {
-      box-shadow: 3px 3px 0 0 rgba(255, 255, 255, 0.8);
-    }
-    .dark .card-sketch {
-      box-shadow: 3px 3px 0 0 rgba(255, 255, 255, 0.4);
-    }
-    .dark .card-sketch:hover {
-      box-shadow: 4px 4px 0 0 rgba(255, 255, 255, 0.4);
-    }
-    .dark .input-sketch:focus {
-      box-shadow: 2px 2px 0 0 rgba(255, 255, 255, 0.4);
-    }
+  }
+  ::-webkit-scrollbar { width: 12px; height: 12px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--color-border);
+    background-color: color-mix(in srgb, var(--color-primary) 55%, transparent);
+    border: 3px solid transparent;
+    border-radius: 0;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-primary);
+    background-clip: padding-box;
   }
 }

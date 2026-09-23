@@ -2,22 +2,23 @@ import db from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { logActivity } from '../routes/utils/index.js';
 import { formatLocalDate, generateOrderNo, isValidDateOnly, safeJsonParse, validateAmount } from '../routes/utils/helpers.js';
+import type { CountRow } from '../dbRows.js';
 
-type OrderRow = {
+export type OrderRow = {
   id: string;
   userId: string;
   orderNo: string;
   title: string;
   type: string;
   status: string;
-  expectedAmount?: number;
-  actualAmount: number;
+  expectedAmount?: number | null;
+  actualAmount: number | null;
   brandName: string | null;
   platforms: string | string[] | null;
-  acceptDate: string | null;
-  submitDate: string | null;
-  productName: string | null;
-  productValue: number;
+  acceptDate?: string | null;
+  submitDate?: string | null;
+  productName?: string | null;
+  productValue: number | null;
   createdAt?: string;
 };
 
@@ -46,28 +47,85 @@ const isMonetaryType = (type: string | null | undefined): boolean => {
   return !isExchangeType(type || '');
 };
 
+const VALID_ORDER_TYPES = ['paid', 'product_exchange', 'direct', 'ecard'];
+const VALID_ORDER_STATUSES = ['in_progress', 'completed', 'cancelled'];
+
+const assertValidOrderType = (value: unknown): string | undefined => {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value !== 'string' || !VALID_ORDER_TYPES.includes(value)) {
+    throw new Error('商单类型无效，必须为付费/置换/直发/E卡之一');
+  }
+  return value;
+};
+
+const assertValidOrderStatus = (value: unknown): string | undefined => {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value !== 'string' || !VALID_ORDER_STATUSES.includes(value)) {
+    throw new Error('商单状态无效，必须为进行中/已完成/已取消之一');
+  }
+  return value;
+};
+
+const normalizePlatformsInput = (value: unknown): string[] => {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    throw new Error('平台数据必须是数组');
+  }
+  const platforms = value.map(item => String(item).trim()).filter(Boolean);
+  if (platforms.length > 10) {
+    throw new Error('平台数量不能超过10个');
+  }
+  if (platforms.some(platform => platform.length > 30)) {
+    throw new Error('单个平台名称不能超过30个字符');
+  }
+  return platforms;
+};
+
+const normalizeDateInput = (value: unknown, label: string): string | null => {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string' || !isValidDateOnly(value)) {
+    throw new Error(`${label}格式无效，应为 YYYY-MM-DD`);
+  }
+  return value;
+};
+
 const toNumber = (value: unknown, fallback = 0): number => {
   const num = Number(value);
   return Number.isFinite(num) ? num : fallback;
 };
 
-const normalizeOrder = (order: any): OrderRow => ({
+// 接口入参的金额解析：非法输入（如 "abc"）直接报错，不静默转成 0。
+// 空值视为 0，由 validateAmount 做范围校验。
+const parseAmountInput = (value: unknown): number => {
+  if (value === undefined || value === null || value === '') return 0;
+  const num = Number(value);
+  if (!Number.isFinite(num)) throw new Error('金额数值无效');
+  return num;
+};
+
+const parsePlatformsField = (value: unknown): string[] => {
+  if (Array.isArray(value)) return value.map(item => String(item));
+  const parsed = safeJsonParse(typeof value === 'string' ? value : null, []);
+  return Array.isArray(parsed) ? parsed.map(item => String(item)) : [];
+};
+
+const normalizeOrder = (order: OrderRow): OrderRow => ({
   ...order,
   actualAmount: toNumber(order.actualAmount),
   productValue: toNumber(order.productValue),
 });
 
-const parseOrderForClient = (order: any) => {
-  if (!order) return order;
+const parseOrderForClient = (order: OrderRow | undefined) => {
+  if (!order) return undefined;
   return {
     ...order,
-    platforms: Array.isArray(order.platforms) ? order.platforms : safeJsonParse(order.platforms, []),
+    platforms: parsePlatformsField(order.platforms),
   };
 };
 
 const getBrandId = (userId: string, brandName: string | null): string | null => {
   if (!brandName) return null;
-  const brand = db.prepare('SELECT id FROM brands WHERE name = ? AND userId = ?').get(brandName, userId) as any;
+  const brand = db.prepare('SELECT id FROM brands WHERE name = ? AND userId = ?').get(brandName, userId) as { id: string } | undefined;
   return brand?.id || null;
 };
 
@@ -85,7 +143,7 @@ const syncOrderTodo = (order: OrderRow, userId: string): void => {
     WHERE orderId = ? AND userId = ? AND content LIKE '商单任务:%'
     ORDER BY createdAt ASC
     LIMIT 1
-  `).get(order.id, userId) as any;
+  `).get(order.id, userId) as { id: string } | undefined;
 
   if (existingGeneratedTodo) {
     db.prepare(`
@@ -128,12 +186,20 @@ const resolveOperationDate = (value: unknown): string => {
 
 const upsertPaymentFromOrder = (order: OrderRow, userId: string, operationDate?: string): string | null => {
   if (order.status !== 'completed' || !isMonetaryType(order.type) || toNumber(order.actualAmount) <= 0) {
-    db.prepare('DELETE FROM payments WHERE orderNo = ? AND userId = ?').run(order.orderNo, userId);
+    // 仅移除未结算的自动账单；已结算账单代表实际收款，商单状态回退不能删除
+    db.prepare("DELETE FROM payments WHERE orderNo = ? AND userId = ? AND (type IS NULL OR type <> 'settled')")
+      .run(order.orderNo, userId);
     return null;
   }
 
-  const existing = db.prepare('SELECT * FROM payments WHERE orderNo = ? AND userId = ?').get(order.orderNo, userId) as any;
+  const existing = db.prepare('SELECT * FROM payments WHERE orderNo = ? AND userId = ?').get(order.orderNo, userId) as { id: string; type?: string | null } | undefined;
   if (existing) {
+    if (existing.type === 'settled') {
+      // 已结算金额是实际收款历史，不随商单金额改写
+      db.prepare('UPDATE payments SET brand = ? WHERE id = ? AND userId = ?')
+        .run(order.brandName || null, existing.id, userId);
+      return existing.id;
+    }
     db.prepare(`
       UPDATE payments
       SET brand = ?, amount = ?
@@ -164,13 +230,15 @@ const upsertPaymentFromOrder = (order: OrderRow, userId: string, operationDate?:
 
 const upsertAssetFromOrder = (order: OrderRow, userId: string): string | null => {
   if (order.status !== 'completed' || !isExchangeType(order.type)) {
-    db.prepare('DELETE FROM assets WHERE orderId = ? AND userId = ?').run(order.id, userId);
+    // 仅移除未出售的自动资产；已出售记录是交易历史，商单状态回退不能删除
+    db.prepare("DELETE FROM assets WHERE orderId = ? AND userId = ? AND (saleStatus IS NULL OR saleStatus <> 'sold')")
+      .run(order.id, userId);
     return null;
   }
 
   const productName = getAssetProductName(order);
   const productValue = toNumber(order.productValue);
-  const existing = db.prepare('SELECT * FROM assets WHERE orderId = ? AND userId = ?').get(order.id, userId) as any;
+  const existing = db.prepare('SELECT * FROM assets WHERE orderId = ? AND userId = ?').get(order.id, userId) as { id: string } | undefined;
   if (existing) {
     db.prepare(`
       UPDATE assets
@@ -189,7 +257,7 @@ const upsertAssetFromOrder = (order: OrderRow, userId: string): string | null =>
   return assetId;
 };
 
-export const syncOrderDerivedRecords = (order: any, userId: string, operationDate?: string): void => {
+export const syncOrderDerivedRecords = (order: OrderRow, userId: string, operationDate?: string): void => {
   const normalizedOrder = normalizeOrder(order);
   syncOrderTodo(normalizedOrder, userId);
   upsertPaymentFromOrder(normalizedOrder, userId, operationDate);
@@ -199,7 +267,7 @@ export const syncOrderDerivedRecords = (order: any, userId: string, operationDat
 export const createOrderWithTodo = (userId: string, orderData: OrderInput) => {
   const { title, type, status, expectedAmount, actualAmount, brandName, platforms, acceptDate, submitDate, productName, productValue, operationDate } = orderData;
 
-  if (!title || title.trim().length === 0) {
+  if (typeof title !== 'string' || title.trim().length === 0) {
     throw new Error('商单标题不能为空');
   }
   if (title.length > 100) {
@@ -208,17 +276,23 @@ export const createOrderWithTodo = (userId: string, orderData: OrderInput) => {
   if (!validateAmount(actualAmount) || !validateAmount(expectedAmount) || !validateAmount(productValue)) {
     throw new Error('金额数值无效');
   }
+  if (brandName !== undefined && brandName !== null && typeof brandName !== 'string') {
+    throw new Error('品牌名称格式无效');
+  }
   if (brandName && brandName.length > 50) {
     throw new Error('品牌名称不能超过50个字符');
   }
-  if (platforms && platforms.length > 10) {
-    throw new Error('平台数量不能超过10个');
+  if (productName !== undefined && productName !== null && typeof productName !== 'string') {
+    throw new Error('产品名称格式无效');
   }
+  const normalizedPlatforms = normalizePlatformsInput(platforms);
+  const normalizedAcceptDate = normalizeDateInput(acceptDate, '接单日期');
+  const normalizedSubmitDate = normalizeDateInput(submitDate, '提交日期');
 
   const id = uuidv4();
   const orderNo = generateOrderNo();
-  const normalizedStatus = status || 'in_progress';
-  const normalizedType = type || 'paid';
+  const normalizedStatus = assertValidOrderStatus(status) || 'in_progress';
+  const normalizedType = assertValidOrderType(type) || 'paid';
 
   const createOrder = db.transaction(() => {
     db.prepare(`
@@ -231,14 +305,14 @@ export const createOrderWithTodo = (userId: string, orderData: OrderInput) => {
       title.trim(),
       normalizedType,
       normalizedStatus,
-      toNumber(expectedAmount),
-      toNumber(actualAmount),
+      parseAmountInput(expectedAmount),
+      parseAmountInput(actualAmount),
       brandName?.trim() || null,
-      JSON.stringify(platforms || []),
-      acceptDate || null,
-      submitDate || null,
+      JSON.stringify(normalizedPlatforms),
+      normalizedAcceptDate,
+      normalizedSubmitDate,
       productName?.trim() || null,
-      toNumber(productValue),
+      parseAmountInput(productValue),
     );
 
     const todoId = uuidv4();
@@ -253,27 +327,30 @@ export const createOrderWithTodo = (userId: string, orderData: OrderInput) => {
       'high',
       brandName?.trim() || null,
       normalizedStatus === 'completed' ? 1 : 0,
-      submitDate || null,
+      normalizedSubmitDate,
       id,
       brandId,
     );
 
-    const order = db.prepare('SELECT * FROM orders WHERE id = ? AND userId = ?').get(id, userId) as any;
-    syncOrderDerivedRecords(order, userId, operationDate);
+    const createdOrder = db.prepare('SELECT * FROM orders WHERE id = ? AND userId = ?').get(id, userId) as OrderRow;
+    syncOrderDerivedRecords(createdOrder, userId, operationDate);
     logActivity(userId, 'create', 'order', id, `创建商单: ${title.trim()} (${orderNo})`);
-    return order;
+    return createdOrder;
   });
 
   return parseOrderForClient(createOrder());
 };
 
 export const updateOrderWithSync = (userId: string, orderId: string, updateData: OrderUpdate) => {
-  const existingOrder = db.prepare('SELECT * FROM orders WHERE id = ? AND userId = ?').get(orderId, userId) as any;
+  const existingOrder = db.prepare('SELECT * FROM orders WHERE id = ? AND userId = ?').get(orderId, userId) as OrderRow | undefined;
   if (!existingOrder) {
     throw new Error('商单不存在');
   }
 
   const existing = normalizeOrder(existingOrder);
+  if (updateData.title !== undefined && typeof updateData.title !== 'string') {
+    throw new Error('商单标题格式无效');
+  }
   const newTitle = updateData.title !== undefined ? updateData.title.trim() : existing.title;
   if (!newTitle) {
     throw new Error('商单标题不能为空');
@@ -281,20 +358,32 @@ export const updateOrderWithSync = (userId: string, orderId: string, updateData:
   if (newTitle.length > 100) {
     throw new Error('商单标题不能超过100个字符');
   }
+  if (updateData.brandName !== undefined && updateData.brandName !== null && typeof updateData.brandName !== 'string') {
+    throw new Error('品牌名称格式无效');
+  }
+  if (updateData.productName !== undefined && updateData.productName !== null && typeof updateData.productName !== 'string') {
+    throw new Error('产品名称格式无效');
+  }
+
+  const nextStatus = assertValidOrderStatus(updateData.status);
+  const nextType = assertValidOrderType(updateData.type);
+  const nextPlatforms = updateData.platforms !== undefined ? normalizePlatformsInput(updateData.platforms) : null;
+  const nextAcceptDate = updateData.acceptDate !== undefined ? normalizeDateInput(updateData.acceptDate, '接单日期') : undefined;
+  const nextSubmitDate = updateData.submitDate !== undefined ? normalizeDateInput(updateData.submitDate, '提交日期') : undefined;
 
   const newOrder: OrderRow = {
     ...existing,
-    status: updateData.status || existing.status,
+    status: nextStatus || existing.status,
     title: newTitle,
-    type: updateData.type || existing.type,
-    expectedAmount: updateData.expectedAmount !== undefined ? toNumber(updateData.expectedAmount) : toNumber(existing.expectedAmount),
-    actualAmount: updateData.actualAmount !== undefined ? toNumber(updateData.actualAmount) : toNumber(existing.actualAmount),
+    type: nextType || existing.type,
+    expectedAmount: updateData.expectedAmount !== undefined ? parseAmountInput(updateData.expectedAmount) : toNumber(existing.expectedAmount),
+    actualAmount: updateData.actualAmount !== undefined ? parseAmountInput(updateData.actualAmount) : toNumber(existing.actualAmount),
     brandName: updateData.brandName !== undefined ? (updateData.brandName?.trim() || null) : existing.brandName,
-    platforms: updateData.platforms !== undefined ? JSON.stringify(updateData.platforms || []) : existing.platforms,
-    acceptDate: updateData.acceptDate !== undefined ? (updateData.acceptDate || null) : existing.acceptDate,
-    submitDate: updateData.submitDate !== undefined ? (updateData.submitDate || null) : existing.submitDate,
+    platforms: nextPlatforms !== null ? JSON.stringify(nextPlatforms) : existing.platforms,
+    acceptDate: nextAcceptDate !== undefined ? nextAcceptDate : existing.acceptDate,
+    submitDate: nextSubmitDate !== undefined ? nextSubmitDate : existing.submitDate,
     productName: updateData.productName !== undefined ? (updateData.productName?.trim() || null) : existing.productName,
-    productValue: updateData.productValue !== undefined ? toNumber(updateData.productValue) : toNumber(existing.productValue),
+    productValue: updateData.productValue !== undefined ? parseAmountInput(updateData.productValue) : toNumber(existing.productValue),
   };
 
   if (!validateAmount(newOrder.actualAmount) || !validateAmount(newOrder.expectedAmount) || !validateAmount(newOrder.productValue)) {
@@ -302,9 +391,6 @@ export const updateOrderWithSync = (userId: string, orderId: string, updateData:
   }
   if (newOrder.brandName && newOrder.brandName.length > 50) {
     throw new Error('品牌名称不能超过50个字符');
-  }
-  if (updateData.platforms && updateData.platforms.length > 10) {
-    throw new Error('平台数量不能超过10个');
   }
 
   const updateOrder = db.transaction(() => {
@@ -343,51 +429,57 @@ export const updateOrderWithSync = (userId: string, orderId: string, updateData:
       logActivity(userId, 'update_brand', 'order', orderId, `商单品牌修改: ${existing.title} (${existing.brandName || '无'} -> ${newOrder.brandName || '无'})`);
     }
 
-    return db.prepare('SELECT * FROM orders WHERE id = ? AND userId = ?').get(orderId, userId) as any;
+    return db.prepare('SELECT * FROM orders WHERE id = ? AND userId = ?').get(orderId, userId) as OrderRow;
   });
 
   return parseOrderForClient(updateOrder());
 };
 
-export const autoCreatePaymentIfCompleted = (order: any, userId: string) => {
-  const normalizedOrder = normalizeOrder(order);
-  return upsertPaymentFromOrder(normalizedOrder, userId);
-};
-
-export const autoCreateAssetIfExchange = (order: any, userId: string) => {
-  const normalizedOrder = normalizeOrder(order);
-  return upsertAssetFromOrder(normalizedOrder, userId);
-};
-
 export const deleteOrderWithRelated = (userId: string, orderId: string) => {
-  const order = db.prepare('SELECT * FROM orders WHERE id = ? AND userId = ?').get(orderId, userId) as any;
+  const order = db.prepare('SELECT * FROM orders WHERE id = ? AND userId = ?').get(orderId, userId) as OrderRow | undefined;
 
   if (!order) {
     throw new Error('商单不存在');
   }
 
+  // 与状态回退保持同一原则：已结算账单（实际收款）与已出售资产（交易历史）不随商单删除，
+  // 保留为独立记录以便审计；其余自动派生记录一并清理。
   const deleteRelatedData = db.transaction(() => {
     logActivity(userId, 'delete', 'order', orderId, `删除商单: ${order.title} (${order.orderNo})`);
     db.prepare('DELETE FROM paid_promotions WHERE orderId = ? AND userId = ?').run(orderId, userId);
     db.prepare('DELETE FROM publish_links WHERE orderId = ? AND userId = ?').run(orderId, userId);
     db.prepare('DELETE FROM comments WHERE orderId = ? AND userId = ?').run(orderId, userId);
     db.prepare('DELETE FROM todos WHERE orderId = ? AND userId = ?').run(orderId, userId);
-    db.prepare('DELETE FROM payments WHERE orderNo = ? AND userId = ?').run(order.orderNo, userId);
-    db.prepare('DELETE FROM assets WHERE orderId = ? AND userId = ?').run(orderId, userId);
+    db.prepare("DELETE FROM payments WHERE orderNo = ? AND userId = ? AND (type IS NULL OR type <> 'settled')")
+      .run(order.orderNo, userId);
+    db.prepare("DELETE FROM assets WHERE orderId = ? AND userId = ? AND (saleStatus IS NULL OR saleStatus <> 'sold')")
+      .run(orderId, userId);
     db.prepare('DELETE FROM orders WHERE id = ? AND userId = ?').run(orderId, userId);
   });
 
   deleteRelatedData();
 
-  return { success: true, orderNo: order.orderNo };
+  const keptPayments = (db.prepare("SELECT COUNT(*) AS count FROM payments WHERE orderNo = ? AND userId = ? AND type = 'settled'")
+    .get(order.orderNo, userId) as CountRow).count;
+  const keptAssets = (db.prepare("SELECT COUNT(*) AS count FROM assets WHERE orderId = ? AND userId = ? AND saleStatus = 'sold'")
+    .get(orderId, userId) as CountRow).count;
+
+  return { success: true, orderNo: order.orderNo, keptPayments, keptAssets };
 };
 
-export const getOrdersByUserId = (userId: string) => {
-  const orders = db.prepare('SELECT * FROM orders WHERE userId = ? ORDER BY createdAt DESC').all(userId);
-  return orders.map(parseOrderForClient);
+export const getOrdersByUserId = (userId: string, paging?: { limit?: number; offset?: number }) => {
+  const clause = paging?.limit ? ' LIMIT ? OFFSET ?' : '';
+  const orders = db.prepare(`SELECT * FROM orders WHERE userId = ? ORDER BY createdAt DESC${clause}`)
+    .all(...(paging?.limit ? [userId, paging.limit, paging.offset ?? 0] : [userId]));
+  return (orders as OrderRow[]).map(parseOrderForClient);
 };
+
+// 列表总数：供分页接口返回 X-Total-Count（缺省全量请求时等于数组长度）
+export const countOrders = (userId: string): number => (
+  (db.prepare('SELECT COUNT(*) AS count FROM orders WHERE userId = ?').get(userId) as CountRow).count
+);
 
 export const getOrderById = (userId: string, orderId: string) => {
-  const order = db.prepare('SELECT * FROM orders WHERE id = ? AND userId = ?').get(orderId, userId) as any;
+  const order = db.prepare('SELECT * FROM orders WHERE id = ? AND userId = ?').get(orderId, userId) as OrderRow | undefined;
   return parseOrderForClient(order);
 };

@@ -5,6 +5,7 @@ import ConfirmDialog from '../ConfirmDialog';
 import { useToast } from '../Toast';
 import { useStore, type OrderTemplate, type OrderType } from '../../store/useStore';
 import { ORDER_TYPE_MAP } from '../../constants/orders';
+import Select from '../common/Select';
 
 type TemplateForm = {
   name: string;
@@ -139,7 +140,7 @@ export default function OrderTemplatesPanel() {
 
   return (
     <>
-      <section className="card-sketch bg-white p-3 md:p-4" aria-labelledby="order-template-heading">
+      <section className="card-sketch bg-panda-white p-3 md:p-4" aria-labelledby="order-template-heading">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
             <span className="w-9 h-9 rounded-xl bg-panda-yellow/25 flex items-center justify-center flex-shrink-0">
@@ -164,7 +165,7 @@ export default function OrderTemplatesPanel() {
           <button
             type="button"
             onClick={() => openEditor()}
-            className="mt-3 w-full min-h-16 border-2 border-dashed border-gray-200 rounded-xl text-xs text-gray-500 hover:border-panda-black/30 hover:bg-gray-50 transition-colors"
+            className="mt-3 w-full min-h-16 border-2 border-dashed border-gray-200 rounded-xl text-xs text-gray-500 hover:border-panda-black/30 hover:bg-panda-black/5 transition-colors"
           >
             暂无模板，点击创建第一个常用商单模板
           </button>
@@ -179,14 +180,14 @@ export default function OrderTemplatesPanel() {
               return (
                 <article
                   key={template.id}
-                  className="min-w-[270px] max-w-[320px] flex-1 snap-start rounded-xl border border-gray-200 bg-gray-50/70 p-3"
+                  className="min-w-[270px] max-w-[320px] flex-1 snap-start rounded-xl border border-border bg-bg-tertiary/70 p-3"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <h3 className="font-semibold text-sm text-panda-black truncate" title={template.name}>{template.name}</h3>
                       <p className="text-xs text-gray-500 truncate mt-0.5" title={template.title}>{template.title}</p>
                     </div>
-                    <span className="text-[11px] px-2 py-1 rounded-full bg-white border border-gray-200 whitespace-nowrap">
+                    <span className="text-[11px] px-2 py-1 rounded-full bg-panda-white border border-border whitespace-nowrap">
                       {type?.icon} {type?.label}
                     </span>
                   </div>
@@ -209,7 +210,7 @@ export default function OrderTemplatesPanel() {
                     <button
                       type="button"
                       onClick={() => openEditor(template)}
-                      className="min-h-11 rounded-xl border border-gray-200 bg-white text-gray-600 hover:text-panda-black hover:border-panda-black/30 flex items-center justify-center transition-colors"
+                      className="min-h-11 rounded-xl border border-gray-200 bg-panda-white text-gray-600 hover:text-panda-black hover:border-panda-black/30 flex items-center justify-center transition-colors"
                       aria-label={`编辑模板“${template.name}”`}
                     >
                       <Pencil size={15} aria-hidden="true" />
@@ -217,7 +218,7 @@ export default function OrderTemplatesPanel() {
                     <button
                       type="button"
                       onClick={() => setDeletingTemplate(template)}
-                      className="min-h-11 rounded-xl border border-gray-200 bg-white text-gray-500 hover:text-danger hover:border-danger/30 flex items-center justify-center transition-colors"
+                      className="min-h-11 rounded-xl border border-gray-200 bg-panda-white text-gray-500 hover:text-danger hover:border-danger/30 flex items-center justify-center transition-colors"
                       aria-label={`删除模板“${template.name}”`}
                     >
                       <Trash2 size={15} aria-hidden="true" />
@@ -246,7 +247,7 @@ export default function OrderTemplatesPanel() {
                 value={form.name}
                 onChange={event => setForm({ ...form, name: event.target.value })}
                 placeholder="例如：小红书月度合作"
-                className="mt-1 w-full px-3 py-2.5 border border-border rounded-lg outline-none focus:border-accent text-sm"
+                className="mt-1 w-full form-control"
               />
             </label>
             <label className="text-xs font-medium text-gray-700">
@@ -256,7 +257,7 @@ export default function OrderTemplatesPanel() {
                 list="template-brand-options"
                 value={form.brandName}
                 onChange={event => setForm({ ...form, brandName: event.target.value })}
-                className="mt-1 w-full px-3 py-2.5 border border-border rounded-lg outline-none focus:border-accent text-sm"
+                className="mt-1 w-full form-control"
               />
               <datalist id="template-brand-options">
                 {brands.map(brand => <option key={brand.id} value={brand.name} />)}
@@ -271,22 +272,24 @@ export default function OrderTemplatesPanel() {
               value={form.title}
               onChange={event => setForm({ ...form, title: event.target.value })}
               placeholder="每次创建后仍可单独修改"
-              className="mt-1 w-full px-3 py-2.5 border border-border rounded-lg outline-none focus:border-accent text-sm"
+              className="mt-1 w-full form-control"
             />
           </label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="text-xs font-medium text-gray-700">
               合作类型
-              <select
+              <Select
                 value={form.type}
-                onChange={event => setForm({ ...form, type: event.target.value as OrderType })}
-                className="mt-1 w-full px-3 py-2.5 border border-border rounded-lg outline-none focus:border-accent text-sm bg-white"
-              >
-                <option value="paid">付费</option>
-                <option value="product_exchange">置换</option>
-                <option value="ecard">E卡</option>
-                <option value="direct">直发</option>
-              </select>
+                onChange={value => setForm({ ...form, type: value as OrderType })}
+                className="mt-1 w-full"
+                aria-label="模板合作类型"
+                options={[
+                  { value: 'paid', label: '付费' },
+                  { value: 'product_exchange', label: '置换' },
+                  { value: 'ecard', label: 'E卡' },
+                  { value: 'direct', label: '直发' },
+                ]}
+              />
             </label>
             {(form.type === 'product_exchange' || form.type === 'ecard') ? (
               <label className="text-xs font-medium text-gray-700">
@@ -297,7 +300,7 @@ export default function OrderTemplatesPanel() {
                   type="number"
                   value={form.productValue}
                   onChange={event => setForm({ ...form, productValue: event.target.value })}
-                  className="mt-1 w-full px-3 py-2.5 border border-border rounded-lg outline-none focus:border-accent text-sm"
+                  className="mt-1 w-full form-control"
                 />
               </label>
             ) : (
@@ -309,7 +312,7 @@ export default function OrderTemplatesPanel() {
                   type="number"
                   value={form.actualAmount}
                   onChange={event => setForm({ ...form, actualAmount: event.target.value })}
-                  className="mt-1 w-full px-3 py-2.5 border border-border rounded-lg outline-none focus:border-accent text-sm"
+                  className="mt-1 w-full form-control"
                 />
               </label>
             )}
@@ -321,7 +324,7 @@ export default function OrderTemplatesPanel() {
                 maxLength={100}
                 value={form.productName}
                 onChange={event => setForm({ ...form, productName: event.target.value })}
-                className="mt-1 w-full px-3 py-2.5 border border-border rounded-lg outline-none focus:border-accent text-sm"
+                className="mt-1 w-full form-control"
               />
             </label>
           )}
@@ -331,12 +334,12 @@ export default function OrderTemplatesPanel() {
               value={form.platforms}
               onChange={event => setForm({ ...form, platforms: event.target.value })}
               placeholder="小红书, 抖音（逗号分隔）"
-              className="mt-1 w-full px-3 py-2.5 border border-border rounded-lg outline-none focus:border-accent text-sm"
+              className="mt-1 w-full form-control"
             />
           </label>
           <p className="text-xs text-gray-500">一键创建时会自动生成商单号，以当天为接单日期，并同步创建待办。</p>
           <div className="pt-2 flex justify-end gap-2">
-            <button type="button" onClick={closeEditor} disabled={saving} className="min-h-11 px-4 text-sm text-gray-600 hover:bg-gray-100 rounded-xl disabled:opacity-50">取消</button>
+            <button type="button" onClick={closeEditor} disabled={saving} className="min-h-11 px-4 text-sm text-gray-600 hover:bg-panda-black/10 rounded-xl disabled:opacity-50">取消</button>
             <button type="submit" disabled={saving} className="btn-sketch min-h-11 px-5 text-sm disabled:opacity-60">
               {saving ? '保存中…' : (editingTemplate ? '保存修改' : '创建模板')}
             </button>

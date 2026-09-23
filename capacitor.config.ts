@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'KOLFlow',
   webDir: 'dist',
   server: {
-    cleartext: false,
+    // 不注入 server.url：WebView 加载本地打包资源；后端地址由应用内配置
   },
   plugins: {
     CapacitorHttp: {

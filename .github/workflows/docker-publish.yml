@@ -11,7 +11,7 @@ on:
         default: ""
 
 env:
-  APP_VERSION: 1.4.4
+  APP_VERSION: 1.4.5
   GHCR_IMAGE: ghcr.io/panda-995/kolflow
   DOCKERHUB_IMAGE: panda995/kolflow
   HAS_DOCKERHUB: ${{ secrets.DOCKER_HUB_USERNAME != '' && secrets.DOCKER_HUB_TOKEN != '' }}
@@ -21,7 +21,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # 发布门禁：镜像构建前必须通过类型检查、单元/回归测试和前端构建
+  quality-gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run lint
+
+      - name: Unit and regression tests
+        run: npm test
+
+      - name: Build frontend
+        run: npm run build
+
   build:
+    needs: [quality-gate]
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -96,7 +126,8 @@ jobs:
           JS
 
       - name: Verify old data and custom folder persistence
-        run: bash scripts/verify-container-storage.sh "${GHCR_IMAGE}:1.4.3-${{ matrix.suffix }}" "${GHCR_IMAGE}:${APP_VERSION}-${{ matrix.suffix }}"
+        run: |
+          bash scripts/verify-container-storage.sh "${GHCR_IMAGE}:1.4.4-${{ matrix.suffix }}" "${GHCR_IMAGE}:${APP_VERSION}-${{ matrix.suffix }}"
 
       - name: Verify Compose authentication, reports and restart persistence
         env:

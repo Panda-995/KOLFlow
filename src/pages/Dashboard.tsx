@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { ArrowUpRight, ArrowDownRight, Package, DollarSign, CheckCircle2, Calendar as CalendarIcon, Receipt, Target, Edit3 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -7,19 +7,50 @@ import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { AreaChartComponent } from '../components/charts/MemoizedCharts';
 import TodoItem from '../components/todos/TodoItem';
-import { parseLocalDate } from '../lib/dateFilter';
+import { authFetch } from '../lib/api';
+import { getSessionEpoch, isSessionCurrent } from '../store/cache';
+import type { Order, Todo } from '../types';
 
-const getSettledDate = (payment: { settledDate?: string; date?: string }) => payment.settledDate || payment.date || '';
+type DashboardOverview = {
+  monthlyIncome: number;
+  lastMonthIncome: number;
+  completedOrders: number;
+  pendingOrders: number;
+  completionRate: number;
+  completionRateChange: number;
+  newOrdersThisMonth: number;
+  thisMonthOrderCount: number;
+  monthlyStats: Array<{ name: string; monthIndex: number; income: number }>;
+  recentOrders: Order[];
+  recentTodos: Todo[];
+};
 
 export default function Dashboard() {
-  const { orders, todos, toggleTodo, payments, assets } = useStore();
+  const { toggleTodo } = useStore();
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const [overview, setOverview] = useState<DashboardOverview | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const loadOverview = useCallback(async () => {
+    const epoch = getSessionEpoch();
+    const now = new Date();
+    try {
+      const response = await authFetch(`/api/dashboard?year=${now.getFullYear()}&month=${now.getMonth() + 1}`);
+      if (!response.ok) throw new Error('仪表盘加载失败');
+      const data = await response.json() as DashboardOverview;
+      if (!isSessionCurrent(epoch)) return;
+      setOverview(data);
+      setLoadError(false);
+    } catch {
+      if (isSessionCurrent(epoch)) setLoadError(true);
+    }
+  }, []);
+  useEffect(() => { void loadOverview(); }, [loadOverview]);
 
-  // 月度目标设置
+  const monthlyTargetKey = `monthlyTarget:${localStorage.getItem('userId') ?? ''}`;
   const [monthlyTarget, setMonthlyTarget] = useState(() => {
-    const saved = localStorage.getItem('monthlyTarget');
-    return saved ? Number(saved) : 10000;
+    const saved = Number(localStorage.getItem(monthlyTargetKey));
+    return Number.isFinite(saved) && saved > 0 ? saved : 10000;
   });
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [goalInput, setGoalInput] = useState(monthlyTarget.toString());
@@ -28,7 +59,7 @@ export default function Dashboard() {
     const newGoal = Number(goalInput);
     if (newGoal > 0) {
       setMonthlyTarget(newGoal);
-      localStorage.setItem('monthlyTarget', newGoal.toString());
+      localStorage.setItem(monthlyTargetKey, newGoal.toString());
       setIsGoalModalOpen(false);
       showToast('月度目标已更新');
     } else {
@@ -36,120 +67,39 @@ export default function Dashboard() {
     }
   };
 
-  const currentMonth = new Date().getMonth();
-  const currentYear = new Date().getFullYear();
-
-  // 使用 useMemo 缓存所有计算结果
-  const paymentStats = useMemo(() => {
-    const monthlyIncome = payments.filter(p => {
-      if (p.type !== 'settled') return false;
-      const date = parseLocalDate(getSettledDate(p));
-      return date && date.getMonth() === currentMonth && date.getFullYear() === currentYear;
-    }).reduce((acc, p) => acc + p.amount, 0);
-
-    const lastMonthIncome = payments.filter(p => {
-      if (p.type !== 'settled') return false;
-      const date = parseLocalDate(getSettledDate(p));
-      if (!date) return false;
-      return date.getMonth() === (currentMonth === 0 ? 11 : currentMonth - 1) &&
-             date.getFullYear() === (currentMonth === 0 ? currentYear - 1 : currentYear);
-    }).reduce((acc, p) => acc + p.amount, 0);
-
-    const monthlyAssetIncome = assets.filter(a => {
-      if (a.saleStatus !== 'sold' || !a.soldDate) return false;
-      const date = parseLocalDate(a.soldDate);
-      return date && date.getMonth() === currentMonth && date.getFullYear() === currentYear;
-    }).reduce((acc, a) => acc + a.soldAmount, 0);
-
-    const lastMonthAssetIncome = assets.filter(a => {
-      if (a.saleStatus !== 'sold' || !a.soldDate) return false;
-      const date = parseLocalDate(a.soldDate);
-      if (!date) return false;
-      return date.getMonth() === (currentMonth === 0 ? 11 : currentMonth - 1) &&
-             date.getFullYear() === (currentMonth === 0 ? currentYear - 1 : currentYear);
-    }).reduce((acc, a) => acc + a.soldAmount, 0);
-
-    return {
-      monthlyIncome: monthlyIncome + monthlyAssetIncome,
-      lastMonthIncome: lastMonthIncome + lastMonthAssetIncome
-    };
-  }, [payments, assets, currentMonth, currentYear]);
-
-  const monthlyIncome = paymentStats.monthlyIncome;
-  const lastMonthIncome = paymentStats.lastMonthIncome;
-
-  const orderStats = useMemo(() => {
-    const completedOrders = orders.filter(o => o.status === 'completed').length;
-    const pendingOrders = orders.filter(o => o.status !== 'completed' && o.status !== 'cancelled').length;
-    const completionRate = orders.length > 0 ? Math.round((completedOrders / orders.length) * 100) : 0;
-
-    // 本月新增商单
-    const newOrdersThisMonth = orders.filter(o => {
-      const date = parseLocalDate(o.acceptDate);
-      return date && date.getMonth() === currentMonth && date.getFullYear() === currentYear;
-    }).length;
-
-    // 上月完成率
-    const lastMonthOrders = orders.filter(o => {
-      const date = parseLocalDate(o.acceptDate);
-      if (!date) return false;
-      return date.getMonth() === (currentMonth === 0 ? 11 : currentMonth - 1) &&
-             date.getFullYear() === (currentMonth === 0 ? currentYear - 1 : currentYear);
-    });
-    const lastMonthCompleted = lastMonthOrders.filter(o => o.status === 'completed').length;
-    const lastMonthCompletionRate = lastMonthOrders.length > 0 ? Math.round((lastMonthCompleted / lastMonthOrders.length) * 100) : 0;
-    const completionRateChange = completionRate - lastMonthCompletionRate;
-
-    return { completedOrders, pendingOrders, completionRate, newOrdersThisMonth, completionRateChange };
-  }, [orders, currentMonth, currentYear]);
-
-  const completedOrders = orderStats.completedOrders;
-  const pendingOrders = orderStats.pendingOrders;
-  const completionRate = orderStats.completionRate;
-  const newOrdersThisMonth = orderStats.newOrdersThisMonth;
-  const completionRateChange = orderStats.completionRateChange;
-
+  const monthlyIncome = overview?.monthlyIncome ?? 0;
+  const lastMonthIncome = overview?.lastMonthIncome ?? 0;
+  const completedOrders = overview?.completedOrders ?? 0;
+  const pendingOrders = overview?.pendingOrders ?? 0;
+  const completionRate = overview?.completionRate ?? 0;
+  const newOrdersThisMonth = overview?.newOrdersThisMonth ?? 0;
+  const completionRateChange = overview?.completionRateChange ?? 0;
+  const thisMonthOrderCount = overview?.thisMonthOrderCount ?? 0;
+  const orders = overview?.recentOrders ?? [];
+  const todos = overview?.recentTodos ?? [];
+  const data = overview?.monthlyStats ?? [];
   const incomeChange = lastMonthIncome === 0
     ? (monthlyIncome > 0 ? 100 : 0)
     : ((monthlyIncome - lastMonthIncome) / lastMonthIncome) * 100;
-
   const targetProgress = Math.min(Math.round((monthlyIncome / monthlyTarget) * 100), 100) || 0;
-
-  const data = useMemo(() => {
-    const currentYear = new Date().getFullYear().toString();
-    const yearPayments = payments.filter(p => getSettledDate(p).startsWith(currentYear) && p.type === 'settled');
-    
-    const monthlyStats = Array.from({ length: 12 }, (_, i) => ({
-      name: `${i + 1}月`,
-      monthIndex: i,
-      income: 0,
-    }));
-
-    yearPayments.forEach(payment => {
-      const month = parseLocalDate(getSettledDate(payment))?.getMonth();
-      if (month !== undefined && month !== null && !isNaN(month)) {
-        monthlyStats[month].income += payment.amount;
-      }
-    });
-
-    assets.filter(a => a.saleStatus === 'sold' && a.soldDate && a.soldDate.startsWith(currentYear))
-      .forEach(a => {
-        const month = parseLocalDate(a.soldDate!)?.getMonth();
-        if (month !== undefined && month !== null && !isNaN(month)) {
-          monthlyStats[month].income += a.soldAmount;
-        }
-      });
-
-    const currentMonth = new Date().getMonth();
-    return monthlyStats.slice(0, currentMonth + 1).length > 0 ? monthlyStats.slice(0, currentMonth + 1) : monthlyStats.slice(0, 1);
-  }, [payments, assets]);
+  const handleToggleTodo = async (id: string) => {
+    await toggleTodo(id);
+    await loadOverview();
+  };
 
   const quickActions = [
-    { name: '新建商单', icon: Package, path: '/orders', color: 'bg-blue-500' },
-    { name: '添加待办', icon: CheckCircle2, path: '/todos?tab=list', color: 'bg-panda-black' },
-    { name: '查看日历', icon: CalendarIcon, path: '/todos?tab=calendar', color: 'bg-emerald-500' },
-    { name: '财务入账', icon: Receipt, path: '/billing', color: 'bg-amber-500' },
+    { name: '新建商单', icon: Package, path: '/orders?new=1', color: 'bg-blue-500 text-white' },
+    { name: '添加待办', icon: CheckCircle2, path: '/todos?tab=list&new=1', color: 'bg-panda-black text-panda-white' },
+    { name: '查看日历', icon: CalendarIcon, path: '/todos?tab=calendar', color: 'bg-emerald-500 text-white' },
+    { name: '财务入账', icon: Receipt, path: '/billing?new=1', color: 'bg-amber-500 text-white' },
   ];
+
+  if (loadError && !overview) {
+    return <div role="alert" className="card-pixel p-6">仪表盘加载失败。<button className="ml-3 underline" onClick={() => void loadOverview()}>重试</button></div>;
+  }
+  if (!overview) {
+    return <div role="status" className="card-pixel p-6">正在加载业务概览…</div>;
+  }
 
   return (
     <div className="space-y-4 md:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -161,9 +111,9 @@ export default function Dashboard() {
         <div className="flex items-center gap-3">
           <div className="text-right hidden md:block">
             <div className="text-sm font-medium text-panda-black">{new Date().toLocaleDateString('zh-CN', { weekday: 'long' })}</div>
-            <div className="text-xs text-gray-400">{new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+            <div className="text-xs text-gray-500">{new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
           </div>
-          <div className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-white border border-border/50 flex items-center justify-center shadow-sm">
+          <div className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-panda-white border border-border/50 flex items-center justify-center shadow-sm">
             <CalendarIcon size={18} className="text-panda-black md:hidden" />
             <CalendarIcon size={20} className="text-panda-black hidden md:block" />
           </div>
@@ -178,7 +128,7 @@ export default function Dashboard() {
             onClick={() => navigate(action.path)}
             className="group card-sketch p-3 md:p-4 flex items-center gap-3 md:gap-4 hover:scale-[1.02] transition-all cursor-pointer"
           >
-            <div className={clsx("w-9 h-9 md:w-10 md:h-10 rounded-xl flex items-center justify-center text-white shadow-sm group-hover:scale-110 transition-transform", action.color)}>
+            <div className={clsx("w-9 h-9 md:w-10 md:h-10 rounded-xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform", action.color)}>
               <action.icon size={18} className="md:hidden" />
               <action.icon size={20} className="hidden md:block" />
             </div>
@@ -190,14 +140,18 @@ export default function Dashboard() {
       {/* 核心指标卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-6">
         <div
-          className="card-pixel p-4 md:p-6 flex flex-col gap-3 md:gap-4 bg-gradient-to-br from-panda-black to-gray-800 text-white relative overflow-hidden cursor-pointer group"
+          className="card-pixel p-4 md:p-6 flex flex-col gap-3 md:gap-4 bg-gradient-to-br from-panda-black to-gray-800 text-white relative overflow-hidden cursor-pointer group focus-visible:outline-2 focus-visible:outline-offset-2"
+          role="button"
+          tabIndex={0}
+          aria-label="设置月度目标"
+          onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setIsGoalModalOpen(true); } }}
           onClick={() => setIsGoalModalOpen(true)}
         >
           <div className="absolute top-0 right-0 p-6 md:p-8 opacity-10">
             <DollarSign size={80} className="md:hidden" />
             <DollarSign size={120} className="hidden md:block" />
           </div>
-          <div className="absolute top-2 md:top-3 right-2 md:right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="absolute top-2 md:top-3 right-2 md:right-3 max-md:opacity-100 opacity-0 group-hover:opacity-100 hover-visible transition-opacity">
             <Edit3 size={14} className="text-white/60 md:hidden" />
             <Edit3 size={16} className="text-white/60 hidden md:block" />
           </div>
@@ -211,7 +165,7 @@ export default function Dashboard() {
               {incomeChange !== 0 && (
                 <div className={clsx(
                   "flex items-center gap-1 text-xs md:text-sm font-medium px-1.5 md:px-2 py-0.5 md:py-1 rounded-md",
-                  incomeChange > 0 ? "text-white bg-white/20" : "text-white bg-white/10"
+                  incomeChange > 0 ? "text-white bg-panda-white/20" : "text-white bg-panda-white/10"
                 )}>
                   {incomeChange > 0 ? <ArrowUpRight size={12} className="md:hidden" /> : <ArrowDownRight size={12} className="md:hidden" />}
                   {incomeChange > 0 ? <ArrowUpRight size={16} className="hidden md:block" /> : <ArrowDownRight size={16} className="hidden md:block" />}
@@ -222,17 +176,17 @@ export default function Dashboard() {
             <div className="text-2xl md:text-4xl font-bold font-mono tracking-tight text-white mb-2 md:mb-4">
               ¥ {monthlyIncome.toLocaleString()}
             </div>
-            <div className="w-full bg-white/20 h-1.5 md:h-2 rounded-full overflow-hidden">
-              <div className="bg-white h-full rounded-full transition-all duration-1000" style={{ width: `${targetProgress}%` }}></div>
+            <div className="w-full bg-panda-white/20 h-1.5 md:h-2 rounded-full overflow-hidden">
+              <div className="bg-panda-white h-full rounded-full transition-all duration-1000" style={{ width: `${targetProgress}%` }}></div>
             </div>
             <div className="flex justify-between items-center mt-1.5 md:mt-2">
-              <span className="text-[10px] md:text-xs text-gray-400">月度目标 ¥{monthlyTarget.toLocaleString()}</span>
+              <span className="text-[10px] md:text-xs text-gray-200">月度目标 ¥{monthlyTarget.toLocaleString()}</span>
               <span className="text-[10px] md:text-xs font-bold text-white">{targetProgress}%</span>
             </div>
           </div>
         </div>
 
-        <div className="card-pixel p-4 md:p-6 flex flex-col gap-3 md:gap-4 relative overflow-hidden bg-white">
+        <div className="card-pixel p-4 md:p-6 flex flex-col gap-3 md:gap-4 relative overflow-hidden bg-panda-white">
           <div className="absolute top-0 right-0 p-6 md:p-8 opacity-5">
             <Package size={80} className="md:hidden" />
             <Package size={120} className="hidden md:block" />
@@ -255,7 +209,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="card-pixel p-4 md:p-6 flex flex-col gap-3 md:gap-4 relative overflow-hidden bg-white">
+        <div className="card-pixel p-4 md:p-6 flex flex-col gap-3 md:gap-4 relative overflow-hidden bg-panda-white">
           <div className="absolute top-0 right-0 p-6 md:p-8 opacity-5">
             <CheckCircle2 size={80} className="md:hidden" />
             <CheckCircle2 size={120} className="hidden md:block" />
@@ -274,7 +228,7 @@ export default function Dashboard() {
                 )}>
                   {completionRateChange > 0 ? <ArrowUpRight size={12} className="md:hidden" /> : <ArrowDownRight size={12} className="md:hidden" />}
                   {completionRateChange > 0 ? <ArrowUpRight size={16} className="hidden md:block" /> : <ArrowDownRight size={16} className="hidden md:block" />}
-                  <span>{completionRateChange > 0 ? '+' : ''}{completionRateChange.toFixed(1)}%</span>
+                  <span title="本月完成率环比上月（按接单日期）">{completionRateChange > 0 ? '+' : ''}{completionRateChange.toFixed(1)}%</span>
                 </div>
               )}
             </div>
@@ -283,7 +237,7 @@ export default function Dashboard() {
             </div>
             <div className="flex items-center gap-2 text-xs md:text-sm text-gray-500">
               <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-success"></span>
-              共 {completedOrders} 个已完成商单
+              本月 {thisMonthOrderCount} 单 · 累计完成 {completedOrders}
             </div>
           </div>
         </div>
@@ -291,7 +245,7 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 {/* 收入趋势 */}
-        <div className="card-pixel p-6 lg:col-span-2 bg-white">
+        <div className="card-pixel p-6 lg:col-span-2 bg-panda-white">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-bold">收入趋势</h2>
             <div className="flex items-center gap-2">
@@ -301,24 +255,33 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
-          <div className="h-[300px] w-full">
-            <AreaChartComponent
-              data={data}
-              dataKey="income"
-              height={300}
-            />
-          </div>
+          {/* 空账号不画全零折线：与统计页的空状态保持一致 */}
+          {data.some(point => point.income > 0) ? (
+            <div className="h-[300px] w-full">
+              <AreaChartComponent
+                data={data}
+                dataKey="income"
+                dataName="实收金额"
+                height={300}
+              />
+            </div>
+          ) : (
+            <div className="h-[300px] w-full flex flex-col items-center justify-center text-gray-600">
+              <div className="text-4xl mb-2 opacity-50">🐼</div>
+              <p>暂无收入数据</p>
+            </div>
+          )}
         </div>
 
         {/* 待办事项 */}
-        <div className="card-pixel p-6 flex flex-col bg-white">
+        <div className="card-pixel p-6 flex flex-col bg-panda-white">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-bold">近期待办</h2>
             <Link to="/todos" className="text-sm text-accent hover:underline font-medium">查看全部</Link>
           </div>
           <div className="space-y-4 flex-1 overflow-auto pr-2 custom-scrollbar">
             {todos.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-gray-400 gap-2">
+              <div className="h-full flex flex-col items-center justify-center text-gray-600 gap-2">
                 <CheckCircle2 size={40} className="opacity-20" />
                 <p className="text-sm">暂无待办事项</p>
               </div>
@@ -327,7 +290,7 @@ export default function Dashboard() {
                 <TodoItem
                   key={todo.id}
                   todo={todo}
-                  onToggle={() => toggleTodo(todo.id)}
+                  onToggle={() => void handleToggleTodo(todo.id)}
                 />
               ))
             )}
@@ -335,7 +298,7 @@ export default function Dashboard() {
         </div>
 
         {/* 最近商单 */}
-        <div className="card-pixel p-4 md:p-6 lg:col-span-3 bg-white">
+        <div className="card-pixel p-4 md:p-6 lg:col-span-3 bg-panda-white">
           <div className="flex items-center justify-between mb-4 md:mb-6">
             <h2 className="text-base md:text-lg font-bold">最近商单</h2>
             <Link to="/orders" className="text-xs md:text-sm text-accent hover:underline font-medium">查看全部</Link>
@@ -346,12 +309,15 @@ export default function Dashboard() {
             {orders.slice(0, 5).map(order => (
               <div 
                 key={order.id} 
-                className="p-3 border border-border/50 rounded-xl hover:bg-gray-50/50 transition-colors cursor-pointer"
+                className="p-3 border border-border/50 rounded-xl hover:bg-panda-black/5 transition-colors cursor-pointer"
                 onClick={() => navigate(`/orders?id=${order.id}`)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); navigate(`/orders?id=${order.id}`); } }}
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-panda-black text-white flex items-center justify-center font-bold text-xs">
+                    <div className="w-8 h-8 rounded-lg bg-panda-black text-panda-white flex items-center justify-center font-bold text-xs">
                       {order.brandName?.charAt(0) || '?'}
                     </div>
                     <span className="font-bold text-panda-black text-sm">{order.brandName || '未知品牌'}</span>
@@ -371,13 +337,13 @@ export default function Dashboard() {
                   <span>{order.platforms.join(', ')}</span>
                   <span className="font-bold text-panda-black">¥{order.actualAmount.toLocaleString()}</span>
                 </div>
-                <div className="text-[10px] text-gray-400 mt-1">
+                <div className="text-[10px] text-gray-500 mt-1">
                   {order.acceptDate || '-'}
                 </div>
               </div>
             ))}
             {orders.length === 0 && (
-              <div className="py-8 text-center text-gray-400 text-sm">
+              <div className="py-8 text-center text-gray-600 text-sm">
                 暂无商单记录
               </div>
             )}
@@ -387,7 +353,7 @@ export default function Dashboard() {
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-border/50">
+                <tr className="text-[10px] font-bold text-gray-600 uppercase tracking-widest border-b border-border/50">
                   <th className="pb-3 pl-2">品牌</th>
                   <th className="pb-3">平台</th>
                   <th className="pb-3">接单日期</th>
@@ -398,10 +364,10 @@ export default function Dashboard() {
               </thead>
               <tbody className="divide-y divide-border/30">
                 {orders.slice(0, 5).map(order => (
-                  <tr key={order.id} className="group hover:bg-gray-50/50 transition-colors">
+                  <tr key={order.id} className="group hover:bg-panda-black/5 transition-colors">
                     <td className="py-4 pl-2">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-panda-black text-white flex items-center justify-center font-bold text-xs">
+                        <div className="w-8 h-8 rounded-lg bg-panda-black text-panda-white flex items-center justify-center font-bold text-xs">
                           {order.brandName?.charAt(0) || '?'}
                         </div>
                         <span className="font-bold text-panda-black text-sm">{order.brandName || '未知品牌'}</span>
@@ -437,7 +403,8 @@ export default function Dashboard() {
                     <td className="py-4 text-right pr-2">
                       <button 
                         onClick={() => navigate(`/orders?id=${order.id}`)}
-                        className="text-gray-400 hover:text-panda-black transition-colors"
+                        className="text-gray-600 hover:text-panda-black transition-colors"
+                        aria-label={`查看商单：${order.title}`}
                       >
                         <ArrowUpRight size={18} />
                       </button>
@@ -446,7 +413,7 @@ export default function Dashboard() {
                 ))}
                 {orders.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-10 text-center text-gray-400 text-sm">
+                    <td colSpan={6} className="py-10 text-center text-gray-600 text-sm">
                       暂无商单记录
                     </td>
                   </tr>
@@ -469,12 +436,13 @@ export default function Dashboard() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">目标金额 (¥)</label>
+            <label htmlFor="monthly-target" className="text-sm font-medium text-gray-700">目标金额 (¥)</label>
             <input
+              id="monthly-target"
               type="number"
               value={goalInput}
               onChange={(e) => setGoalInput(e.target.value)}
-              className="w-full px-4 py-3 border border-border rounded-xl outline-none focus:border-accent transition-all text-lg font-mono"
+              className="w-full form-control text-lg font-mono"
               placeholder="输入目标金额"
             />
           </div>
@@ -487,8 +455,8 @@ export default function Dashboard() {
                 className={clsx(
                   "py-2 rounded-lg text-sm font-medium transition-all",
                   Number(goalInput) === amount
-                    ? "bg-accent text-white"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    ? "bg-accent text-[#1a1a1a]"
+                    : "bg-gray-100 text-gray-600 hover:bg-panda-black/15"
                 )}
               >
                 ¥{amount.toLocaleString()}
@@ -499,7 +467,7 @@ export default function Dashboard() {
           <div className="pt-4 flex justify-end gap-3">
             <button
               onClick={() => setIsGoalModalOpen(false)}
-              className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl transition-colors text-sm"
+              className="px-4 py-2 text-gray-600 hover:bg-panda-black/10 rounded-xl transition-colors text-sm"
             >
               取消
             </button>

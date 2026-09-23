@@ -1,6 +1,7 @@
 import { useCallback, useState, useEffect, useRef } from 'react';
 import { Save, User, Bell, Shield, Database, Key, Palette, Cloud, Info, LogOut, RefreshCw } from 'lucide-react';
 import { useStore } from '../store/useStore';
+import { applyThemeColors } from '../lib/theme';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { MAX_AVATAR_SIZE } from '../constants';
@@ -8,14 +9,15 @@ import { apiFetch, authFetch, getActiveServerUrl } from '../lib/api';
 import { formatLocalDate } from '../lib/dateFilter';
 import { createEncryptedSensitiveBody } from '../lib/authEncryption';
 import {
-  getWebdavAuthorization,
-  getWebdavFileUrl,
-  loadWebdavLastSync,
-  loadWebdavConfig,
-  saveWebdavLastSync,
-  saveWebdavConfig,
-  uploadWebdavBackup,
-} from '../lib/webdav';
+  BACKUP_RISK_UPDATED_EVENT,
+  clearBackupRisk,
+  extractExportWarnings,
+  formatExportWarningMessage,
+  loadBackupRisk,
+  saveBackupRisk,
+  type BackupRisk,
+} from '../lib/backupNotice';
+import { useWebdavSync } from '../hooks/useWebdavSync';
 
 // 导入拆分的 Tab 组件
 import {
@@ -30,7 +32,6 @@ import {
   THEME_COLORS,
   type FormData,
   type SecurityFormData,
-  type WebdavConfig,
 } from '../components/settings';
 
 type ImportPreview = {
@@ -39,6 +40,25 @@ type ImportPreview = {
   counts: Record<string, number>;
   conflicts: { ids: number; orderNos: number; apiKey: number };
   warnings: string[];
+  /** 备份中包含的集合（只有这些会被替换） */
+  collections: string[];
+  /** 仅包含设置 */
+  settingsOnly: boolean;
+  /** 当前账号各集合现有条数 */
+  localCounts: Record<string, number>;
+  /** 数据清洗统计 */
+  adjustments: Record<string, number>;
+  /** 品牌集合变化对依赖记录的影响 */
+  brandChanges?: { renamed: number; remapped: number; removed: number };
+  /** 恢复后会因所属商单消失而被清理/解绑的关联记录 */
+  orphans?: {
+    comments: number;
+    links: number;
+    promotions: number;
+    todos: number;
+    assets: number;
+    todoBrands: number;
+  };
 };
 
 const IMPORT_COUNT_LABELS: Record<string, string> = {
@@ -75,15 +95,9 @@ export default function Settings() {
     password: '',
     oldPassword: ''
   });
-  const [webdavConfig, setWebdavConfig] = useState<WebdavConfig>(() => loadWebdavConfig());
   const [isSaving, setIsSaving] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [lastSyncTime, setLastSyncTime] = useState<string | null>(() => {
-    return loadWebdavLastSync();
-  });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
-  const webdavSyncInProgressRef = useRef(false);
 
   const [clearDataConfirm, setClearDataConfirm] = useState(false);
   const [apiKeyConfirm, setApiKeyConfirm] = useState(false);
@@ -253,8 +267,17 @@ export default function Settings() {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      showToast('数据导出成功');
-    } catch (e) {
+      // 备份可能因超过导入上限而无法直接恢复：这种风险必须让用户当场看到，
+      // 否则会带着"导出成功 = 备份可用"的误解离开；提示不自动消失，并在数据管理页留档。
+      const warnings = extractExportWarnings(data);
+      saveBackupRisk(warnings, 'export');
+      const warningMessage = formatExportWarningMessage(warnings, '数据已导出，但这份备份可能无法直接恢复');
+      if (warningMessage) {
+        showToast(warningMessage, 'warning', { persistent: true });
+      } else {
+        showToast('数据导出成功');
+      }
+    } catch {
       showToast('导出失败', 'error');
     }
   };
@@ -277,6 +300,25 @@ export default function Settings() {
     setImportSource(source);
   }, []);
 
+  // WebDAV 同步逻辑抽离到 useWebdavSync（配置/上传/下载/冲突确认）
+  const prepareWebdavRestore = useCallback(async (remoteData: Record<string, unknown>) => {
+    await prepareImportData(remoteData, 'webdav');
+  }, [prepareImportData]);
+
+  const {
+    webdavConfig,
+    setWebdavConfig,
+    lastSyncTime,
+    isSyncing,
+    conflictConfirmOpen: webdavConflictConfirm,
+    dismissConflictConfirm: setWebdavConflictConfirmFalse,
+    confirmConflictUpload,
+    handleSaveWebdavConfig,
+    handleWebdavSync,
+    markRestored,
+    lastError: webdavLastError,
+  } = useWebdavSync({ onRestoreData: prepareWebdavRestore });
+
   const handleImportData = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -295,17 +337,25 @@ export default function Settings() {
     setPendingImportData(null);
   };
 
+  // 备份可恢复性风险：留在数据管理页可回看（提示条 3 秒读不完）
+  const [backupRisk, setBackupRisk] = useState<BackupRisk | null>(() => loadBackupRisk());
+  useEffect(() => {
+    const refresh = () => setBackupRisk(loadBackupRisk());
+    window.addEventListener(BACKUP_RISK_UPDATED_EVENT, refresh);
+    return () => window.removeEventListener(BACKUP_RISK_UPDATED_EVENT, refresh);
+  }, []);
+  const dismissBackupRisk = () => {
+    clearBackupRisk();
+    setBackupRisk(null);
+  };
+
   const confirmImportData = async () => {
     if (!pendingImportData) return;
     try {
       await setAllData(pendingImportData);
       if (importSource === 'webdav') {
-        const now = new Date().toISOString();
-        saveWebdavLastSync(now);
-        setLastSyncTime(now);
+        markRestored();
         showToast('数据已从 WebDAV 恢复');
-      } else {
-        showToast('数据导入成功');
       }
     } catch (error) {
       showToast(error instanceof Error ? error.message : '导入数据失败', 'error');
@@ -316,79 +366,12 @@ export default function Settings() {
   const handleClearData = async () => {
     try {
       await clearData();
-      showToast('数据已清空');
     } catch (error) {
       showToast(error instanceof Error ? error.message : '清空数据失败', 'error');
       throw error;
     }
   };
 
-  // WebDAV 同步功能
-  const handleSaveWebdavConfig = () => {
-    if (webdavConfig.url && (!webdavConfig.username || !webdavConfig.password)) {
-      showToast('请填写完整的 WebDAV 认证信息', 'warning');
-      return;
-    }
-    saveWebdavConfig(webdavConfig);
-    showToast('WebDAV 配置已保存');
-  };
-
-  const handleWebdavSync = useCallback(async (
-    direction: 'upload' | 'download',
-    options: { silent?: boolean } = {},
-  ): Promise<boolean> => {
-    if (!webdavConfig.url || !webdavConfig.username || !webdavConfig.password) {
-      if (!options.silent) {
-        showToast('请先配置 WebDAV 连接信息', 'warning');
-      }
-      return false;
-    }
-
-    if (webdavSyncInProgressRef.current) {
-      return false;
-    }
-
-    webdavSyncInProgressRef.current = true;
-    setIsSyncing(true);
-    try {
-      if (direction === 'upload') {
-        const syncedAt = await uploadWebdavBackup(webdavConfig);
-        setLastSyncTime(syncedAt);
-        if (!options.silent) {
-          showToast('数据已同步到 WebDAV');
-        }
-        return true;
-      } else {
-        // 从 WebDAV 下载
-        const response = await fetch(getWebdavFileUrl(webdavConfig), {
-          method: 'GET',
-          headers: {
-            'Authorization': getWebdavAuthorization(webdavConfig)
-          }
-        });
-
-        if (response.ok) {
-          const remoteData = await response.json();
-          await prepareImportData(remoteData, 'webdav');
-          return true;
-        } else if (response.status === 404) {
-          showToast('WebDAV 上暂无备份文件', 'warning');
-          return false;
-        } else {
-          throw new Error(`下载失败: ${response.status}`);
-        }
-      }
-    } catch (error: any) {
-      console.error('WebDAV sync error:', error);
-      if (!options.silent) {
-        showToast(`同步失败: ${error.message || '网络错误'}`, 'error');
-      }
-      return false;
-    } finally {
-      webdavSyncInProgressRef.current = false;
-      setIsSyncing(false);
-    }
-  }, [prepareImportData, showToast, webdavConfig.password, webdavConfig.url, webdavConfig.username]);
 
   const handleGenerateApiKey = async () => {
     setApiKeyConfirm(true);
@@ -415,7 +398,7 @@ export default function Settings() {
     }
     setIsTestingApi(true);
     try {
-      const response = await apiFetch(`/api/external/statistics?token=${settings.apiKey}`);
+      const response = await apiFetch('/api/external/statistics', { headers: { Authorization: `Bearer ${settings.apiKey}` } });
       if (response.ok) {
         const data = await response.json();
         showToast(`连接成功！共 ${data.orders?.total || 0} 个商单`, 'success');
@@ -433,7 +416,7 @@ export default function Settings() {
   const copyCurlExample = (endpoint: string) => {
     const baseUrl = getActiveServerUrl();
     const key = settings?.apiKey || 'YOUR_API_KEY';
-    const curl = `curl "${baseUrl}${endpoint}?token=${key}"`;
+    const curl = `curl -H "Authorization: Bearer ${key}" "${baseUrl}${endpoint}"`;
     copyToClipboard(curl);
     showToast('已复制 curl 命令');
   };
@@ -445,7 +428,7 @@ export default function Settings() {
 API Key: ${settings?.apiKey || '尚未生成'}
 
 # 使用示例
-curl "${serverUrl}/api/external/orders?token=${settings?.apiKey || 'YOUR_KEY'}"`;
+curl -H "Authorization: Bearer ${settings?.apiKey || 'YOUR_KEY'}" "${serverUrl}/api/external/orders"`;
     copyToClipboard(config);
     showToast('已复制配置信息');
   };
@@ -463,30 +446,16 @@ curl "${serverUrl}/api/external/orders?token=${settings?.apiKey || 'YOUR_KEY'}"`
     }
   };
 
-  // 应用主题色
+  // 应用主题色（通过 data-theme 属性切换，兼容暗色模式；启动时由 main.tsx 全局恢复）
   const applyTheme = (themeId: string) => {
     const theme = THEME_COLORS.find(t => t.id === themeId);
     if (!theme) return;
 
-    // 更新 CSS 变量
-    document.documentElement.style.setProperty('--color-panda-black', theme.primary);
-    document.documentElement.style.setProperty('--color-accent', theme.accent);
-
-    // 保存到 localStorage
+    applyThemeColors(themeId);
     localStorage.setItem('theme', themeId);
     setCurrentTheme(themeId);
     showToast(`已应用「${theme.name}」主题`);
   };
-
-  // 初始化主题
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') || 'panda';
-    const theme = THEME_COLORS.find(t => t.id === savedTheme);
-    if (theme) {
-      document.documentElement.style.setProperty('--color-panda-black', theme.primary);
-      document.documentElement.style.setProperty('--color-accent', theme.accent);
-    }
-  }, []);
 
   if (!settings) {
     return (
@@ -551,63 +520,66 @@ curl "${serverUrl}/api/external/orders?token=${settings?.apiKey || 'YOUR_KEY'}"`
 
       <div className="flex flex-col md:flex-row gap-8">
         {/* 左侧导航 */}
-        <div className="w-full md:w-64 flex flex-col gap-2">
+        <div className="w-full min-w-0 md:w-64">
+          <p className="md:hidden text-xs font-medium text-gray-600 mb-2">左右滑动查看更多设置 →</p>
+          <div className="w-full min-w-0 flex flex-row md:flex-col gap-2 overflow-x-auto md:overflow-visible pb-2 md:pb-0">
           <button 
             onClick={() => setActiveTab('profile')}
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'profile' ? 'bg-white shadow-sm border border-border/50 text-panda-black font-medium' : 'text-gray-500 hover:bg-white hover:text-panda-black'}`}
+            className={`flex shrink-0 items-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-xl whitespace-nowrap transition-colors ${activeTab === 'profile' ? 'bg-panda-white shadow-sm border border-border/50 text-panda-black font-medium' : 'text-gray-500 hover:bg-panda-white hover:text-panda-black'}`}
           >
             <User size={18} />
             个人资料
           </button>
           <button 
             onClick={() => setActiveTab('notifications')}
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'notifications' ? 'bg-white shadow-sm border border-border/50 text-panda-black font-medium' : 'text-gray-500 hover:bg-white hover:text-panda-black'}`}
+            className={`flex shrink-0 items-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-xl whitespace-nowrap transition-colors ${activeTab === 'notifications' ? 'bg-panda-white shadow-sm border border-border/50 text-panda-black font-medium' : 'text-gray-500 hover:bg-panda-white hover:text-panda-black'}`}
           >
             <Bell size={18} />
             通知设置
           </button>
           <button 
             onClick={() => setActiveTab('security')}
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'security' ? 'bg-white shadow-sm border border-border/50 text-panda-black font-medium' : 'text-gray-500 hover:bg-white hover:text-panda-black'}`}
+            className={`flex shrink-0 items-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-xl whitespace-nowrap transition-colors ${activeTab === 'security' ? 'bg-panda-white shadow-sm border border-border/50 text-panda-black font-medium' : 'text-gray-500 hover:bg-panda-white hover:text-panda-black'}`}
           >
             <Shield size={18} />
             账号安全
           </button>
           <button 
             onClick={() => setActiveTab('backup')}
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'backup' ? 'bg-white shadow-sm border border-border/50 text-panda-black font-medium' : 'text-gray-500 hover:bg-white hover:text-panda-black'}`}
+            className={`flex shrink-0 items-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-xl whitespace-nowrap transition-colors ${activeTab === 'backup' ? 'bg-panda-white shadow-sm border border-border/50 text-panda-black font-medium' : 'text-gray-500 hover:bg-panda-white hover:text-panda-black'}`}
           >
             <Database size={18} />
             数据管理
           </button>
           <button
             onClick={() => setActiveTab('api')}
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'api' ? 'bg-white shadow-sm border border-border/50 text-panda-black font-medium' : 'text-gray-500 hover:bg-white hover:text-panda-black'}`}
+            className={`flex shrink-0 items-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-xl whitespace-nowrap transition-colors ${activeTab === 'api' ? 'bg-panda-white shadow-sm border border-border/50 text-panda-black font-medium' : 'text-gray-500 hover:bg-panda-white hover:text-panda-black'}`}
           >
             <Key size={18} />
             API 设置
           </button>
           <button
             onClick={() => setActiveTab('theme')}
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'theme' ? 'bg-white shadow-sm border border-border/50 text-panda-black font-medium' : 'text-gray-500 hover:bg-white hover:text-panda-black'}`}
+            className={`flex shrink-0 items-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-xl whitespace-nowrap transition-colors ${activeTab === 'theme' ? 'bg-panda-white shadow-sm border border-border/50 text-panda-black font-medium' : 'text-gray-500 hover:bg-panda-white hover:text-panda-black'}`}
           >
             <Palette size={18} />
             主题外观
           </button>
           <button
             onClick={() => setActiveTab('sync')}
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'sync' ? 'bg-white shadow-sm border border-border/50 text-panda-black font-medium' : 'text-gray-500 hover:bg-white hover:text-panda-black'}`}
+            className={`flex shrink-0 items-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-xl whitespace-nowrap transition-colors ${activeTab === 'sync' ? 'bg-panda-white shadow-sm border border-border/50 text-panda-black font-medium' : 'text-gray-500 hover:bg-panda-white hover:text-panda-black'}`}
           >
             <Cloud size={18} />
             云端同步
           </button>
           <button 
             onClick={() => setActiveTab('about')}
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'about' ? 'bg-white shadow-sm border border-border/50 text-panda-black font-medium' : 'text-gray-500 hover:bg-white hover:text-panda-black'}`}
+            className={`flex shrink-0 items-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-xl whitespace-nowrap transition-colors ${activeTab === 'about' ? 'bg-panda-white shadow-sm border border-border/50 text-panda-black font-medium' : 'text-gray-500 hover:bg-panda-white hover:text-panda-black'}`}
           >
             <Info size={18} />
             关于项目
           </button>
+          </div>
         </div>
 
         {/* 右侧内容 */}
@@ -649,6 +621,8 @@ curl "${serverUrl}/api/external/orders?token=${settings?.apiKey || 'YOUR_KEY'}"`
               handleImportData={handleImportData}
               importInputRef={importInputRef}
               setClearDataConfirm={setClearDataConfirm}
+              backupRisk={backupRisk}
+              onDismissBackupRisk={dismissBackupRisk}
             />
           )}
 
@@ -684,6 +658,7 @@ curl "${serverUrl}/api/external/orders?token=${settings?.apiKey || 'YOUR_KEY'}"`
               isSyncing={isSyncing}
               handleSaveWebdavConfig={handleSaveWebdavConfig}
               handleWebdavSync={handleWebdavSync}
+              lastError={webdavLastError}
               showToast={showToast}
             />
           )}
@@ -698,6 +673,15 @@ curl "${serverUrl}/api/external/orders?token=${settings?.apiKey || 'YOUR_KEY'}"`
       </div>
 
       {/* 确认弹窗 */}
+      <ConfirmDialog
+        isOpen={webdavConflictConfirm}
+        onClose={setWebdavConflictConfirmFalse}
+        onConfirm={confirmConflictUpload}
+        title="云端备份已被其他设备更新"
+        message="强制上传会用当前设备数据覆盖云端备份。如果其他设备可能有新数据，建议先「恢复数据」合并后再上传。确定要强制覆盖吗？"
+        confirmText="强制覆盖"
+        type="warning"
+      />
       <ConfirmDialog
         isOpen={clearDataConfirm}
         onClose={() => setClearDataConfirm(false)}
@@ -714,11 +698,23 @@ curl "${serverUrl}/api/external/orders?token=${settings?.apiKey || 'YOUR_KEY'}"`
         onConfirm={confirmImportData}
         title={importSource === 'webdav' ? '确认恢复数据' : '确认导入数据'}
         message={importPreview ? [
-          '此操作将覆盖当前数据。',
-          `预检结果：${Object.entries(importPreview.counts)
+          importPreview.settingsOnly
+            ? '本次只恢复账号设置，不会改动商单、品牌、账单等业务数据。'
+            : '本次按集合替换：备份中包含的集合会被整体替换，未包含的集合保持原样。',
+          `备份内容：${Object.entries(importPreview.counts)
             .filter(([, count]) => count > 0)
             .map(([name, count]) => `${IMPORT_COUNT_LABELS[name] || name} ${count} 条`)
             .join('、') || '无业务记录'}。`,
+          importPreview.collections.length > 0
+            ? `受影响集合：${importPreview.collections
+              .map(name => {
+                const label = IMPORT_COUNT_LABELS[name] || name;
+                const local = importPreview.localCounts?.[name] ?? 0;
+                return `${label}（现有 ${local} 条 → 备份 ${importPreview.counts[name]} 条）`;
+              })
+              .join('、')}。`
+            : '',
+          '未在备份中出现的集合不会被修改。',
           importPreview.warnings.join('；'),
         ].filter(Boolean).join(' ') : ''}
         confirmText={importSource === 'webdav' ? '确认恢复' : '确认导入'}

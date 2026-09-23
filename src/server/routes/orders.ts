@@ -1,19 +1,23 @@
 import { Router } from 'express';
 import {
   getOrdersByUserId,
+  countOrders,
   createOrderWithTodo,
   updateOrderWithSync,
   deleteOrderWithRelated
 } from '../services/orderService.js';
 import { getUserId } from './utils/index.js';
+import { parseListPaging } from './utils/helpers.js';
 
 const router = Router();
 
-// 获取所有商单
+// 获取商单列表（支持 ?limit=&offset=，响应头 X-Total-Count 给出总数；
+// 不传分页参数时仍返回全量，保持既有调用方行为）
 router.get('/', (req, res) => {
   try {
     const userId = getUserId(req);
-    const orders = getOrdersByUserId(userId);
+    const orders = getOrdersByUserId(userId, parseListPaging(req.query));
+    res.setHeader('X-Total-Count', String(countOrders(userId)));
     res.json(orders);
   } catch (error) {
     console.error('获取商单列表错误:', error instanceof Error ? error.message : error);

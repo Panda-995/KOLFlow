@@ -209,7 +209,7 @@ android/app/build/outputs/apk/debug/app-debug.apk
 
 - App name: `KOLFlow`
 - App icon source: `public/app.png`
-- Android cleartext traffic is disabled; the app only accepts HTTPS backend addresses with valid certificates.
+- The Android app allows cleartext HTTP on purpose so that LAN self-hosted servers (e.g. `http://192.168.x.x:3000`) work out of the box. Authentication payloads are additionally encrypted at the application layer; HTTPS with a valid certificate is strongly recommended whenever the server is reachable beyond the LAN.
 - The APP download/update link shown in “设置－关于项目” can be overridden at build time with `VITE_APP_DOWNLOAD_URL`.
 
 ---
@@ -231,17 +231,20 @@ docker-compose up -d
 
 # 或手动指定镜像（HTTP/HTTPS 均可访问）
 docker run -d -p 3000:3000 \
+  -v kolflow-data:/app/data \
   -e JWT_SECRET=your-secret \
   -e INVITE_CODE=your-code \
   ghcr.io/panda-995/kolflow:latest
 ```
+
+> 注意：必须挂载 `/app/data` 卷（如上例 `-v kolflow-data:/app/data`）。数据库与上传文件都在该目录内，未挂卷时容器删除即丢失数据。
 
 **镜像标签**:
 
 | Tag | 说明 |
 |-----|------|
 | `latest` | 最新版（多架构） |
-| `1.4.4` | v1.4.4 固定版本（多架构） |
+| `1.4.5` | v1.4.5 固定版本（多架构） |
 | `arm64` | ARM64 架构专用 |
 | `amd64` | x86_64 架构专用 |
 
@@ -256,7 +259,9 @@ export ENFORCE_HTTPS=false
 docker compose up -d
 ```
 
-KOLFlow 默认保留完整 HTTP 页面、注册、登录和业务功能。登录、注册、修改邮箱/密码和账号注销使用 `RSA-OAEP-256 + AES-256-GCM` 混合加密，HTTP 请求体不会直接出现邮箱、密码或邀请码；一次性挑战值会阻止抓包密文被重复提交。HTTPS 仍是推荐部署方式，因为 HTTP 页面本身无法抵御主动中间人篡改。配置 HTTPS 反向代理并启用 `ENFORCE_HTTPS=true` 时，只有容器前一跳确为受控代理才设置 `TRUST_PROXY=1`。
+> 安全提示：未设置 `INVITE_CODE` 时使用内置默认邀请码，任何知道该默认值的人都能注册账号；自托管实例（尤其暴露公网时）请务必通过环境变量设置自己的邀请码。备份文件包含 `API Key` 等敏感信息，请妥善保管。
+
+KOLFlow 默认保留完整 HTTP 页面、注册、登录和业务功能。登录、注册、修改邮箱/密码和账号注销使用 `RSA-OAEP-256 + AES-256-GCM` 混合加密，HTTP 请求体不会直接出现邮箱、密码或邀请码；一次性挑战值会阻止抓包密文被重复提交。HTTPS 仍是推荐部署方式，因为 HTTP 页面本身无法抵御主动中间人篡改。配置 HTTPS 反向代理并启用 `ENFORCE_HTTPS=true` 时，**必须同时设置 `TRUST_PROXY=1`**：否则服务端无法识别代理转发的 `X-Forwarded-Proto`，会把所有请求视为明文并拒绝（返回 426），应用不可用。仅在受控代理之后才开启该选项，直连部署请保持关闭。
 
 GitHub Actions 会优先发布 GHCR 镜像；Docker Hub 只有配置了 `DOCKER_HUB_USERNAME` 和 `DOCKER_HUB_TOKEN` secrets 时才会同步发布。如果拉取镜像提示 `manifest unknown`，先确认镜像名为全小写：
 
@@ -387,6 +392,8 @@ POST   /api/data/clear           # 清空当前用户业务数据
 
 完整备份的预检与导入接口支持最大 `100 MB` 的 JSON 请求体；其他 JSON API 继续保持 `10 MB` 上限。若在 KOLFlow 前部署反向代理，还需要将代理层的请求体上限配置为至少 `100 MB`。
 
+> 备份能力边界：备份为**整包快照**（预检 + 确认后整包恢复），不是增量同步，也不会在多设备间自动合并数据。WebDAV 上传前会做冲突检测（云端备份被其他设备更新时会提示确认），手动上传会额外保留最近 10 份历史副本（`kolflow_backups/` 目录）。多设备并行写入同一备份文件时，请以"恢复数据"合并进度后再上传。
+
 ### Settings | 设置
 
 ```bash
@@ -415,16 +422,18 @@ POST   /api/order-templates/:id/create-order   # 一键创建全新商单
 
 ### External API | 外部 API（API Key 鉴权）
 
+所有外部 API 请求都需在请求头传入 `Authorization: Bearer <API_KEY>`。不要把 API Key 写入 URL。
+
 ```bash
-GET    /api/external/orders?token=<API_KEY>          # 获取商单列表
-POST   /api/external/orders?token=<API_KEY>          # 创建商单
-PUT    /api/external/orders/:id?token=<API_KEY>      # 更新商单
-DELETE /api/external/orders/:id?token=<API_KEY>      # 删除商单
-GET    /api/external/todos?token=<API_KEY>           # 获取待办列表
-GET    /api/external/payments?token=<API_KEY>        # 获取账单列表
-GET    /api/external/brands?token=<API_KEY>          # 获取品牌列表
-GET    /api/external/statistics?token=<API_KEY>      # 获取统计数据
-GET    /api/external/export?token=<API_KEY>          # 导出数据（包含商单、账单、品牌、资产、推广记录等）
+GET    /api/external/orders          # 获取商单列表
+POST   /api/external/orders          # 创建商单
+PUT    /api/external/orders/:id      # 更新商单
+DELETE /api/external/orders/:id      # 删除商单
+GET    /api/external/todos           # 获取待办列表
+GET    /api/external/payments        # 获取账单列表
+GET    /api/external/brands          # 获取品牌列表
+GET    /api/external/statistics      # 获取统计数据
+GET    /api/external/export          # 导出数据（包含商单、账单、品牌、资产、推广记录等）
 ```
 
 External order create/update supports `productName` and `productValue`. When an Exchange/E-card order is marked as completed through the external API, KOLFlow will create the related Asset automatically.
@@ -445,11 +454,18 @@ External order create/update supports `productName` and `productValue`. When an 
 | Data | 数据处理 | read-excel-file / csv-parse (商单文件导入), multer (文件上传) |
 | Security | 安全 | bcrypt, JWT, helmet, express-rate-limit |
 | Mobile | 移动端 | Capacitor (Android) |
-| Deployment | 部署 | Docker, Vercel |
+| Deployment | 部署 | Docker / Docker Compose, UGOS UPK, Capacitor (Android APK) |
 
 ---
 
 ## 📝 更新日志 | Changelog
+
+### 2026-09-23 · v1.4.5
+
+- **交互与加载**：优化页面按需加载、列表分页、手机导航、弹窗和错误重试；完善账号切换时的状态隔离。
+- **数据与备份**：修正金额及品牌关联处理，增强完整备份和 WebDAV 同步。导出格式升级为 v4，继续支持 v2/v3 导入。
+- **安全与升级**：新增密码修改后的会话撤销；容器以非 root 用户运行，保留旧数据并处理历史 SQLite 文件权限。
+- **版本**：Android versionCode 12，UGOS Pro 1.4.5.0014。升级前保留旧版备份；回退旧程序应使用旧版备份，不应导入新版 v4 文件。
 
 ### 2026-09-21 · v1.4.4
 
@@ -514,7 +530,7 @@ External order create/update supports `productName` and `productValue`. When an 
 - **HTTPS 传输加固**: Android 关闭明文网络流量并仅接受有效 HTTPS 服务地址；生产部署可通过 `ENFORCE_HTTPS=true` 拒绝 HTTP API 请求。
 - **绿联双架构重建**: 重新构建并发布 `amd64`、`arm64` 镜像及多架构 `latest` 清单，并基于新镜像生成 UGOS Pro 双架构 `1.3.0.0004` 应用包。
 - **Release 资产更新**: GitHub Release 更新为 `1.3.0.0004` 双架构 UPK 与当前 Android APK；绿联构建工作流新增可选 Release 发布参数，避免构建产物只保留在 Actions Artifacts。
-- **分支与镜像清理**: 仓库分支收敛为仅保留 `main`；GHCR 与 Docker Hub 自动删除历史版本，只保留当前 `latest` 多架构清单及其 `amd64`、`arm64` 子镜像。
+- **分支与镜像清理**: 仓库分支收敛为仅保留 `main`；GHCR 与 Docker Hub 同时保留 `latest` 多架构清单、各版本 tag 及其 `amd64`、`arm64` 子镜像（历史版本不会被自动删除）。
 
 ### 2026-06-30
 
@@ -650,7 +666,7 @@ External order create/update supports `productName` and `productValue`. When an 
 - **核心功能**: 仪表盘、商单管理、待办日历、账单管理、品牌管理、资产库、数据统计
 - **数据联动**: 创建商单自动生成待办、商单完成自动创建账单/资产、类型变更双向同步、删除品牌自动清理关联数据
 - **API 系统**: 内部 RESTful API + 外部 API Key 鉴权体系
-- **主题外观**: 支持亮色/暗色主题切换
+- **主题外观**: 支持多套主题配色（熊猫黑/深海蓝/森林绿/落日橙/薰衣紫）切换
 - **剪贴板功能**: 修复复制到剪贴板兼容性问题
 
 ---

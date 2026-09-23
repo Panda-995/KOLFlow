@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import db from '../db.js';
 import { logActivity, getUserId } from './utils/index.js';
-import { formatLocalDate, isValidDateOnly } from './utils/helpers.js';
-import { createPayment, deletePaymentRecord, listPayments, updatePaymentRecord } from '../services/paymentService.js';
+import { formatLocalDate, isValidDateOnly, parseListPaging } from './utils/helpers.js';
+import { createPayment, countPayments, deletePaymentRecord, listPayments, updatePaymentRecord } from '../services/paymentService.js';
 import { getApiErrorMessage, getApiErrorStatus } from '../services/errors.js';
+import type { PaymentRow } from '../dbRows.js';
 
 const router = Router();
 
@@ -11,7 +12,9 @@ const router = Router();
 router.get('/', (req, res) => {
   try {
     const userId = getUserId(req);
-    return res.json(listPayments(userId));
+    const payments = listPayments(userId, parseListPaging(req.query));
+    res.setHeader('X-Total-Count', String(countPayments(userId)));
+    return res.json(payments);
   } catch (error) {
     console.error('获取账单列表错误:', error instanceof Error ? error.message : error);
     return res.status(500).json({ 
@@ -36,15 +39,25 @@ router.put('/:id/settle', (req, res) => {
   try {
     const userId = getUserId(req);
     const { id } = req.params;
-    const payment = db.prepare('SELECT * FROM payments WHERE id = ? AND userId = ?').get(id, userId) as any;
+    const payment = db.prepare('SELECT * FROM payments WHERE id = ? AND userId = ?').get(id, userId) as PaymentRow | undefined;
 
     if (!payment) {
       return res.status(404).json({ error: '账单不存在' });
     }
 
-    const newType = payment.type === 'pending' ? 'settled' : 'pending';
+    // 明确目标状态优先（settled: true/false，幂等）；未提供时保持切换语义兼容旧调用
+    const requestedSettled = req.body?.settled;
+    const requestedType = requestedSettled === true ? 'settled' : requestedSettled === false ? 'pending' : null;
+    const newType = requestedType ?? (payment.type === 'pending' ? 'settled' : 'pending');
+
+    if (payment.type === newType) {
+      // 幂等：重复请求不回退状态、不改写结算日期
+      return res.json(payment);
+    }
+
     const requestedDate = req.body?.settledDate;
-    const dueDate = payment.dueDate || (payment.type === 'pending' ? payment.date : null);
+    // 取消结算时若旧数据没有 dueDate，回退到原 date 列，避免结算历史日期被清空
+    const dueDate = payment.dueDate || payment.date || null;
     const settledDate = newType === 'settled'
       ? (isValidDateOnly(requestedDate) ? requestedDate : formatLocalDate())
       : null;

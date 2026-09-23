@@ -18,7 +18,7 @@ export default memo(function TodoItem({ todo, onToggle }: TodoItemProps) {
         "flex items-start gap-3 p-3 rounded-xl border transition-all duration-200 cursor-pointer group",
         todo.completed
           ? "bg-gray-50 border-transparent opacity-60"
-          : "bg-white border-border/50 hover:border-accent/50 hover:shadow-sm"
+          : "bg-panda-white border-border/50 hover:border-panda-black/40 hover:-translate-y-px"
       )}
       onClick={onToggle}
     >
@@ -26,7 +26,7 @@ export default memo(function TodoItem({ todo, onToggle }: TodoItemProps) {
         className={clsx(
           "mt-0.5 w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 transition-all duration-200",
           todo.completed
-            ? "bg-accent border-accent text-white"
+            ? "bg-accent border-accent text-[#1a1a1a]"
             : "border-gray-300 text-transparent group-hover:border-accent"
         )}
       >
@@ -51,7 +51,7 @@ export default memo(function TodoItem({ todo, onToggle }: TodoItemProps) {
           >
             {priority.label}
           </span>
-          <span className="text-[10px] text-gray-400 flex items-center gap-1">
+          <span className="text-[10px] text-gray-500 flex items-center gap-1">
             <Clock size={10} />
             {todo.dueDate}
           </span>

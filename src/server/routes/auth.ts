@@ -2,8 +2,17 @@ import { Router } from 'express';
 import db from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcrypt';
-import { logActivity, generateToken, verifyToken } from './utils/index.js';
+import {
+  logActivity,
+  generateToken,
+  verifyToken,
+  isTokenActiveForUser,
+  isAccountLocked,
+  recordAccountFailure,
+  clearAccountFailures,
+} from './utils/index.js';
 import { VALID_INVITE_CODE } from './utils/constants.js';
+import type { UserRow } from '../dbRows.js';
 import { validateEmail, validatePassword } from './utils/helpers.js';
 import {
   issueAuthEncryptionKey,
@@ -59,7 +68,7 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: '邀请码无效' });
     }
 
-    const existingUser = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as any;
+    const existingUser = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as UserRow | undefined;
     if (existingUser) {
       return res.status(400).json({ error: '该邮箱已被注册' });
     }
@@ -105,17 +114,24 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: '邮箱和密码不能为空' });
     }
 
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as any;
+    if (isAccountLocked(email)) {
+      return res.status(429).json({ error: '该账号失败次数过多，请 15 分钟后再试' });
+    }
+
+    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as UserRow | undefined;
 
     if (!user) {
+      recordAccountFailure(email);
       return res.status(401).json({ error: '邮箱或密码错误' });
     }
 
     const isValidPassword = await verifyPassword(password, user.password);
     if (!isValidPassword) {
+      recordAccountFailure(email);
       return res.status(401).json({ error: '邮箱或密码错误' });
     }
 
+    clearAccountFailures(email);
     logActivity(user.id, 'login', 'user', user.id, `用户登录: ${email}`);
 
     const token = generateToken(user.id);
@@ -137,8 +153,8 @@ router.post('/verify', (req, res) => {
 
   const token = authHeader.substring(7);
   const decoded = verifyToken(token);
-  
-  if (decoded) {
+
+  if (decoded && isTokenActiveForUser(decoded)) {
     return res.json({ valid: true, userId: decoded.userId });
   } else {
     return res.status(401).json({ valid: false, error: '令牌无效或已过期' });

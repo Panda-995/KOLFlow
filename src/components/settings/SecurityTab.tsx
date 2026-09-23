@@ -13,38 +13,43 @@ export function SecurityTab({
 }: SecurityTabProps) {
   return (
     <div className="space-y-6">
-      <div className="card-sketch p-6 bg-white">
+      <div className="card-sketch p-6 bg-panda-white">
         <h2 className="text-lg font-bold mb-6">账号安全</h2>
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-gray-600">登录账号 (邮箱)</label>
+            <label htmlFor="security-email" className="text-sm font-medium text-gray-600">登录账号 (邮箱)</label>
             <input
+              id="security-email"
               type="email"
               value={securityData.email}
               onChange={e => setSecurityData({...securityData, email: e.target.value})}
-              className="w-full px-4 py-2 bg-bg-tertiary border border-transparent focus:border-accent focus:bg-white rounded-xl outline-none transition-all text-sm"
+              className="w-full form-control"
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-gray-600">原密码</label>
+            <label htmlFor="security-oldPassword" className="text-sm font-medium text-gray-600">原密码</label>
             <input
+              id="security-oldPassword"
               type="password"
+              autoComplete="current-password"
               value={securityData.oldPassword || ''}
               onChange={e => setSecurityData({...securityData, oldPassword: e.target.value})}
-              className="w-full px-4 py-2 bg-bg-tertiary border border-transparent focus:border-accent focus:bg-white rounded-xl outline-none transition-all text-sm"
+              className="w-full form-control"
               placeholder="请输入原密码以验证身份"
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-gray-600">新密码</label>
+            <label htmlFor="security-password" className="text-sm font-medium text-gray-600">新密码</label>
             <input
+              id="security-password"
               type="password"
+              autoComplete="new-password"
               value={securityData.password}
               onChange={e => setSecurityData({...securityData, password: e.target.value})}
-              className="w-full px-4 py-2 bg-bg-tertiary border border-transparent focus:border-accent focus:bg-white rounded-xl outline-none transition-all text-sm"
+              className="w-full form-control"
               placeholder="至少6位，包含字母和数字"
             />
-            <p className="text-xs text-gray-400">密码需至少6位，且包含字母和数字</p>
+            <p className="text-xs text-gray-500">密码需至少6位，且包含字母和数字，最长 72 个字节（中文每个占 3 字节）</p>
           </div>
           <div className="pt-2">
             <button onClick={handleSecuritySave} disabled={isSaving} className="btn-sketch py-2 px-6 disabled:opacity-50">
@@ -54,7 +59,7 @@ export function SecurityTab({
         </div>
       </div>
 
-      <div className="p-6 bg-white rounded-2xl border border-danger/30">
+      <div className="p-6 bg-panda-white rounded-2xl border border-danger/30">
         <h2 className="text-lg font-bold text-danger mb-2 flex items-center gap-2">
           <Trash2 size={19} />
           注销账号
@@ -73,7 +78,7 @@ export function SecurityTab({
             autoComplete="current-password"
             value={deletionPassword}
             onChange={e => setDeletionPassword(e.target.value)}
-            className="w-full px-4 py-2 bg-bg-tertiary border border-transparent focus:border-danger focus:bg-white rounded-xl outline-none transition-all text-sm"
+            className="w-full form-control"
             placeholder="输入当前密码以确认本人操作"
           />
         </div>

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import db from './db.js';
 import '../types/index.js'; // 加载Express类型扩展
+import type { AssetRow, BrandRow, OrderRow, OrderTemplateRow, PaidPromotionRow, PaymentRow, SettingsRow, TodoRow } from './dbRows.js';
 import { getUserIdByApiKey } from './routes/utils/index.js';
 import { safeJsonParse } from './routes/utils/helpers.js';
 import {
@@ -16,7 +17,8 @@ import { createTodo, listTodos, updateTodo } from './services/todoService.js';
 import { createPublishLink, deletePublishLink, listPublishLinks } from './services/publishLinkService.js';
 
 const router = Router();
-const BACKUP_VERSION = 3;
+// 与 /api/data/export 的备份版本保持一致（v4 起包含操作日志）
+const BACKUP_VERSION = 4;
 
 // userId验证辅助函数
 function getUserId(req: Express.Request): string {
@@ -29,22 +31,15 @@ function getUserId(req: Express.Request): string {
 
 // 认证中间件
 router.use((req, res, next) => {
-  // 支持 URL 参数认证 (?token=xxx 或 ?key=xxx)
-  const urlToken = req.query.token || req.query.key;
-
-  if (urlToken) {
-    const userId = getUserIdByApiKey(urlToken as string);
-    if (userId) {
-      req.userId = userId;
-      return next();
-    }
-    return res.status(401).json({ error: 'Invalid API Key' });
+  // API Key 只能放在请求头，避免出现在 URL、浏览器历史和访问日志中。
+  if (req.query.token !== undefined || req.query.key !== undefined) {
+    return res.status(401).json({ error: '请通过 Authorization: Bearer <API_KEY> 请求头认证' });
   }
 
   // 支持 Authorization Header
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Missing or invalid Authorization header or token parameter' });
+    return res.status(401).json({ error: 'Missing or invalid Authorization header' });
   }
 
   const token = authHeader.split(' ')[1];
@@ -55,7 +50,7 @@ router.use((req, res, next) => {
   }
 
   req.userId = userId;
-  next();
+  return next();
 });
 
 // ==================== Orders ====================
@@ -249,11 +244,11 @@ router.delete('/brands/:id', async (req, res) => {
 router.get('/statistics', async (req, res) => {
   try {
     const userId = req.userId;
-    const orders = db.prepare('SELECT * FROM orders WHERE userId = ?').all(userId) as any[];
-    const payments = db.prepare('SELECT * FROM payments WHERE userId = ?').all(userId) as any[];
-    const todos = db.prepare('SELECT * FROM todos WHERE userId = ?').all(userId) as any[];
-    const assets = db.prepare("SELECT * FROM assets WHERE userId = ? AND saleStatus = 'sold'").all(userId) as any[];
-    const paidPromotions = db.prepare('SELECT * FROM paid_promotions WHERE userId = ?').all(userId) as any[];
+    const orders = db.prepare('SELECT * FROM orders WHERE userId = ?').all(userId) as OrderRow[];
+    const payments = db.prepare('SELECT * FROM payments WHERE userId = ?').all(userId) as PaymentRow[];
+    const todos = db.prepare('SELECT * FROM todos WHERE userId = ?').all(userId) as TodoRow[];
+    const assets = db.prepare("SELECT * FROM assets WHERE userId = ? AND saleStatus = 'sold'").all(userId) as AssetRow[];
+    const paidPromotions = db.prepare('SELECT * FROM paid_promotions WHERE userId = ?').all(userId) as PaidPromotionRow[];
 
     const totalOrders = orders.length;
     const completedOrders = orders.filter(o => o.status === 'completed').length;
@@ -325,7 +320,7 @@ router.delete('/publish-links/:id', async (req, res) => {
 router.get('/settings', async (req, res) => {
   try {
     const userId = req.userId;
-    const settings = db.prepare('SELECT * FROM settings WHERE userId = ?').get(userId) as any;
+    const settings = db.prepare('SELECT * FROM settings WHERE userId = ?').get(userId) as SettingsRow | undefined;
     if (!settings) {
       return res.json({ displayName: '博主账号', email: '', bio: '' });
     }
@@ -350,7 +345,7 @@ router.get('/settings', async (req, res) => {
 router.get('/logs', async (req, res) => {
   try {
     const userId = req.userId;
-    const limit = parseInt(req.query.limit as string) || 100;
+    const limit = Math.max(1, Math.min(parseInt(req.query.limit as string) || 100, 500));
     const logs = db.prepare('SELECT * FROM activity_logs WHERE userId = ? ORDER BY createdAt DESC LIMIT ?').all(userId, limit);
     return res.json(logs);
   } catch (error) {
@@ -367,20 +362,33 @@ router.get('/logs', async (req, res) => {
 router.get('/export', async (req, res) => {
   try {
     const userId = req.userId;
-    const orders = db.prepare('SELECT * FROM orders WHERE userId = ?').all(userId) as any[];
-    const brands = db.prepare('SELECT * FROM brands WHERE userId = ?').all(userId) as any[];
-    const payments = db.prepare('SELECT * FROM payments WHERE userId = ?').all(userId) as any[];
-    const todos = db.prepare('SELECT * FROM todos WHERE userId = ?').all(userId) as any[];
-    const settings = db.prepare('SELECT * FROM settings WHERE userId = ?').get(userId) as any;
+    const orders = db.prepare('SELECT * FROM orders WHERE userId = ?').all(userId) as OrderRow[];
+    const brands = db.prepare('SELECT * FROM brands WHERE userId = ?').all(userId) as BrandRow[];
+    const payments = db.prepare('SELECT * FROM payments WHERE userId = ?').all(userId) as PaymentRow[];
+    const todos = db.prepare('SELECT * FROM todos WHERE userId = ?').all(userId) as TodoRow[];
+    const settings = db.prepare('SELECT * FROM settings WHERE userId = ?').get(userId) as SettingsRow | undefined;
     const publishLinks = db.prepare('SELECT * FROM publish_links WHERE userId = ? ORDER BY createdAt DESC').all(userId);
     const paidPromotions = db.prepare('SELECT * FROM paid_promotions WHERE userId = ? ORDER BY createdAt DESC').all(userId);
     const comments = db.prepare('SELECT * FROM comments WHERE userId = ? ORDER BY createdAt DESC').all(userId);
     const assets = db.prepare('SELECT * FROM assets WHERE userId = ? ORDER BY createdAt DESC').all(userId);
-    const orderTemplates = db.prepare('SELECT * FROM order_templates WHERE userId = ? ORDER BY updatedAt DESC, createdAt DESC').all(userId) as any[];
+    const orderTemplates = db.prepare('SELECT * FROM order_templates WHERE userId = ? ORDER BY updatedAt DESC, createdAt DESC').all(userId) as OrderTemplateRow[];
+    const activityLogs = db.prepare('SELECT * FROM activity_logs WHERE userId = ? ORDER BY createdAt DESC').all(userId);
 
     return res.json({
       backupVersion: BACKUP_VERSION,
       exportedAt: new Date().toISOString(),
+      counts: {
+        orders: orders.length,
+        brands: brands.length,
+        payments: payments.length,
+        todos: todos.length,
+        assets: assets.length,
+        publishLinks: publishLinks.length,
+        paidPromotions: paidPromotions.length,
+        comments: comments.length,
+        orderTemplates: orderTemplates.length,
+        activityLogs: activityLogs.length,
+      },
       orders: orders.map(o => ({ ...o, platforms: safeJsonParse(o.platforms, []) })),
       brands,
       payments,
@@ -398,6 +406,7 @@ router.get('/export', async (req, res) => {
         ...template,
         platforms: safeJsonParse(template.platforms, []),
       })),
+      activityLogs,
     });
   } catch (error) {
     console.error('externalApi GET /export失败:', error);

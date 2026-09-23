@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { registerFreshAccount } from './helpers';
 import { getCompletedReportPeriod } from '../../src/lib/reportSchedule';
 
 type ApiOptions = {
@@ -25,15 +26,15 @@ const api = async <T>(page: Page, path: string, options: ApiOptions = {}): Promi
 test('v1.4.0 商单模板、周期通知、旧数据兼容与核心页面', async ({ page }) => {
   const pageErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));
+  // 回归防护：CSP 配置错误会拦掉脚本导致整页白屏，这里任何 CSP 违规都视为失败
+  const cspViolations: string[] = [];
+  page.on('console', msg => {
+    if (msg.type() === 'error' && /Content Security Policy|Refused to (load|execute|connect|apply)/i.test(msg.text())) {
+      cspViolations.push(msg.text());
+    }
+  });
 
-  await page.goto('/');
-  await expect(page.getByText('正在检查系统状态...')).toBeHidden();
-  await page.getByLabel('账号邮箱').fill(`release-${Date.now()}@example.com`);
-  await page.getByLabel('密码').fill('KolFlow-E2E-2026!');
-  await page.getByLabel('邀请码').fill('kolflow-e2e-invite');
-  await page.getByRole('checkbox', { name: /我已阅读并同意/ }).check();
-  await page.getByRole('button', { name: '注册', exact: true }).last().click();
-  await expect(page.getByRole('heading', { name: '仪表盘' })).toBeVisible();
+  await registerFreshAccount(page, 'release');
 
   await page.goto('/orders');
   await expect(page.getByRole('heading', { name: '商单管理' })).toBeVisible();
@@ -42,7 +43,9 @@ test('v1.4.0 商单模板、周期通知、旧数据兼容与核心页面', asyn
   await page.getByLabel('模板名称').fill('月度推广模板');
   await page.getByLabel('合作品牌').fill('E2E 品牌');
   await page.getByLabel('商单标题').fill('月度推广合作');
-  await page.getByLabel('合作类型').selectOption('paid');
+  // 下拉框为自定义组件：先打开触发器，再点选列表项
+  await page.getByLabel('合作类型').click();
+  await page.getByRole('option', { name: '付费', exact: true }).click();
   await page.getByLabel('金额 (¥)').fill('3888');
   await page.getByLabel('发布平台').fill('小红书, 抖音');
   await page.getByRole('button', { name: '创建模板' }).click();
@@ -176,19 +179,21 @@ test('v1.4.0 商单模板、周期通知、旧数据兼容与核心页面', asyn
 
   await page.goto('/orders');
   await expect(page.getByText('旧版本商单')).toBeVisible();
-  await expect(page.getByText('暂无模板，点击创建第一个常用商单模板')).toBeVisible();
-  expect(await api<unknown[]>(page, '/api/order-templates')).toEqual([]);
-  await page.getByRole('button', { name: /暂无模板/ }).click();
+  // 新语义：备份中缺失的集合（如商单模板）不再被当作空集合清空，原有模板应保留
+  const templatesAfterLegacyImport = await api<unknown[]>(page, '/api/order-templates');
+  expect(templatesAfterLegacyImport.length).toBeGreaterThan(0);
+  await page.getByRole('button', { name: '新建模板' }).click();
   await page.getByLabel('模板名称').fill('兼容后新模板');
   await page.getByLabel('商单标题').fill('兼容验证商单');
   await page.getByRole('button', { name: '创建模板' }).click();
   await expect(page.getByRole('heading', { name: '兼容后新模板' })).toBeVisible();
   const exported = await api<{ backupVersion: number; orderTemplates: unknown[] }>(page, '/api/data/export');
-  expect(exported.backupVersion).toBe(3);
-  expect(exported.orderTemplates).toHaveLength(1);
+  expect(exported.backupVersion).toBe(4);
+  expect(exported.orderTemplates.length).toBe(templatesAfterLegacyImport.length + 1);
 
   await page.getByRole('button', { name: '删除模板“兼容后新模板”' }).click();
   await page.getByRole('button', { name: '删除模板', exact: true }).click();
   await expect(page.getByText('旧版本商单')).toBeVisible();
   expect(pageErrors).toEqual([]);
+  expect(cspViolations, `CSP 违规: ${cspViolations.join(' | ')}`).toEqual([]);
 });

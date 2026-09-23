@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import Select from '../components/common/Select';
 import { useStore } from '../store/useStore';
 import {
   CheckCircle2,
@@ -20,32 +21,39 @@ import { clsx } from 'clsx';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
+import { useFormSessionGuard } from '../hooks/useFormSessionGuard';
+import { usePageLoad } from '../hooks/usePageLoad';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays, parseISO } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { Todo } from '../types';
 
-const PRIORITIES = [
+type TodoPriority = 'low' | 'medium' | 'high';
+type TodoStatusFilter = 'all' | 'active' | 'completed';
+
+const PRIORITIES: Array<{ id: TodoPriority; label: string; color: string; bg: string }> = [
   { id: 'low', label: '低', color: 'text-info', bg: 'bg-info/10' },
   { id: 'medium', label: '中', color: 'text-warning', bg: 'bg-warning/10' },
   { id: 'high', label: '高', color: 'text-danger', bg: 'bg-danger/10' },
 ];
 
 export default function Todos() {
-  const { todos, toggleTodo, addTodo, deleteTodo, brands, fetchBrands, orders } = useStore();
+  const { todos, toggleTodo, addTodo, deleteTodo, brands, fetchBrands, fetchTodos, fetchOrders, orders } = useStore();
   const { showToast } = useToast();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
 
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>(() => {
     return tabParam === 'list' ? 'list' : 'calendar';
   });
-  const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const [filter, setFilter] = useState<TodoStatusFilter>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { invalidateFormSession, captureFormSession, isFormSessionCurrent } = useFormSessionGuard();
 
   // 删除确认弹窗状态
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; todo: Todo | null }>({
@@ -55,15 +63,16 @@ export default function Todos() {
 
   const [formData, setFormData] = useState({
     content: '',
-    priority: 'medium' as 'low' | 'medium' | 'high',
+    priority: 'medium' as TodoPriority,
     category: '',
     brandId: '',
     dueDate: format(new Date(), 'yyyy-MM-dd')
   });
 
-  useEffect(() => {
-    fetchBrands();
-  }, [fetchBrands]);
+  const { state: loadState, retry: retryLoad } = usePageLoad(useCallback(
+    () => Promise.all([fetchBrands(), fetchTodos(), fetchOrders()]),
+    [fetchBrands, fetchTodos, fetchOrders],
+  ));
 
   const filteredTodos = useMemo(() => {
     return todos.filter(todo => {
@@ -82,26 +91,51 @@ export default function Todos() {
     return brands.map(b => b.name);
   }, [brands]);
 
+  const resetForm = () => setFormData({
+    content: '',
+    priority: 'medium',
+    category: '',
+    brandId: '',
+    dueDate: format(new Date(), 'yyyy-MM-dd')
+  });
+
+  // 关闭弹窗（取消/遮罩）：作废当前表单会话，使在途保存不会再改动弹窗状态
+  const closeModal = () => {
+    invalidateFormSession();
+    setIsModalOpen(false);
+    resetForm();
+  };
+
+  // 快捷键/深链：?new=1 直接打开新建待办表单
+  useEffect(() => {
+    if (searchParams.get('new')) {
+      invalidateFormSession();
+      setIsModalOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete('new');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams, invalidateFormSession]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    // 记录发起保存时的表单：返回后若弹窗已被关闭/换成另一张表单，不再改动弹窗状态
+    const formSession = captureFormSession();
+    setIsSubmitting(true);
     try {
       await addTodo(formData);
-      showToast('任务已创建');
+      if (!isFormSessionCurrent(formSession)) return;
       setIsModalOpen(false);
-      setFormData({
-        content: '',
-        priority: 'medium',
-        category: '',
-        brandId: '',
-        dueDate: format(new Date(), 'yyyy-MM-dd')
-      });
+      resetForm();
     } catch (error) {
       showToast(error instanceof Error ? error.message : '创建失败', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleBrandChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const brandId = e.target.value;
+  const handleBrandChange = (brandId: string) => {
     const brand = brands.find(b => b.id === brandId);
     setFormData({
       ...formData,
@@ -165,8 +199,8 @@ export default function Todos() {
       days.push(
         <div
           className={clsx(
-            "min-h-[100px] border-2 border-panda-black/10 p-2 flex flex-col gap-1 transition-all group relative bg-white",
-            !isCurrentMonth ? "bg-gray-50/50 text-gray-400" : "bg-white",
+            "min-h-[100px] border-2 border-panda-black/10 p-2 flex flex-col gap-1 transition-all group relative bg-panda-white",
+            isCurrentMonth ? "bg-panda-white" : "bg-gray-50/50 text-gray-600",
             isSameDay(date, new Date()) ? "border-panda-black bg-panda-black/5" : ""
           )}
           key={date.toString()}
@@ -174,16 +208,18 @@ export default function Todos() {
           <div className="flex justify-between items-center mb-1">
             <span className={clsx(
               "text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full transition-colors",
-              isSameDay(date, new Date()) ? "bg-panda-black text-white" : "text-panda-black"
+              isSameDay(date, new Date()) ? "bg-panda-black text-panda-white" : "text-panda-black"
             )}>
               {formattedDate}
             </span>
             <button
               onClick={() => {
+                invalidateFormSession();
                 setFormData({ ...formData, dueDate: format(date, 'yyyy-MM-dd') });
                 setIsModalOpen(true);
               }}
-              className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-100 rounded-md transition-all text-gray-400 hover:text-panda-black"
+              aria-label={`在 ${formattedDate} 日新建任务`}
+              className="max-md:opacity-100 opacity-0 group-hover:opacity-100 hover-visible p-1 hover:bg-panda-black/10 rounded-md transition-all text-gray-600 hover:text-panda-black"
             >
               <Plus size={14} />
             </button>
@@ -213,9 +249,10 @@ export default function Todos() {
               <div
                 key={todo.id}
                 onClick={() => toggleTodo(todo.id)}
+                title={todo.content}
                 className={clsx(
                   "text-[10px] p-1 rounded cursor-pointer truncate transition-all border-l-2 flex items-center gap-1",
-                  todo.completed ? "bg-gray-100 text-gray-400 line-through border-gray-300" :
+                  todo.completed ? "bg-gray-100 text-gray-600 line-through border-gray-300" :
                   todo.priority === 'high' ? "bg-danger/5 text-danger border-danger" :
                   todo.priority === 'medium' ? "bg-warning/5 text-warning border-warning" :
                   "bg-info/5 text-info border-info"
@@ -230,7 +267,7 @@ export default function Todos() {
                   setSelectedDate(date);
                   setIsSummaryModalOpen(true);
                 }}
-                className="text-[10px] text-gray-400 hover:text-panda-black font-medium w-full text-left px-1"
+                className="text-[10px] text-gray-500 hover:text-panda-black font-medium w-full text-left px-1"
               >
                 还有 {dayTodos.length + dayOrders.length - 3} 项...
               </button>
@@ -250,7 +287,10 @@ export default function Todos() {
     });
 
     return <div className="border-2 border-panda-black/20 rounded-2xl overflow-hidden">{rows}</div>;
-  }, [calendarData, toggleTodo, formData, setFormData]);
+  }, [calendarData, toggleTodo, formData, invalidateFormSession]);
+
+  if (loadState === 'loading') return <div role="status" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">任务与日程</h1>正在加载待办…</div>;
+  if (loadState === 'error') return <div role="alert" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">任务与日程</h1>待办数据加载失败，请检查连接后重试。<button type="button" className="ml-3 underline" onClick={() => void retryLoad()}>重试</button></div>;
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-6xl mx-auto pb-10">
@@ -260,21 +300,25 @@ export default function Todos() {
           <p className="text-gray-500 text-xs mt-1">管理你的日常任务和商单进度</p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex bg-gray-100 p-1 rounded-xl border-2 border-panda-black/10">
+          <div className="segment-group">
             <button
               onClick={() => setViewMode('calendar')}
-              className={clsx("p-1.5 px-3 rounded-lg transition-all flex items-center gap-2 text-sm font-medium", viewMode === 'calendar' ? "bg-panda-black text-white" : "text-gray-500 hover:text-panda-black")}
+              type="button"
+              aria-pressed={viewMode === 'calendar'}
+              className="segment p-1.5 px-3 text-sm"
             >
               <CalendarIcon size={16} /> 日历
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={clsx("p-1.5 px-3 rounded-lg transition-all flex items-center gap-2 text-sm font-medium", viewMode === 'list' ? "bg-panda-black text-white" : "text-gray-500 hover:text-panda-black")}
+              type="button"
+              aria-pressed={viewMode === 'list'}
+              className="segment p-1.5 px-3 text-sm"
             >
               <ListIcon size={16} /> 列表
             </button>
           </div>
-          <button onClick={() => setIsModalOpen(true)} className="btn-sketch flex items-center gap-2 text-sm">
+          <button onClick={() => { invalidateFormSession(); setIsModalOpen(true); }} className="btn-sketch flex items-center gap-2 text-sm">
             <Plus size={16} />
             <span>新建任务</span>
           </button>
@@ -303,23 +347,23 @@ export default function Todos() {
           <div className="lg:col-span-1 space-y-6">
             <div className="card-sketch p-5 space-y-5">
               <div>
-                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3">状态过滤</h3>
+                <h3 className="text-sm font-bold text-gray-600 uppercase tracking-wider mb-3">状态过滤</h3>
                 <div className="space-y-1">
-                  {[
+                  {([
                     { id: 'all', label: '全部任务', count: todos.length },
                     { id: 'active', label: '进行中', count: todos.filter(t => !t.completed).length },
                     { id: 'completed', label: '已完成', count: todos.filter(t => t.completed).length },
-                  ].map(item => (
+                  ] satisfies Array<{ id: TodoStatusFilter; label: string; count: number }>).map(item => (
                     <button
                       key={item.id}
-                      onClick={() => setFilter(item.id as any)}
+                      onClick={() => setFilter(item.id)}
                       className={clsx(
                         "w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all",
-                        filter === item.id ? "bg-panda-black text-white" : "text-gray-600 hover:bg-gray-100"
+                        filter === item.id ? "bg-panda-black text-panda-white" : "text-gray-600 hover:bg-panda-black/10"
                       )}
                     >
                       <span>{item.label}</span>
-                      <span className={clsx("px-2 py-0.5 rounded-full text-[10px]", filter === item.id ? "bg-white/20" : "bg-gray-100")}>
+                      <span className={clsx("px-2 py-0.5 rounded-full text-[10px]", filter === item.id ? "bg-panda-white/20" : "bg-gray-100")}>
                         {item.count}
                       </span>
                     </button>
@@ -328,13 +372,13 @@ export default function Todos() {
               </div>
 
               <div>
-                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3">品牌分类</h3>
+                <h3 className="text-sm font-bold text-gray-600 uppercase tracking-wider mb-3">品牌分类</h3>
                 <div className="space-y-1">
                   <button
                     onClick={() => setCategoryFilter('all')}
                     className={clsx(
                       "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all",
-                      categoryFilter === 'all' ? "bg-panda-black text-white" : "text-gray-600 hover:bg-gray-100"
+                      categoryFilter === 'all' ? "bg-panda-black text-panda-white" : "text-gray-600 hover:bg-panda-black/10"
                     )}
                   >
                     <Filter size={16} />
@@ -346,10 +390,10 @@ export default function Todos() {
                       onClick={() => setCategoryFilter(cat)}
                       className={clsx(
                         "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all",
-                        categoryFilter === cat ? "bg-panda-black text-white" : "text-gray-600 hover:bg-gray-100"
+                        categoryFilter === cat ? "bg-panda-black text-panda-white" : "text-gray-600 hover:bg-panda-black/10"
                       )}
                     >
-                      <Building2 size={16} className={categoryFilter === cat ? "text-white" : "text-gray-400"} />
+                      <Building2 size={16} className={categoryFilter === cat ? "text-panda-white" : "text-gray-600"} />
                       <span className="truncate">{cat}</span>
                     </button>
                   ))}
@@ -360,11 +404,12 @@ export default function Todos() {
 
           {/* Main List */}
           <div className="lg:col-span-3 space-y-4">
-            <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border-2 border-panda-black/10">
+            <div className="flex items-center gap-3 bg-panda-white p-2 rounded-2xl border-2 border-panda-black/10">
               <div className="flex-1 flex items-center gap-2 px-3">
-                <Search size={18} className="text-gray-400" />
+                <Search size={18} className="text-gray-500" />
                 <input
                   type="text"
+                  aria-label="搜索任务"
                   placeholder="搜索任务..."
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
@@ -382,14 +427,15 @@ export default function Todos() {
                     key={todo.id}
                     className={clsx(
                       "flex items-center gap-4 p-4 rounded-2xl border-2 transition-all group",
-                      todo.completed ? "bg-gray-50 border-transparent opacity-60" : "bg-white border-panda-black/10 hover:border-panda-black/30"
+                      todo.completed ? "bg-gray-50 border-transparent opacity-60" : "bg-panda-white border-panda-black/10 hover:border-panda-black/30"
                     )}
                   >
                     <button
                       onClick={() => toggleTodo(todo.id)}
+                      aria-label={todo.completed ? `标记未完成 ${todo.content}` : `标记完成 ${todo.content}`}
                       className={clsx(
                         "w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0 transition-all",
-                        todo.completed ? "bg-panda-black border-panda-black text-white" : "border-gray-300 text-transparent hover:border-panda-black"
+                        todo.completed ? "bg-panda-black border-panda-black text-panda-white" : "border-gray-300 text-transparent hover:border-panda-black"
                       )}
                     >
                       <CheckCircle2 size={16} />
@@ -399,7 +445,7 @@ export default function Todos() {
                       <div className="flex items-center gap-2">
                         <p className={clsx(
                           "font-semibold transition-all text-sm truncate",
-                          todo.completed ? "line-through text-gray-400" : "text-panda-black"
+                          todo.completed ? "line-through text-gray-600" : "text-panda-black"
                         )}>
                           {todo.content}
                         </p>
@@ -417,14 +463,18 @@ export default function Todos() {
                         )}>
                           {priority.label}
                         </span>
-                        <span className="text-xs text-gray-400 flex items-center gap-1 font-medium">
+                        <span className="text-xs text-gray-500 flex items-center gap-1 font-medium">
                           <Clock size={14} />
                           {todo.dueDate || '无截止日期'}
                         </span>
                       </div>
                     </div>
 
-                    <button onClick={() => handleDeleteTodo(todo)} className="p-2 text-gray-400 hover:text-danger hover:bg-danger/10 rounded-xl transition-all opacity-0 group-hover:opacity-100">
+                    <button
+                      onClick={() => handleDeleteTodo(todo)}
+                      aria-label={`删除任务 ${todo.content}`}
+                      className="p-2 text-gray-600 hover:text-danger hover:bg-danger/10 rounded-xl transition-all max-md:opacity-100 opacity-0 group-hover:opacity-100 hover-visible"
+                    >
                       <Trash2 size={18} />
                     </button>
                   </div>
@@ -432,32 +482,32 @@ export default function Todos() {
               })}
 
               {filteredTodos.length === 0 && (
-                <div className="py-20 flex flex-col items-center justify-center text-gray-400 card-sketch">
+                <div className="py-20 flex flex-col items-center justify-center text-gray-600 card-sketch">
                   <div className="w-16 h-16 border-2 border-dashed border-gray-300 rounded-full flex items-center justify-center mb-4">
                     <AlertCircle size={32} className="text-gray-300" />
                   </div>
                   <h3 className="text-sm font-bold text-gray-600">未找到任务</h3>
-                  <p className="text-xs text-gray-400">尝试调整过滤条件或搜索关键词</p>
+                  <p className="text-xs text-gray-500">尝试调整过滤条件或搜索关键词</p>
                 </div>
               )}
             </div>
           </div>
         </div>
       ) : (
-        <div className="card-sketch p-6 bg-white">
+        <div className="card-sketch p-6 bg-panda-white">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-4">
               <h2 className="text-lg font-bold text-panda-black">
                 {format(currentMonth, 'yyyy年 MM月', { locale: zhCN })}
               </h2>
-              <div className="flex gap-1 bg-gray-100 p-1 rounded-xl border-2 border-panda-black/10">
-                <button onClick={prevMonth} className="p-1.5 hover:bg-white hover:shadow-sm rounded-lg transition-all text-gray-600">
-                  <ChevronLeft size={18} />
+              <div className="segment-group gap-1">
+                <button type="button" aria-label="上个月" onClick={prevMonth} className="p-1.5 hover:bg-panda-black/10 rounded-lg transition-all text-gray-600">
+                  <ChevronLeft size={18} aria-hidden="true" />
                 </button>
-                <button onClick={() => setCurrentMonth(new Date())} className="px-3 py-1 text-xs font-bold hover:bg-white hover:shadow-sm rounded-lg transition-all text-gray-600">
+                <button onClick={() => setCurrentMonth(new Date())} className="px-3 py-1 text-xs font-bold hover:bg-panda-black/10 rounded-lg transition-all text-gray-600">
                   今天
                 </button>
-                <button onClick={nextMonth} className="p-1.5 hover:bg-white hover:shadow-sm rounded-lg transition-all text-gray-600">
+                <button type="button" aria-label="下个月" onClick={nextMonth} className="p-1.5 hover:bg-panda-black/10 rounded-lg transition-all text-gray-600">
                   <ChevronRight size={18} />
                 </button>
               </div>
@@ -466,7 +516,7 @@ export default function Todos() {
 
           <div className="grid grid-cols-7 mb-2">
             {['一', '二', '三', '四', '五', '六', '日'].map(day => (
-              <div key={day} className="text-center text-xs font-bold text-gray-400 py-2 uppercase tracking-widest">
+              <div key={day} className="text-center text-xs font-bold text-gray-600 py-2 uppercase tracking-widest">
                 周{day}
               </div>
             ))}
@@ -477,49 +527,53 @@ export default function Todos() {
       )}
 
       {/* Create Modal */}
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="新建任务">
+      <Modal isOpen={isModalOpen} onClose={closeModal} title="新建任务">
         <form onSubmit={handleSubmit} className="space-y-5 p-1">
           <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">任务内容</label>
+            <label htmlFor="todo-content" className="block text-sm font-bold text-gray-700 mb-2">任务内容</label>
             <textarea
+              id="todo-content"
               required
               rows={3}
               value={formData.content}
               onChange={e => setFormData({...formData, content: e.target.value})}
               placeholder="输入任务描述..."
-              className="input-sketch resize-none"
+              className="w-full form-control resize-none"
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">关联品牌 (分类)</label>
+              <label htmlFor="todo-brand" className="block text-sm font-bold text-gray-700 mb-2">关联品牌 (分类)</label>
               <div className="relative">
-                <Building2 size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <select
+                <Building2 size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none" />
+                <Select
+                  id="todo-brand"
                   value={formData.brandId}
                   onChange={handleBrandChange}
-                  className="input-sketch pl-10"
-                >
-                  <option value="">不关联品牌 (个人任务)</option>
-                  {brands.map(brand => (
-                    <option key={brand.id} value={brand.id}>{brand.name}</option>
-                  ))}
-                </select>
+                  className="w-full pl-10"
+                  aria-label="关联品牌"
+                  options={[
+                    { value: '', label: '不关联品牌 (个人任务)' },
+                    ...brands.map(brand => ({ value: brand.id, label: brand.name })),
+                  ]}
+                />
               </div>
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">优先级</label>
-                <div className="flex gap-2">
+                <span id="todo-priority-label" className="block text-sm font-bold text-gray-700 mb-2">优先级</span>
+                <div role="group" aria-labelledby="todo-priority-label" className="flex gap-2">
                   {PRIORITIES.map(p => (
                     <button
                       key={p.id}
                       type="button"
-                      onClick={() => setFormData({...formData, priority: p.id as any})}
+                      onClick={() => setFormData({...formData, priority: p.id})}
                       className={clsx(
-                        "flex-1 py-2 rounded-xl border-2 text-xs font-bold transition-all",
-                        formData.priority === p.id ? "border-panda-black bg-panda-black text-white" : "border-panda-black/20 hover:border-panda-black/40"
+                        "flex-1 py-2 rounded-lg border-2 text-xs font-bold transition-all",
+                        formData.priority === p.id
+                          ? "border-panda-black bg-panda-black text-panda-white shadow-[2px_2px_0_0_var(--shadow-hard-soft)]"
+                          : "border-panda-black/20 hover:border-panda-black/50 hover:-translate-y-px"
                       )}
                     >
                       {p.label}
@@ -528,20 +582,21 @@ export default function Todos() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">截止日期</label>
+                <label htmlFor="todo-dueDate" className="block text-sm font-bold text-gray-700 mb-2">截止日期</label>
                 <input
+                  id="todo-dueDate"
                   type="date"
                   value={formData.dueDate}
                   onChange={e => setFormData({...formData, dueDate: e.target.value})}
-                  className="input-sketch"
+                  className="w-full form-control"
                 />
               </div>
             </div>
           </div>
 
           <div className="pt-4 flex justify-end gap-3">
-            <button type="button" onClick={() => setIsModalOpen(false)} className="btn-secondary px-6 py-2.5">取消</button>
-            <button type="submit" className="btn-sketch px-8 py-2.5">保存任务</button>
+            <button type="button" onClick={closeModal} className="btn-secondary px-6 py-2.5">取消</button>
+            <button type="submit" disabled={isSubmitting} className="btn-sketch px-8 py-2.5 disabled:opacity-50">{isSubmitting ? '保存中...' : '保存任务'}</button>
           </div>
         </form>
       </Modal>
@@ -581,7 +636,7 @@ export default function Todos() {
                         )}>
                           {isAccept ? '接单日期' : '交稿日期'}
                         </span>
-                        <span className="text-[10px] text-gray-400">{order.brandName}</span>
+                        <span className="text-[10px] text-gray-500">{order.brandName}</span>
                       </div>
                     </div>
                   </div>
@@ -597,14 +652,14 @@ export default function Todos() {
                     key={todo.id}
                     className={clsx(
                       "flex items-center gap-3 p-4 rounded-2xl border-2 transition-all",
-                      todo.completed ? "bg-gray-50 border-transparent opacity-60" : "bg-white border-panda-black/10"
+                      todo.completed ? "bg-gray-50 border-transparent opacity-60" : "bg-panda-white border-panda-black/10"
                     )}
                   >
                     <button
                       onClick={() => toggleTodo(todo.id)}
                       className={clsx(
                         "w-5 h-5 rounded-lg border-2 flex items-center justify-center flex-shrink-0 transition-all",
-                        todo.completed ? "bg-panda-black border-panda-black text-white" : "border-gray-300 text-transparent hover:border-panda-black"
+                        todo.completed ? "bg-panda-black border-panda-black text-panda-white" : "border-gray-300 text-transparent hover:border-panda-black"
                       )}
                     >
                       <CheckCircle2 size={14} />
@@ -643,7 +698,7 @@ export default function Todos() {
               const submitDate = order.submitDate ? parseISO(order.submitDate) : null;
               return (acceptDate && isSameDay(acceptDate, selectedDate)) || (submitDate && isSameDay(submitDate, selectedDate));
             }).length === 0 && (
-            <div className="py-12 flex flex-col items-center justify-center text-gray-400">
+            <div className="py-12 flex flex-col items-center justify-center text-gray-600">
               <div className="w-16 h-16 border-2 border-dashed border-gray-300 rounded-full flex items-center justify-center mb-3">
                 <AlertCircle size={32} className="text-gray-300" />
               </div>

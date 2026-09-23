@@ -2,11 +2,14 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useStore, Asset } from '../store/useStore';
 import { Search, Trash2, Upload, Pencil, X, Check, Package, Plus } from 'lucide-react';
 import { clsx } from 'clsx';
+import Select from '../components/common/Select';
+import { sumMoney } from '../lib/money';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
 import { ALL_MONTHS, ALL_YEARS, getAvailableYears, matchesYearMonth, monthOptions } from '../lib/dateFilter';
 import { authFetch } from '../lib/api';
+import { useProgressiveList } from '../hooks/useProgressiveList';
 
 const getAssetFilterDate = (asset: Asset): string => asset.createdAt || asset.soldDate || '';
 const assetImageCache = new Map<string, string>();
@@ -138,9 +141,18 @@ function AssetThumbnail({ asset, onClick }: { asset: Asset; onClick: () => void 
       className={clsx(
         "w-20 h-20 rounded-xl flex-shrink-0 flex items-center justify-center overflow-hidden border-2",
         hasImage
-          ? "border-transparent cursor-pointer bg-gray-100"
+          ? "border-transparent cursor-pointer bg-bg-tertiary"
           : "border-dashed border-gray-200 hover:border-panda-black/30 cursor-pointer"
       )}
+      role="button"
+      tabIndex={0}
+      aria-label={hasImage ? `查看资产图片: ${asset.productName}` : `上传资产图片: ${asset.productName}`}
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       onClick={onClick}
     >
       {imageSource ? (
@@ -154,7 +166,7 @@ function AssetThumbnail({ asset, onClick }: { asset: Asset; onClick: () => void 
       ) : hasImage ? (
         <div className="w-full h-full animate-pulse bg-gray-200" aria-label="图片加载中" />
       ) : (
-        <div className="flex flex-col items-center text-gray-400">
+        <div className="flex flex-col items-center text-gray-600">
           <Upload size={16} />
           <span className="text-[9px] mt-0.5">上传图片</span>
         </div>
@@ -345,12 +357,16 @@ export default function Assets() {
     }
   };
 
-  const totalValue = filteredAssets.reduce((sum, a) => {
-    if (a.saleStatus === 'sold') {
-      return sum + (a.soldAmount || 0);
-    }
-    return sum + a.productValue;
-  }, 0);
+  // 按分累加：已售出取成交价，其余取估值
+  const totalValue = sumMoney(filteredAssets, a => (a.saleStatus === 'sold' ? (a.soldAmount || 0) : a.productValue));
+
+  // 渐进渲染：数据全量加载（统计需要），但列表只渲染前若干条
+  const assetsView = useProgressiveList(
+    filteredAssets,
+    undefined,
+    `${searchTerm}|${brandFilter}|${yearFilter}|${monthFilter}`,
+  );
+
 
   return (
     <div className="space-y-4">
@@ -374,64 +390,55 @@ export default function Assets() {
         </div>
       </div>
 
-      <div className="card-sketch p-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-white">
+      <div className="card-sketch p-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-panda-white">
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-1">
           <div className="relative flex-1 max-w-xs">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
             <input
               type="text"
-              placeholder="搜索产品名称、品牌、商单号"
+              aria-label="搜索资产" placeholder="搜索产品名称、品牌、商单号"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 bg-gray-50 border-2 border-panda-black/10 focus:border-panda-black focus:bg-white rounded-lg outline-none transition-all text-xs"
+              className="w-full form-control form-control-sm pl-8"
             />
           </div>
           <div className="flex items-center gap-2">
-            <select
+            <Select
               value={brandFilter}
-              onChange={e => setBrandFilter(e.target.value)}
-              className="h-8 bg-gray-50 border-2 border-panda-black/10 focus:border-panda-black focus:bg-white rounded-lg px-2 text-xs outline-none transition-all"
-              title="按品牌筛选"
-            >
-              <option value="all">全部品牌</option>
-              {brandOptions.map(brand => (
-                <option key={brand} value={brand}>{brand}</option>
-              ))}
-            </select>
-            <select
+              onChange={setBrandFilter}
+              size="sm"
+              className="w-32 flex-shrink-0"
+              aria-label="按品牌筛选"
+              options={[{ value: 'all', label: '全部品牌' }, ...brandOptions.map(brand => ({ value: brand, label: brand }))]}
+            />
+            <Select
               value={yearFilter}
-              onChange={e => setYearFilter(e.target.value)}
-              className="h-8 bg-gray-50 border-2 border-panda-black/10 focus:border-panda-black focus:bg-white rounded-lg px-2 text-xs outline-none transition-all"
-              title="按资产创建年份筛选"
-            >
-              <option value={ALL_YEARS}>全部年份</option>
-              {availableYears.map(year => (
-                <option key={year} value={year}>{year}年</option>
-              ))}
-            </select>
-            <select
+              onChange={setYearFilter}
+              size="sm"
+              className="w-28 flex-shrink-0"
+              aria-label="按资产创建年份筛选"
+              options={[{ value: ALL_YEARS, label: '全部年份' }, ...availableYears.map(year => ({ value: year, label: `${year}年` }))]}
+            />
+            <Select
               value={monthFilter}
-              onChange={e => setMonthFilter(e.target.value)}
-              className="h-8 bg-gray-50 border-2 border-panda-black/10 focus:border-panda-black focus:bg-white rounded-lg px-2 text-xs outline-none transition-all"
-              title="按资产创建月份筛选"
-            >
-              <option value={ALL_MONTHS}>全年</option>
-              {monthOptions.map(option => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
+              onChange={setMonthFilter}
+              size="sm"
+              className="w-24 flex-shrink-0"
+              aria-label="按资产创建月份筛选"
+              options={[{ value: ALL_MONTHS, label: '全年' }, ...monthOptions.map(option => ({ value: option.value, label: option.label }))]}
+            />
           </div>
         </div>
-        <span className="text-xs text-gray-400">{filteredAssets.length} 件资产</span>
+        <span className="text-xs text-gray-500">{filteredAssets.length} 件资产</span>
       </div>
 
       {loading ? (
-        <div className="py-16 flex flex-col items-center justify-center text-gray-400">
+        <div className="py-16 flex flex-col items-center justify-center text-gray-600">
           <div className="w-8 h-8 border-2 border-gray-300 border-t-panda-black rounded-full animate-spin mb-3" />
           <p className="text-sm">正在加载资产数据...</p>
         </div>
       ) : error ? (
-        <div className="py-16 flex flex-col items-center justify-center text-gray-400 card-pixel p-8">
+        <div className="py-16 flex flex-col items-center justify-center text-gray-600 card-pixel p-8">
           <div className="w-16 h-16 border-2 border-red-200 rounded-full flex items-center justify-center mb-3 bg-red-50">
             <Package size={28} className="text-red-400" />
           </div>
@@ -444,7 +451,7 @@ export default function Assets() {
           </button>
         </div>
       ) : filteredAssets.length === 0 ? (
-        <div className="py-16 flex flex-col items-center justify-center text-gray-400 card-pixel p-8">
+        <div className="py-16 flex flex-col items-center justify-center text-gray-600 card-pixel p-8">
           <div className="w-16 h-16 border-2 border-dashed border-gray-300 rounded-full flex items-center justify-center mb-3">
             <Package size={28} />
           </div>
@@ -453,10 +460,10 @@ export default function Assets() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filteredAssets.map(asset => (
+          {assetsView.visibleItems.map(asset => (
             <div
               key={asset.id}
-              className="card-pixel p-4 bg-white rounded-2xl border-2 border-gray-100 hover:border-panda-black/20 hover:shadow-lg transition-all duration-300"
+              className="card-pixel p-4 bg-panda-white rounded-2xl border-2 border-gray-100 hover:border-panda-black/20 transition-all duration-300"
             >
               <div className="flex items-start gap-3">
                 {isEcard(asset) ? (
@@ -476,35 +483,35 @@ export default function Assets() {
                           type="text"
                           value={editForm.productName}
                           onChange={e => setEditForm({ ...editForm, productName: e.target.value })}
-                          className="w-full px-2 py-1 text-sm border border-border rounded-lg outline-none focus:border-accent"
+                          className="w-full form-control form-control-xs"
                         />
                       )}
                       <input
                         type="number"
                         value={editForm.productValue}
                         onChange={e => setEditForm({ ...editForm, productValue: e.target.value })}
-                        className="w-full px-2 py-1 text-sm border border-border rounded-lg outline-none focus:border-accent"
+                        className="w-full form-control form-control-xs"
                       />
-                      <select
+                      <Select
                         value={editForm.saleStatus}
-                        onChange={e => setEditForm({ ...editForm, saleStatus: e.target.value as 'keep' | 'sold' })}
-                        className="w-full px-2 py-1 text-sm border border-border rounded-lg outline-none focus:border-accent"
-                      >
-                        <option value="keep">自留</option>
-                        <option value="sold">已出</option>
-                      </select>
+                        onChange={value => setEditForm({ ...editForm, saleStatus: value as 'keep' | 'sold' })}
+                        size="xs"
+                        className="w-full"
+                        aria-label="资产状态"
+                        options={[{ value: 'keep', label: '自留' }, { value: 'sold', label: '已出' }]}
+                      />
                       {editForm.saleStatus === 'sold' && (
                         <input
                           type="number"
                           value={editForm.soldAmount}
                           onChange={e => setEditForm({ ...editForm, soldAmount: e.target.value })}
                           placeholder="已出金额"
-                          className="w-full px-2 py-1 text-sm border border-border rounded-lg outline-none focus:border-accent"
+                          className="w-full form-control form-control-xs"
                         />
                       )}
                       <div className="flex gap-1">
                         <button onClick={handleSaveEdit} className="p-1 text-success hover:bg-green-50 rounded"><Check size={14} /></button>
-                        <button onClick={() => setEditingAsset(null)} className="p-1 text-gray-400 hover:bg-gray-50 rounded"><X size={14} /></button>
+                        <button onClick={() => setEditingAsset(null)} className="p-1 text-gray-600 hover:bg-panda-black/5 rounded"><X size={14} /></button>
                       </div>
                     </div>
                   ) : (
@@ -516,7 +523,7 @@ export default function Assets() {
                         )}
                       </h3>
                       <p className="text-xs text-gray-500 mt-0.5">{asset.brandName || '未知品牌'}</p>
-                      <p className="text-xs text-gray-400 font-mono mt-0.5">{asset.orderNo}</p>
+                      <p className="text-xs text-gray-500 font-mono mt-0.5">{asset.orderNo}</p>
                       <div className="flex items-center gap-2 mt-1">
                         <p className="text-sm font-bold text-success">¥{asset.productValue.toLocaleString()}</p>
                         <span className={clsx(
@@ -533,14 +540,14 @@ export default function Assets() {
               <div className="flex items-center justify-end gap-1 mt-3 pt-2 border-t border-gray-100">
                 <button
                   onClick={() => handleEdit(asset)}
-                  className="p-1.5 text-gray-400 hover:text-panda-black hover:bg-gray-100 rounded-lg transition-colors"
+                  className="p-1.5 text-gray-600 hover:text-panda-black hover:bg-panda-black/10 rounded-lg transition-colors"
                   title="编辑"
                 >
                   <Pencil size={14} />
                 </button>
                 <button
                   onClick={() => setDeleteConfirm({ isOpen: true, asset })}
-                  className="p-1.5 text-gray-400 hover:text-danger hover:bg-red-50 rounded-lg transition-colors"
+                  className="p-1.5 text-gray-600 hover:text-danger hover:bg-red-50 rounded-lg transition-colors"
                   title="删除"
                 >
                   <Trash2 size={14} />
@@ -548,6 +555,19 @@ export default function Assets() {
               </div>
             </div>
           ))}
+
+          {assetsView.windowed && (
+              <div className="flex flex-col items-center gap-1 py-4">
+                {assetsView.hasMore && (
+                  <button type="button" onClick={assetsView.loadMore} className="btn-secondary text-sm">
+                    加载更多
+                  </button>
+                )}
+                <span className="text-xs text-gray-500">
+                  已显示 {assetsView.visibleCount} / {assetsView.total} 条
+                </span>
+              </div>
+            )}
         </div>
       )}
 
@@ -555,86 +575,89 @@ export default function Assets() {
         <form onSubmit={handleCreateAsset} className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">资产名称</label>
+              <label htmlFor="asset-product-name" className="block text-xs font-medium text-gray-700 mb-1">资产名称</label>
               <input
+                id="asset-product-name"
                 required
                 type="text"
                 value={createForm.productName}
                 onChange={e => setCreateForm({ ...createForm, productName: e.target.value })}
-                className="input-sketch"
+                className="w-full form-control"
                 placeholder="产品名称、E卡等"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">品牌</label>
-              <select
+              <label htmlFor="asset-brand" className="block text-xs font-medium text-gray-700 mb-1">品牌</label>
+              <Select
+                id="asset-brand"
                 value={isCustomBrand ? MANUAL_BRAND_VALUE : createForm.brandName}
-                onChange={e => {
-                  if (e.target.value === MANUAL_BRAND_VALUE) {
+                onChange={value => {
+                  if (value === MANUAL_BRAND_VALUE) {
                     setIsCustomBrand(true);
                     setCreateForm({ ...createForm, brandName: '' });
                     return;
                   }
                   setIsCustomBrand(false);
-                  setCreateForm({ ...createForm, brandName: e.target.value });
+                  setCreateForm({ ...createForm, brandName: value });
                 }}
-                className="input-sketch"
-              >
-                <option value="">不关联品牌</option>
-                {brandOptions.map(brand => (
-                  <option key={brand} value={brand}>{brand}</option>
-                ))}
-                <option value={MANUAL_BRAND_VALUE}>手动输入品牌</option>
-              </select>
+                className="w-full"
+                options={[
+                  { value: '', label: '不关联品牌' },
+                  ...brandOptions.map(brand => ({ value: brand, label: brand })),
+                  { value: MANUAL_BRAND_VALUE, label: '手动输入品牌' },
+                ]}
+              />
             </div>
           </div>
           {isCustomBrand && (
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">品牌名称</label>
+              <label htmlFor="asset-custom-brand" className="block text-xs font-medium text-gray-700 mb-1">品牌名称</label>
               <input
+                id="asset-custom-brand"
                 type="text"
                 value={createForm.brandName}
                 onChange={e => setCreateForm({ ...createForm, brandName: e.target.value })}
-                className="input-sketch"
+                className="w-full form-control"
                 placeholder="输入品牌名称"
               />
             </div>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">资产价值 (¥)</label>
+              <label htmlFor="asset-product-value" className="block text-xs font-medium text-gray-700 mb-1">资产价值 (¥)</label>
               <input
+                id="asset-product-value"
                 type="number"
                 min="0"
                 step="0.01"
                 value={createForm.productValue}
                 onChange={e => setCreateForm({ ...createForm, productValue: e.target.value })}
-                className="input-sketch"
+                className="w-full form-control"
                 placeholder="0"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">状态</label>
-              <select
+              <label htmlFor="asset-sale-status" className="block text-xs font-medium text-gray-700 mb-1">状态</label>
+              <Select
+                id="asset-sale-status"
                 value={createForm.saleStatus}
-                onChange={e => setCreateForm({ ...createForm, saleStatus: e.target.value as 'keep' | 'sold' })}
-                className="input-sketch"
-              >
-                <option value="keep">自留</option>
-                <option value="sold">已出</option>
-              </select>
+                onChange={value => setCreateForm({ ...createForm, saleStatus: value as 'keep' | 'sold' })}
+                className="w-full"
+                options={[{ value: 'keep', label: '自留' }, { value: 'sold', label: '已出' }]}
+              />
             </div>
           </div>
           {createForm.saleStatus === 'sold' && (
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">已出金额 (¥)</label>
+              <label htmlFor="asset-sold-amount" className="block text-xs font-medium text-gray-700 mb-1">已出金额 (¥)</label>
               <input
+                id="asset-sold-amount"
                 type="number"
                 min="0"
                 step="0.01"
                 value={createForm.soldAmount}
                 onChange={e => setCreateForm({ ...createForm, soldAmount: e.target.value })}
-                className="input-sketch"
+                className="w-full form-control"
                 placeholder="实际售出金额"
               />
             </div>
@@ -663,9 +686,9 @@ export default function Assets() {
             className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-panda-black/30 transition-colors"
             onClick={() => fileInputRef.current?.click()}
           >
-            <Upload size={24} className="mx-auto text-gray-400 mb-2" />
+            <Upload size={24} className="mx-auto text-gray-600 mb-2" />
             <p className="text-sm text-gray-500">点击选择图片</p>
-            <p className="text-xs text-gray-400 mt-1">支持 JPG、PNG、WebP，最大 5MB；上传时自动压缩</p>
+            <p className="text-xs text-gray-500 mt-1">支持 JPG、PNG、WebP，最大 5MB；上传时自动压缩</p>
           </div>
           <input
             ref={fileInputRef}

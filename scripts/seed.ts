@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import type { TableInfoRow, UserRow } from '../src/server/dbRows.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
@@ -7,8 +8,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dbPath = path.join(__dirname, '..', 'database.sqlite');
 const db = new Database(dbPath);
 
-const assetColumns = db.prepare("PRAGMA table_info(assets)").all() as any[];
-const assetColumnNames = assetColumns.map((c: any) => c.name);
+const assetColumns = db.prepare("PRAGMA table_info(assets)").all() as TableInfoRow[];
+const assetColumnNames = assetColumns.map(c => c.name);
 if (!assetColumnNames.includes('saleStatus')) {
   db.exec("ALTER TABLE assets ADD COLUMN saleStatus TEXT DEFAULT 'keep';");
 }
@@ -19,9 +20,9 @@ if (!assetColumnNames.includes('soldDate')) {
   db.exec('ALTER TABLE assets ADD COLUMN soldDate TEXT;');
 }
 
-const TARGET_EMAIL = 'a676096193@gmail.com';
+const TARGET_EMAIL = 'seed@local.test';
 
-const user = db.prepare('SELECT * FROM users WHERE email = ?').get(TARGET_EMAIL) as any;
+const user = db.prepare('SELECT * FROM users WHERE email = ?').get(TARGET_EMAIL) as UserRow | undefined;
 if (!user) {
   console.error(`用户 ${TARGET_EMAIL} 不存在`);
   process.exit(1);

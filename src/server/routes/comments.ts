@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { logActivity, getUserId } from './utils/index.js';
+import type { CommentRow } from '../dbRows.js';
 
 const router = Router();
 
@@ -21,6 +22,12 @@ router.post('/', (req, res) => {
 
     if (!orderId || !content || content.trim().length === 0) {
       return res.status(400).json({ error: '评论内容不能为空' });
+    }
+
+    // 校验商单存在且属于当前用户，避免产生错误关联或孤立记录
+    const order = db.prepare('SELECT id FROM orders WHERE id = ? AND userId = ?').get(orderId, userId);
+    if (!order) {
+      return res.status(404).json({ error: '关联商单不存在' });
     }
 
     const id = uuidv4();
@@ -44,7 +51,7 @@ router.delete('/:id', (req, res) => {
   const userId = getUserId(req);
   const { id } = req.params;
 
-  const comment = db.prepare('SELECT * FROM comments WHERE id = ? AND userId = ?').get(id, userId) as any;
+  const comment = db.prepare('SELECT * FROM comments WHERE id = ? AND userId = ?').get(id, userId) as CommentRow | undefined;
   if (comment) {
     logActivity(userId, 'delete', 'comment', id, `删除评论: ${comment.content.substring(0, 30)}...`);
   }

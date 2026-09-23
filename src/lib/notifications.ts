@@ -9,7 +9,7 @@ export type BusinessNotification = {
   message: string;
   type: 'info' | 'warning' | 'danger';
   link: string;
-  action?: 'retry-report';
+  action?: 'retry-report' | 'retry-candidates';
 };
 
 export type ReportSummary = {

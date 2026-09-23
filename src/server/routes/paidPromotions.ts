@@ -3,6 +3,7 @@ import db from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { getUserId, logActivity } from './utils/index.js';
 import { validateAmount } from './utils/helpers.js';
+import type { PaidPromotionRow } from '../dbRows.js';
 
 const router = Router();
 
@@ -68,7 +69,7 @@ router.post('/', (req, res) => {
       return res.status(400).json({ error: '推广金额必须大于 0' });
     }
 
-    const order = db.prepare('SELECT id, title FROM orders WHERE id = ? AND userId = ?').get(orderId, userId) as any;
+    const order = db.prepare('SELECT id, title FROM orders WHERE id = ? AND userId = ?').get(orderId, userId) as { id: string; title: string } | undefined;
     if (!order) {
       return res.status(404).json({ error: '商单不存在' });
     }
@@ -94,7 +95,7 @@ router.delete('/:id', (req, res) => {
     const userId = getUserId(req);
     const { id } = req.params;
 
-    const record = db.prepare('SELECT * FROM paid_promotions WHERE id = ? AND userId = ?').get(id, userId) as any;
+    const record = db.prepare('SELECT * FROM paid_promotions WHERE id = ? AND userId = ?').get(id, userId) as PaidPromotionRow | undefined;
     if (record) {
       logActivity(userId, 'delete', 'paid_promotion', id, `删除付费推广: ${record.platform} ¥${record.amount}`);
     }

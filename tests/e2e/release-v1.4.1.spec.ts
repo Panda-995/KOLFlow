@@ -7,7 +7,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     const icon = page.getByRole('img', { name: 'KOLFlow', exact: true });
     await expect(icon).toBeVisible();
     await expect.poll(() => icon.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBe(256);
-    expect(await page.locator('link[rel="icon"]').getAttribute('href')).toBe('/app-icon.png?v=1.4.1');
+    expect(await page.locator('link[rel="icon"]').getAttribute('href')).toBe('/app-icon.png?v=1.4.4');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     for (const [folder, size] of [['pc', [1854, 1236]], ['mobile', [1125, 2436]]] as const) {
       for (const subject of ['01-orders', '02-workflow', '03-insights']) {

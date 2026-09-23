@@ -62,14 +62,34 @@ const ensureOwnedRelations = (userId: string, orderId: string | null, brandId: s
 
 const parseTodo = (todo: TodoRow | undefined) => todo ? { ...todo, completed: Boolean(todo.completed) } : todo;
 
-export const listTodos = (userId: string) => {
+export const countTodos = (userId: string): number => (
+  (db.prepare('SELECT COUNT(*) AS count FROM todos WHERE userId = ?').get(userId) as { count: number }).count
+);
+
+export const listTodos = (userId: string, paging?: { limit?: number; offset?: number }) => {
+  const clause = paging?.limit ? ' LIMIT ? OFFSET ?' : '';
   const todos = db.prepare(`
     SELECT t.*, o.status AS orderStatus, o.orderNo AS orderNo
     FROM todos t
     LEFT JOIN orders o ON t.orderId = o.id AND o.userId = t.userId
     WHERE t.userId = ?
-    ORDER BY t.createdAt DESC
-  `).all(userId) as TodoRow[];
+    ORDER BY t.createdAt DESC${clause}
+  `).all(...(paging?.limit ? [userId, paging.limit, paging.offset ?? 0] : [userId])) as TodoRow[];
+  return todos.map(todo => parseTodo(todo));
+};
+
+export const listUpcomingTodos = (userId: string, limit = 6) => {
+  const todos = db.prepare(`
+    SELECT t.*, o.status AS orderStatus, o.orderNo AS orderNo
+    FROM todos t
+    LEFT JOIN orders o ON t.orderId = o.id AND o.userId = t.userId
+    WHERE t.userId = ? AND t.completed = 0
+    ORDER BY CASE WHEN t.dueDate IS NULL OR t.dueDate = '' THEN 1 ELSE 0 END,
+      t.dueDate ASC,
+      CASE t.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+      t.createdAt DESC
+    LIMIT ?
+  `).all(userId, limit) as TodoRow[];
   return todos.map(todo => parseTodo(todo));
 };
 
@@ -106,7 +126,7 @@ export const updateTodo = (userId: string, id: string, input: TodoInput) => {
   const brandId = input.brandId !== undefined
     ? normalizeOptionalText(input.brandId, '关联品牌', 100)
     : existing.brandId;
-  const completed = input.completed !== undefined ? (Boolean(input.completed) ? 1 : 0) : existing.completed;
+  const completed = input.completed !== undefined ? (input.completed ? 1 : 0) : existing.completed;
   ensureOwnedRelations(userId, orderId, brandId);
 
   db.prepare(`

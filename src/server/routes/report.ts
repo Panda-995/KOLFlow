@@ -3,6 +3,7 @@ import db from '../db.js';
 import { getUserId } from './utils/index.js';
 import { safeJsonParse } from './utils/helpers.js';
 import { getCompletedReportPeriod } from '../../lib/reportSchedule.js';
+import type { AssetRow, OrderRow, PaidPromotionRow, PaymentRow } from '../dbRows.js';
 
 const router = Router();
 
@@ -20,7 +21,7 @@ router.get('/:type', (req, res) => {
     SELECT * FROM orders
     WHERE userId = ? AND acceptDate >= ? AND acceptDate <= ?
     ORDER BY acceptDate DESC
-  `).all(userId, startDateStr, endDateStr) as any[];
+  `).all(userId, startDateStr, endDateStr) as OrderRow[];
 
   const payments = db.prepare(`
     SELECT * FROM payments
@@ -30,7 +31,7 @@ router.get('/:type', (req, res) => {
       (type = 'pending' AND COALESCE(dueDate, date) >= ? AND COALESCE(dueDate, date) <= ?)
     )
     ORDER BY COALESCE(settledDate, dueDate, date) DESC
-  `).all(userId, startDateStr, endDateStr, startDateStr, endDateStr) as any[];
+  `).all(userId, startDateStr, endDateStr, startDateStr, endDateStr) as PaymentRow[];
 
   const totalOrders = orders.length;
   const completedOrders = orders.filter(o => o.status === 'completed').length;
@@ -40,7 +41,7 @@ router.get('/:type', (req, res) => {
   const soldAssets = db.prepare(`
     SELECT * FROM assets
     WHERE userId = ? AND saleStatus = 'sold' AND soldDate >= ? AND soldDate <= ?
-  `).all(userId, startDateStr, endDateStr) as any[];
+  `).all(userId, startDateStr, endDateStr) as AssetRow[];
   const assetIncome = soldAssets.reduce((sum, a) => sum + (a.soldAmount || 0), 0);
   const totalIncome = paymentIncome + assetIncome;
 
@@ -51,7 +52,7 @@ router.get('/:type', (req, res) => {
       AND COALESCE(o.acceptDate, substr(pp.createdAt, 1, 10)) >= ?
       AND COALESCE(o.acceptDate, substr(pp.createdAt, 1, 10)) <= ?
     ORDER BY pp.createdAt DESC
-  `).all(userId, startDateStr, endDateStr) as any[];
+  `).all(userId, startDateStr, endDateStr) as PaidPromotionRow[];
   const paidPromotionTotal = paidPromotions.reduce((sum, record) => sum + (record.amount || 0), 0);
 
   const brandStats: Record<string, { orders: number; income: number }> = {};
@@ -73,11 +74,11 @@ router.get('/:type', (req, res) => {
   });
 
   soldAssets.forEach(a => {
-    if (a.brandName && a.soldAmount > 0) {
+    if (a.brandName && (a.soldAmount ?? 0) > 0) {
       if (!brandStats[a.brandName]) {
         brandStats[a.brandName] = { orders: 0, income: 0 };
       }
-      brandStats[a.brandName].income += a.soldAmount;
+      brandStats[a.brandName].income += a.soldAmount ?? 0;
     }
   });
 

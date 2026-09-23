@@ -1,13 +1,17 @@
 import { Router } from 'express';
-import { createBrand, deleteBrand, getBrand, listBrands, updateBrand } from '../services/brandService.js';
+import { countBrands, createBrand, deleteBrand, getBrand, listBrands, updateBrand } from '../services/brandService.js';
 import { getApiErrorMessage, getApiErrorStatus } from '../services/errors.js';
 import { getUserId } from './utils/index.js';
+import { parseListPaging } from './utils/helpers.js';
 
 const router = Router();
 
 router.get('/', (req, res) => {
   try {
-    return res.json(listBrands(getUserId(req)));
+    const userId = getUserId(req);
+    const brands = listBrands(userId, parseListPaging(req.query));
+    res.setHeader('X-Total-Count', String(countBrands(userId)));
+    return res.json(brands);
   } catch (error) {
     console.error('获取品牌列表错误:', error instanceof Error ? error.message : error);
     return res.status(getApiErrorStatus(error)).json({ error: getApiErrorMessage(error, '获取品牌列表失败，请稍后重试') });

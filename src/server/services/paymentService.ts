@@ -61,8 +61,15 @@ const getOperationDate = (value: unknown): string => {
   return value;
 };
 
-export const listPayments = (userId: string) => (
-  db.prepare('SELECT * FROM payments WHERE userId = ? ORDER BY createdAt DESC').all(userId)
+export const countPayments = (userId: string): number => (
+  (db.prepare('SELECT COUNT(*) AS count FROM payments WHERE userId = ?').get(userId) as { count: number }).count
+);
+
+export const listPayments = (userId: string, paging?: { limit?: number; offset?: number }) => (
+  paging?.limit
+    ? db.prepare('SELECT * FROM payments WHERE userId = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?')
+        .all(userId, paging.limit, paging.offset ?? 0)
+    : db.prepare('SELECT * FROM payments WHERE userId = ? ORDER BY createdAt DESC').all(userId)
 );
 
 export const createPayment = (userId: string, input: PaymentInput) => {

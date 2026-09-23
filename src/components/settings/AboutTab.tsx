@@ -9,6 +9,8 @@ import {
   X,
   ZoomIn,
 } from 'lucide-react';
+import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { AboutTabProps } from './types';
 
 const APP_DOWNLOAD_URL =
@@ -16,19 +18,29 @@ const APP_DOWNLOAD_URL =
   'https://github.com/Panda-995/KOLFlow/releases/latest';
 
 export function AboutTab({ previewImage, setPreviewImage }: AboutTabProps) {
+  // 预览层支持 Esc 关闭（与其它浮层交互一致）
+  useEffect(() => {
+    if (!previewImage) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPreviewImage(null);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [previewImage, setPreviewImage]);
+
   return (
     <>
-      <div className="card-sketch p-6 bg-white">
+      <div className="card-sketch p-6 bg-panda-white">
         <h2 className="text-lg font-bold mb-6 flex items-center gap-2">
           <Heart size={20} className="text-accent" />
           关于 KOLFlow
         </h2>
         <div className="space-y-6">
           {/* 项目介绍 */}
-          <div className="p-6 bg-gradient-to-br from-gray-50 to-white rounded-2xl border border-border/30">
+          <div className="p-6 bg-gradient-to-br from-gray-50 to-panda-white rounded-2xl border border-border/30">
             <h3 className="text-xl font-bold text-panda-black mb-4 flex items-center gap-2">
               <img src="/app-icon.png" alt="" width={32} height={32} className="rounded-lg" /> KOLFlow
-              <span className="text-sm font-normal text-gray-400">达人商单流管理系统</span>
+              <span className="text-sm font-normal text-gray-600">达人商单流管理系统</span>
             </h3>
             <p className="text-sm text-gray-600 leading-relaxed mb-4">
               KOLFlow 是一款专为 KOL/达人设计的商单管理系统，帮助您轻松管理每一笔商业合作。
@@ -41,10 +53,10 @@ export function AboutTab({ previewImage, setPreviewImage }: AboutTabProps) {
                 { icon: '✅', title: '待办日历', desc: '任务管理、日历视图' },
                 { icon: '💰', title: '账单管理', desc: '收支统计、结算状态' },
               ].map((feature) => (
-                <div key={feature.title} className="p-3 bg-white rounded-xl border border-border/20 text-center">
+                <div key={feature.title} className="p-3 bg-panda-white rounded-xl border border-border/20 text-center">
                   <div className="text-2xl mb-1">{feature.icon}</div>
                   <div className="text-xs font-bold text-panda-black">{feature.title}</div>
-                  <div className="text-[10px] text-gray-400">{feature.desc}</div>
+                  <div className="text-[10px] text-gray-500">{feature.desc}</div>
                 </div>
               ))}
             </div>
@@ -57,7 +69,7 @@ export function AboutTab({ previewImage, setPreviewImage }: AboutTabProps) {
           </div>
 
           {/* 合规与支持 */}
-          <div className="p-6 bg-white rounded-2xl border border-border/40">
+          <div className="p-6 bg-panda-white rounded-2xl border border-border/40">
             <h3 className="text-base font-bold text-panda-black mb-2 flex items-center gap-2">
               <ShieldCheck size={18} />
               合规与支持
@@ -71,12 +83,12 @@ export function AboutTab({ previewImage, setPreviewImage }: AboutTabProps) {
                 href="/privacy-policy.html"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="p-4 rounded-xl border border-border/30 hover:border-panda-black/30 hover:bg-gray-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-panda-black"
+                className="p-4 rounded-xl border border-border/30 hover:border-panda-black/30 hover:bg-panda-black/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-panda-black"
               >
                 <span className="flex items-center gap-2 text-sm font-bold text-panda-black">
                   <FileText size={16} />
                   隐私政策
-                  <ExternalLink size={14} className="ml-auto text-gray-400" />
+                  <ExternalLink size={14} className="ml-auto text-gray-600" />
                 </span>
                 <span className="block mt-1 text-xs text-gray-500">了解各项业务功能如何处理个人信息</span>
               </a>
@@ -85,12 +97,12 @@ export function AboutTab({ previewImage, setPreviewImage }: AboutTabProps) {
                 href="/privacy-policy.html#personal-information-lists"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="p-4 rounded-xl border border-border/30 hover:border-panda-black/30 hover:bg-gray-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-panda-black"
+                className="p-4 rounded-xl border border-border/30 hover:border-panda-black/30 hover:bg-panda-black/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-panda-black"
               >
                 <span className="flex items-center gap-2 text-sm font-bold text-panda-black">
                   <ShieldCheck size={16} />
                   个人信息“双清单”
-                  <ExternalLink size={14} className="ml-auto text-gray-400" />
+                  <ExternalLink size={14} className="ml-auto text-gray-600" />
                 </span>
                 <span className="block mt-1 text-xs text-gray-500">查看已收集信息及与第三方共享信息</span>
               </a>
@@ -99,12 +111,12 @@ export function AboutTab({ previewImage, setPreviewImage }: AboutTabProps) {
                 href="https://github.com/Panda-995/KOLFlow/issues"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="p-4 rounded-xl border border-border/30 hover:border-panda-black/30 hover:bg-gray-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-panda-black"
+                className="p-4 rounded-xl border border-border/30 hover:border-panda-black/30 hover:bg-panda-black/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-panda-black"
               >
                 <span className="flex items-center gap-2 text-sm font-bold text-panda-black">
                   <MessageSquareWarning size={16} />
                   投诉、举报与问题反馈
-                  <ExternalLink size={14} className="ml-auto text-gray-400" />
+                  <ExternalLink size={14} className="ml-auto text-gray-600" />
                 </span>
                 <span className="block mt-1 text-xs text-gray-500">通过 GitHub Issues 提交并跟踪处理进度</span>
               </a>
@@ -113,12 +125,12 @@ export function AboutTab({ previewImage, setPreviewImage }: AboutTabProps) {
                 href={APP_DOWNLOAD_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="p-4 rounded-xl border border-border/30 hover:border-panda-black/30 hover:bg-gray-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-panda-black"
+                className="p-4 rounded-xl border border-border/30 hover:border-panda-black/30 hover:bg-panda-black/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-panda-black"
               >
                 <span className="flex items-center gap-2 text-sm font-bold text-panda-black">
                   <Download size={16} />
                   APP 下载与更新
-                  <ExternalLink size={14} className="ml-auto text-gray-400" />
+                  <ExternalLink size={14} className="ml-auto text-gray-600" />
                 </span>
                 <span className="block mt-1 text-xs text-gray-500">获取已构建的 Android APP 与版本说明</span>
               </a>
@@ -147,7 +159,7 @@ export function AboutTab({ previewImage, setPreviewImage }: AboutTabProps) {
           <div className="space-y-4">
             {/* 上方两个方图：小程序和赞赏码 */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="p-5 bg-white rounded-2xl border-2 border-panda-black/10 hover:border-panda-black/30 transition-colors">
+              <div className="p-5 bg-panda-white rounded-2xl border-2 border-panda-black/10 hover:border-panda-black/30 transition-colors">
                 <div className="text-center">
                   <div className="inline-block p-3 bg-gray-50 rounded-xl mb-3 relative group cursor-pointer" onClick={() => setPreviewImage('/小程序.jpg')}>
                     <img
@@ -155,15 +167,15 @@ export function AboutTab({ previewImage, setPreviewImage }: AboutTabProps) {
                       alt="小程序二维码"
                       className="w-32 h-32 object-contain rounded-lg"
                     />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black/40 max-md:opacity-100 opacity-0 group-hover:opacity-100 hover-visible transition-opacity rounded-lg flex items-center justify-center">
                       <ZoomIn className="text-white" size={24} />
                     </div>
                   </div>
                   <h4 className="font-bold text-panda-black text-sm">微信小程序</h4>
-                  <p className="text-xs text-gray-400 mt-1">扫码体验小程序版本</p>
+                  <p className="text-xs text-gray-500 mt-1">扫码体验小程序版本</p>
                 </div>
               </div>
-              <div className="p-5 bg-white rounded-2xl border-2 border-panda-black/10 hover:border-panda-black/30 transition-colors">
+              <div className="p-5 bg-panda-white rounded-2xl border-2 border-panda-black/10 hover:border-panda-black/30 transition-colors">
                 <div className="text-center">
                   <div className="inline-block p-3 bg-gray-50 rounded-xl mb-3 relative group cursor-pointer" onClick={() => setPreviewImage('/赞赏码.png')}>
                     <img
@@ -171,18 +183,18 @@ export function AboutTab({ previewImage, setPreviewImage }: AboutTabProps) {
                       alt="赞赏码"
                       className="w-32 h-32 object-contain rounded-lg"
                     />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black/40 max-md:opacity-100 opacity-0 group-hover:opacity-100 hover-visible transition-opacity rounded-lg flex items-center justify-center">
                       <ZoomIn className="text-white" size={24} />
                     </div>
                   </div>
                   <h4 className="font-bold text-panda-black text-sm">赞赏码</h4>
-                  <p className="text-xs text-gray-400 mt-1">感谢您的支持</p>
+                  <p className="text-xs text-gray-500 mt-1">感谢您的支持</p>
                 </div>
               </div>
             </div>
 
             {/* 下方横图：公众号 */}
-            <div className="p-5 bg-white rounded-2xl border-2 border-panda-black/10 hover:border-panda-black/30 transition-colors">
+            <div className="p-5 bg-panda-white rounded-2xl border-2 border-panda-black/10 hover:border-panda-black/30 transition-colors">
               <div className="text-center">
                 <div className="inline-block p-3 bg-gray-50 rounded-xl mb-3 relative group cursor-pointer" onClick={() => setPreviewImage('/公众号.png')}>
                   <img
@@ -190,19 +202,19 @@ export function AboutTab({ previewImage, setPreviewImage }: AboutTabProps) {
                     alt="微信公众号"
                     className="w-full max-w-md object-contain rounded-lg"
                   />
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
+                  <div className="absolute inset-0 bg-black/40 max-md:opacity-100 opacity-0 group-hover:opacity-100 hover-visible transition-opacity rounded-lg flex items-center justify-center">
                     <ZoomIn className="text-white" size={24} />
                   </div>
                 </div>
                 <h4 className="font-bold text-panda-black text-sm">微信公众号</h4>
-                <p className="text-xs text-gray-400 mt-1">关注获取最新动态和教程</p>
+                <p className="text-xs text-gray-500 mt-1">关注获取最新动态和教程</p>
               </div>
             </div>
           </div>
 
           {/* 版权信息 */}
           <div className="pt-4 border-t border-border/30 text-center">
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-gray-500">
               Made with ❤️ by 熊猫不是猫QAQ
             </p>
             <p className="text-[10px] text-gray-300 mt-1">
@@ -224,12 +236,13 @@ export function AboutTab({ previewImage, setPreviewImage }: AboutTabProps) {
       </div>
 
       {/* 图片预览弹窗 */}
-      {previewImage && (
+      {previewImage && createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 animate-in fade-in duration-200"
           onClick={() => setPreviewImage(null)}
         >
           <button
+            aria-label="关闭图片预览"
             className="absolute top-4 right-4 text-white/80 hover:text-white p-2"
             onClick={() => setPreviewImage(null)}
           >
@@ -241,7 +254,8 @@ export function AboutTab({ previewImage, setPreviewImage }: AboutTabProps) {
             className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg"
             onClick={(e) => e.stopPropagation()}
           />
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { Clock, User, Package, Edit2, Trash2, MessageSquare, AlertCircle, Trash } from 'lucide-react';
+import { parseDatabaseDate } from '../lib/dateFilter';
 import Modal from '../components/Modal';
 
 const actionIcons: Record<string, React.ReactNode> = {
@@ -27,12 +28,26 @@ const entityTypeLabels: Record<string, string> = {
 };
 
 export default function Logs() {
-  const { activityLogs, fetchActivityLogs, clearActivityLogs } = useStore();
+  const { activityLogs, fetchActivityLogs, fetchMoreActivityLogs, clearActivityLogs, activityLogsHasMore, activityLogsTotal } = useStore();
   const [showClearModal, setShowClearModal] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   useEffect(() => {
-    fetchActivityLogs();
+    fetchActivityLogs().catch(() => {
+      // store 已提示错误，避免未捕获 rejection
+    });
   }, [fetchActivityLogs]);
+
+  const handleLoadMore = async () => {
+    setIsLoadingMore(true);
+    try {
+      await fetchMoreActivityLogs();
+    } catch {
+      // store 已提示错误
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
 
   const handleClearLogs = async () => {
     await clearActivityLogs();
@@ -40,7 +55,7 @@ export default function Logs() {
   };
 
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
+    const date = parseDatabaseDate(dateStr) ?? new Date(dateStr);
     return date.toLocaleString('zh-CN', {
       year: 'numeric',
       month: '2-digit',
@@ -68,14 +83,14 @@ export default function Logs() {
         )}
       </div>
 
-      <div className="card-pixel overflow-hidden bg-white">
+      <div className="card-pixel overflow-hidden bg-panda-white">
         {activityLogs.length > 0 ? (
           <div className="divide-y divide-border/50">
             {activityLogs.map((log) => (
-              <div key={log.id} className="p-4 hover:bg-gray-50 transition-colors">
+              <div key={log.id} className="p-4 hover:bg-panda-black/5 transition-colors">
                 <div className="flex items-start gap-4">
                   <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
-                    {actionIcons[log.action] || <AlertCircle size={14} className="text-gray-400" />}
+                    {actionIcons[log.action] || <AlertCircle size={14} className="text-gray-500" />}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -89,7 +104,7 @@ export default function Logs() {
                     {log.details && (
                       <p className="text-sm text-gray-500 mt-1">{log.details}</p>
                     )}
-                    <div className="flex items-center gap-1 text-xs text-gray-400 mt-2">
+                    <div className="flex items-center gap-1 text-xs text-gray-500 mt-2">
                       <Clock size={12} />
                       <span>{formatDate(log.createdAt)}</span>
                     </div>
@@ -99,10 +114,25 @@ export default function Logs() {
             ))}
           </div>
         ) : (
-          <div className="py-16 flex flex-col items-center justify-center text-gray-400">
+          <div className="py-16 flex flex-col items-center justify-center text-gray-600">
             <div className="text-4xl mb-2 opacity-50">🐼</div>
             <p>暂无操作日志</p>
             <p className="text-xs mt-1">系统会自动记录关键操作</p>
+          </div>
+        )}
+        {activityLogsHasMore && (
+          <div className="p-4 border-t border-border/50 flex flex-col items-center gap-1">
+            <button
+              type="button"
+              onClick={handleLoadMore}
+              disabled={isLoadingMore}
+              className="btn-secondary text-sm disabled:opacity-50"
+            >
+              {isLoadingMore ? '加载中...' : '加载更多'}
+            </button>
+            <span className="text-xs text-gray-500">
+              已显示 {activityLogs.length} / {activityLogsTotal} 条
+            </span>
           </div>
         )}
       </div>

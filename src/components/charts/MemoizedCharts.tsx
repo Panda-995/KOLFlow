@@ -25,6 +25,8 @@ interface ChartData {
 interface AreaChartComponentProps {
   data: ChartData[];
   dataKey: string;
+  /** 悬浮提示中的系列名（默认用 dataKey，英文 key 会显示成英文） */
+  dataName?: string;
   strokeColor?: string;
   fillId?: string;
   height?: number;
@@ -33,6 +35,7 @@ interface AreaChartComponentProps {
 export const AreaChartComponent = memo(function AreaChartComponent({
   data,
   dataKey,
+  dataName,
   strokeColor = '#09090b',
   fillId = 'colorChart',
   height = 300
@@ -52,13 +55,13 @@ export const AreaChartComponent = memo(function AreaChartComponent({
             dataKey="name"
             axisLine={false}
             tickLine={false}
-            tick={{ fill: '#9CA3AF', fontSize: 12 }}
+            tick={{ fill: '#6B7280', fontSize: 12 }}
             dy={10}
           />
           <YAxis
             axisLine={false}
             tickLine={false}
-            tick={{ fill: '#9CA3AF', fontSize: 12 }}
+            tick={{ fill: '#6B7280', fontSize: 12 }}
             dx={-10}
           />
           <Tooltip
@@ -73,6 +76,7 @@ export const AreaChartComponent = memo(function AreaChartComponent({
           />
           <Area
             type="monotone"
+            name={dataName ?? dataKey}
             dataKey={dataKey}
             stroke={strokeColor}
             strokeWidth={3}
@@ -107,7 +111,7 @@ export const LineChartComponent = memo(function LineChartComponent({
             dataKey="name"
             axisLine={false}
             tickLine={false}
-            tick={{ fill: '#9CA3AF' }}
+            tick={{ fill: '#6B7280' }}
             dy={10}
           />
           {lines.some(l => l.yAxisId === 'right') ? (
@@ -116,7 +120,7 @@ export const LineChartComponent = memo(function LineChartComponent({
                 yAxisId="left"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: '#9CA3AF' }}
+                tick={{ fill: '#6B7280' }}
                 dx={-10}
               />
               <YAxis
@@ -124,12 +128,12 @@ export const LineChartComponent = memo(function LineChartComponent({
                 orientation="right"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: '#9CA3AF' }}
+                tick={{ fill: '#6B7280' }}
                 dx={10}
               />
             </>
           ) : (
-            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9CA3AF' }} dx={-10} />
+            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} dx={-10} />
           )}
           <Tooltip
             contentStyle={{

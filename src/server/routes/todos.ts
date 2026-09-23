@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import db from '../db.js';
 import { getUserId } from './utils/index.js';
-import { createTodo, listTodos, updateTodo } from '../services/todoService.js';
+import { parseListPaging } from './utils/helpers.js';
+import { countTodos, createTodo, listTodos, updateTodo } from '../services/todoService.js';
 import { getApiErrorMessage, getApiErrorStatus } from '../services/errors.js';
+import type { TodoRow } from '../dbRows.js';
 
 const router = Router();
 
@@ -10,7 +12,9 @@ const router = Router();
 router.get('/', (req, res) => {
   try {
     const userId = getUserId(req);
-    return res.json(listTodos(userId));
+    const todos = listTodos(userId, parseListPaging(req.query));
+    res.setHeader('X-Total-Count', String(countTodos(userId)));
+    return res.json(todos);
   } catch (error) {
     console.error('获取待办列表错误:', error instanceof Error ? error.message : error);
     return res.status(500).json({ 
@@ -45,14 +49,17 @@ router.put('/:id/toggle', (req, res) => {
   try {
     const userId = getUserId(req);
     const { id } = req.params;
-    const todo = db.prepare('SELECT completed, orderId FROM todos WHERE id = ? AND userId = ?').get(id, userId) as any;
+    const todo = db.prepare('SELECT completed, orderId FROM todos WHERE id = ? AND userId = ?').get(id, userId) as { completed: number | null; orderId: string | null } | undefined;
     if (todo) {
       const newStatus = todo.completed ? 0 : 1;
       db.prepare('UPDATE todos SET completed = ? WHERE id = ? AND userId = ?').run(newStatus, id, userId);
 
-      const updatedTodo = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as any;
-      updatedTodo.completed = Boolean(updatedTodo.completed);
-      return res.json(updatedTodo);
+      const updatedTodo = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as TodoRow | undefined;
+      if (!updatedTodo) {
+        return res.status(404).json({ error: '未找到待办事项' });
+      }
+      // 返回给前端时把 SQLite 的 0/1 归一为布尔值
+      return res.json({ ...updatedTodo, completed: Boolean(updatedTodo.completed) });
     } else {
       return res.status(404).json({ error: '未找到待办事项' });
     }

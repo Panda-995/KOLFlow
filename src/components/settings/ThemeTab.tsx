@@ -5,7 +5,7 @@ import { THEME_COLORS } from './types';
 
 export function ThemeTab({ currentTheme, applyTheme }: ThemeTabProps) {
   return (
-    <div className="card-sketch p-6 bg-white">
+    <div className="card-sketch p-6 bg-panda-white">
       <h2 className="text-lg font-bold mb-6">主题外观</h2>
       <div className="space-y-6">
         <p className="text-sm text-gray-500">选择您喜欢的主题配色，让系统更符合您的个性风格。</p>
@@ -24,7 +24,7 @@ export function ThemeTab({ currentTheme, applyTheme }: ThemeTabProps) {
             >
               {currentTheme === theme.id && (
                 <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-accent flex items-center justify-center">
-                  <Check size={14} className="text-white" />
+                  <Check size={14} className="text-[#1a1a1a]" />
                 </div>
               )}
 
@@ -44,7 +44,7 @@ export function ThemeTab({ currentTheme, applyTheme }: ThemeTabProps) {
               </div>
 
               <h3 className="font-bold text-panda-black">{theme.name}</h3>
-              <p className="text-xs text-gray-400 mt-1">{theme.description}</p>
+              <p className="text-xs text-gray-500 mt-1">{theme.description}</p>
 
               <div className="flex items-center gap-2 mt-3">
                 <div

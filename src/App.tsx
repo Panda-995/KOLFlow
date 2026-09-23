@@ -1,19 +1,23 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { lazy } from 'react';
 import Layout from './components/Layout';
-import Dashboard from './pages/Dashboard';
-import Orders from './pages/Orders';
-import Billing from './pages/Billing';
-import Todos from './pages/Todos';
-import Brands from './pages/Brands';
-import Analytics from './pages/Analytics';
-import Settings from './pages/Settings';
-import Logs from './pages/Logs';
-import Assets from './pages/Assets';
 import Login from './pages/Login';
 import { useStore } from './store/useStore';
 import { ToastProvider } from './components/Toast';
 import { useEffect, useState } from 'react';
 import { apiFetch, authFetch, getServerBaseUrl, isNativeAppRuntime } from './lib/api';
+
+// 路由级代码分割：登录页保持静态导入，业务页面按需加载，
+// 避免首屏下载图表库等大依赖（recharts 仅在统计/仪表盘打开时加载）。
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Orders = lazy(() => import('./pages/Orders'));
+const Billing = lazy(() => import('./pages/Billing'));
+const Todos = lazy(() => import('./pages/Todos'));
+const Brands = lazy(() => import('./pages/Brands'));
+const Analytics = lazy(() => import('./pages/Analytics'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Logs = lazy(() => import('./pages/Logs'));
+const Assets = lazy(() => import('./pages/Assets'));
 
 type CheckUsersResponse = {
   hasUsers?: boolean;
@@ -45,19 +49,11 @@ const readErrorMessage = async (response: Response): Promise<string> => {
 };
 
 export default function App() {
-  const { isAuthenticated, darkMode, fetchSettings, logout, setAuthenticated } = useStore();
+  const { isAuthenticated, logout, setAuthenticated } = useStore();
   const [isVerifying, setIsVerifying] = useState(true);
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', darkMode);
-  }, [darkMode]);
-
-  useEffect(() => {
     const verifyToken = async () => {
-      const showLoginWithoutClearingSession = () => {
-        setAuthenticated(false);
-      };
-
       try {
         const token = localStorage.getItem('token');
         if (!token || (isNativeAppRuntime() && !getServerBaseUrl())) {
@@ -68,8 +64,9 @@ export default function App() {
 
         const res = await apiFetch('/api/auth/check-users');
         if (!res.ok) {
+          // 限流或服务暂时故障时保持当前登录状态，避免把在线用户误退回登录页
           console.warn('Token verification skipped:', await readErrorMessage(res));
-          showLoginWithoutClearingSession();
+          setAuthenticated(true);
           return;
         }
 
@@ -81,30 +78,30 @@ export default function App() {
         }
 
         const verifyRes = await authFetch('/api/auth/verify', { method: 'POST' });
-        
+
         if (verifyRes.ok) {
           setAuthenticated(true);
-          await fetchSettings();
         } else if (verifyRes.status === 401) {
           logout();
         } else {
           console.warn('Token verification skipped:', await readErrorMessage(verifyRes));
-          showLoginWithoutClearingSession();
+          setAuthenticated(true);
         }
       } catch (e) {
+        // 网络异常同理：token 未失效就不清除会话
         console.error('Token verification failed:', e);
-        showLoginWithoutClearingSession();
+        setAuthenticated(true);
       } finally {
         setIsVerifying(false);
       }
     };
 
     verifyToken();
-  }, [fetchSettings, logout, setAuthenticated]);
+  }, [logout, setAuthenticated]);
 
   if (isVerifying) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-bg-secondary flex items-center justify-center">
         <div className="text-gray-500">正在加载...</div>
       </div>
     );
@@ -118,19 +115,19 @@ export default function App() {
     <ToastProvider>
       <Router>
         <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="orders" element={<Orders />} />
-            <Route path="billing" element={<Billing />} />
-            <Route path="todos" element={<Todos />} />
-            <Route path="brands" element={<Brands />} />
-            <Route path="assets" element={<Assets />} />
-            <Route path="analytics" element={<Analytics />} />
-            <Route path="logs" element={<Logs />} />
-            <Route path="settings" element={<Settings />} />
-          </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+            <Route path="/" element={<Layout />}>
+              <Route index element={<Dashboard />} />
+              <Route path="orders" element={<Orders />} />
+              <Route path="billing" element={<Billing />} />
+              <Route path="todos" element={<Todos />} />
+              <Route path="brands" element={<Brands />} />
+              <Route path="assets" element={<Assets />} />
+              <Route path="analytics" element={<Analytics />} />
+              <Route path="logs" element={<Logs />} />
+              <Route path="settings" element={<Settings />} />
+            </Route>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
       </Router>
     </ToastProvider>
   );

@@ -29,3 +29,8 @@ ugreen
 build
 **/*.keystore
 **/*.apk
+
+release-artifacts
+tests
+.github
+playwright.config.ts

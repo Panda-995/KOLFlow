@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  # push 只监听 main：开着 PR 的分支由 pull_request 触发，避免同一次提交双跑
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # 质量门禁：类型检查 + 单元/回归测试 + 前端构建
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run lint
+
+      - name: Code standard check (eslint)
+        run: npm run lint:code
+
+      - name: Unit and regression tests
+        run: npm test
+
+      - name: Build frontend
+        run: npm run build
+
+  # 端到端测试：构建产物 + Playwright（chromium）
+  e2e:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run end-to-end tests
+        run: npm run test:e2e
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failure-report
+          path: test-results/
+          retention-days: 7
+
+  # 镜像构建与首启冒烟：验证 Dockerfile/entrypoint/健康检查（PR 阶段尽早发现镜像问题；
+  # main 分支的镜像构建由 docker-publish 负责，避免重复构建）
+  docker-build:
+    if: github.event_name == 'pull_request'
+    needs: [test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build production image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: kolflow-ci:local
+          cache-from: type=gha,scope=ci-docker
+          cache-to: type=gha,mode=max,scope=ci-docker
+
+      - name: Smoke test image startup
+        run: |
+          docker run -d --name kolflow-ci             -e JWT_SECRET=kolflow-ci-isolated-secret             -e INVITE_CODE=ci-invite             kolflow-ci:local
+          trap 'docker logs kolflow-ci; docker rm -fv kolflow-ci' EXIT
+          docker exec -i kolflow-ci node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          let ready = false;
+          for (let i = 0; i < 30; i++) {
+            try { ready = (await fetch('http://127.0.0.1:3000/api/health')).ok; } catch {}
+            if (ready) break;
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+          import { readFileSync, existsSync } from 'node:fs';
+          assert(ready, 'Container did not become healthy');
+          assert.equal((await fetch('http://127.0.0.1:3000/api/auth/check-users')).status, 200);
+          // SPA 回退：非 API 路径返回页面
+          assert.equal((await fetch('http://127.0.0.1:3000/unknown-page')).status, 200);
+          // 未认证的未知 API 被鉴权拦截（不返回 HTML）
+          const missing = await fetch('http://127.0.0.1:3000/api/not-exist');
+          assert.equal(missing.status, 401, '未认证的未知 API 应被鉴权拦截');
+          // 应用进程（PID 1）必须是降权后的 node 用户，而不是 root
+          const uid = readFileSync('/proc/1/status', 'utf8').match(/^Uid:\s+(\d+)/m)?.[1];
+          assert(uid && uid !== '0', `App must not run as root (uid=${uid})`);
+          // 数据目录可写：启动时应已由应用创建数据库文件
+          assert(existsSync('/app/data/database.sqlite'), 'App did not create its database in the data dir');
+          console.log('Image build, non-root app user, health, SPA fallback and data dir verified.');
+          JS

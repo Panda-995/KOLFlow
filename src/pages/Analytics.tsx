@@ -1,17 +1,16 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from 'recharts';
 import { useStore } from '../store/useStore';
+import { usePageLoad } from '../hooks/usePageLoad';
 import { TrendingUp, TrendingDown, DollarSign, Package, CheckCircle, Filter, Megaphone, CalendarRange, X } from 'lucide-react';
 import { clsx } from 'clsx';
+import Select from '../components/common/Select';
 import { isDateInReportPeriod, parseReportPeriod } from '../lib/reportPeriod';
+import { sumMoney } from '../lib/money';
 
-const COLORS = ['#09090b', '#27272a', '#52525b', '#a1a1aa', '#d4d4d8', '#71717a'];
-const STATUS_COLORS = {
-  completed: '#22c55e',
-  in_progress: '#f59e0b',
-  cancelled: '#ef4444'
-};
+// 图表色板与状态色统一取自 constants，避免多处重复维护
+import { CHART_COLORS as COLORS, STATUS_COLORS } from '../constants';
 const getSettledDate = (payment: { settledDate?: string; date?: string }) => payment.settledDate || payment.date || '';
 
 export default function Analytics() {
@@ -19,7 +18,11 @@ export default function Analytics() {
   const [year, setYear] = useState(new Date().getFullYear().toString());
   const [month, setMonth] = useState('all');
   const [brandFilter, setBrandFilter] = useState('all');
-  const { orders, payments, assets, paidPromotions } = useStore();
+  const { orders, payments, assets, paidPromotions, fetchOrders, fetchPayments, fetchAssets, fetchPaidPromotions } = useStore();
+  const { state: loadState, retry: retryLoad } = usePageLoad(useCallback(
+    () => Promise.all([fetchOrders(), fetchPayments(), fetchAssets(), fetchPaidPromotions()]),
+    [fetchOrders, fetchPayments, fetchAssets, fetchPaidPromotions],
+  ));
   const reportPeriod = useMemo(() => parseReportPeriod(searchParams), [searchParams]);
 
   const clearReportPeriod = () => {
@@ -57,8 +60,10 @@ export default function Analytics() {
     const names = new Set<string>();
     orders.forEach(o => o.brandName && names.add(o.brandName));
     assets.forEach(a => a.brandName && names.add(a.brandName));
+    // 独立创建的账单（无关联商单）也要能按品牌筛选
+    payments.forEach(p => p.brand && names.add(p.brand));
     return Array.from(names).sort();
-  }, [orders, assets]);
+  }, [orders, assets, payments]);
 
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
@@ -107,48 +112,52 @@ export default function Analytics() {
   }, [paidPromotions, orderById, year, month, brandFilter, reportPeriod]);
 
   const overviewStats = useMemo(() => {
-    const paymentIncome = filteredPayments.reduce((sum, p) => sum + p.amount, 0);
-    const assetIncome = filteredAssets.reduce((sum, asset) => sum + asset.soldAmount, 0);
+    const paymentIncome = sumMoney(filteredPayments, p => p.amount);
+    const assetIncome = sumMoney(filteredAssets, asset => asset.soldAmount);
     const totalIncome = paymentIncome + assetIncome;
-    const paidPromotionTotal = filteredPaidPromotions.reduce((sum, record) => sum + record.amount, 0);
+    const paidPromotionTotal = sumMoney(filteredPaidPromotions, record => record.amount);
     const totalOrders = filteredOrders.length;
     const completedOrders = filteredOrders.filter(o => o.status === 'completed').length;
     const inProgressOrders = filteredOrders.filter(o => o.status === 'in_progress').length;
     const cancelledOrders = filteredOrders.filter(o => o.status === 'cancelled').length;
-    const avgOrderValue = totalOrders > 0 ? paymentIncome / totalOrders : 0;
+    // 平均客单价按"当期商单实际金额之和 / 当期商单数"计算，
+    // 与商单数量同口径；到账金额跨月回款会失真，不再作为分母来源
+    const orderAmountSum = sumMoney(filteredOrders, order => order.actualAmount);
+    const avgOrderValue = totalOrders > 0 ? orderAmountSum / totalOrders : 0;
     const completionRate = totalOrders > 0 ? (completedOrders / totalOrders * 100).toFixed(1) : '0';
 
     let incomeGrowth: string | null = null;
     if (!reportPeriod) {
-      const currentMonth = month === 'all' ? 12 : parseInt(month);
-      const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1;
-      const prevYear = currentMonth === 1 ? (parseInt(year) - 1).toString() : year;
       const isFullYear = month === 'all';
+      const currentMonthNum = isFullYear ? 12 : parseInt(month);
+      const prevMonthNum = currentMonthNum === 1 ? 12 : currentMonthNum - 1;
+      // 全年视图与上一年全年比较；1 月与上一年 12 月比较
+      const prevYearValue = isFullYear || currentMonthNum === 1 ? (parseInt(year) - 1).toString() : year;
+      const inPrevPeriod = (date: string) => (
+        date.startsWith(prevYearValue)
+        && (isFullYear || date.substring(5, 7) === prevMonthNum.toString().padStart(2, '0'))
+      );
+      const matchesBrand = (brand: string | null | undefined) => brandFilter === 'all' || brand === brandFilter;
 
       const prevPayments = payments.filter(p => {
         const settledDate = getSettledDate(p);
         if (p.type !== 'settled' || !settledDate) return false;
-        return isFullYear
-          ? settledDate.startsWith(prevYear)
-          : settledDate.startsWith(prevYear)
-            && settledDate.substring(5, 7) === prevMonth.toString().padStart(2, '0');
+        return inPrevPeriod(settledDate) && matchesBrand(p.brand);
       });
-      const prevPaymentIncome = prevPayments.reduce((sum, payment) => sum + payment.amount, 0);
-      const prevAssetIncome = assets
-        .filter(asset => {
+      const prevPaymentIncome = sumMoney(prevPayments, payment => payment.amount);
+      const prevAssetIncome = sumMoney(
+        assets.filter(asset => {
           if (asset.saleStatus !== 'sold' || !asset.soldDate) return false;
-          return isFullYear
-            ? asset.soldDate.startsWith(prevYear)
-            : asset.soldDate.startsWith(prevYear)
-              && asset.soldDate.substring(5, 7) === prevMonth.toString().padStart(2, '0');
-        })
-        .reduce((sum, asset) => sum + asset.soldAmount, 0);
+          return inPrevPeriod(asset.soldDate) && matchesBrand(asset.brandName);
+        }),
+        asset => asset.soldAmount,
+      );
       const prevIncome = prevPaymentIncome + prevAssetIncome;
-      incomeGrowth = prevIncome > 0 ? ((totalIncome - prevIncome) / prevIncome * 100).toFixed(1) : '0';
+      incomeGrowth = prevIncome > 0 ? ((totalIncome - prevIncome) / prevIncome * 100).toFixed(1) : null;
     }
 
     return { totalIncome, paidPromotionTotal, totalOrders, completedOrders, inProgressOrders, cancelledOrders, avgOrderValue, completionRate, incomeGrowth };
-  }, [filteredOrders, filteredPayments, filteredAssets, filteredPaidPromotions, payments, assets, year, month, reportPeriod]);
+  }, [filteredOrders, filteredPayments, filteredAssets, filteredPaidPromotions, payments, assets, year, month, brandFilter, reportPeriod]);
 
   const platformData = useMemo(() => {
     const platformCounts: Record<string, number> = {};
@@ -174,74 +183,98 @@ export default function Analytics() {
     if (reportPeriod) {
       return [{
         name: reportPeriod.type === 'weekly' ? '报告周' : '报告月',
-        收入: filteredPayments.reduce((sum, payment) => sum + payment.amount, 0)
-          + filteredAssets.reduce((sum, asset) => sum + asset.soldAmount, 0),
-        推广费: filteredPaidPromotions.reduce((sum, record) => sum + record.amount, 0),
+        收入: sumMoney(filteredPayments, payment => payment.amount)
+          + sumMoney(filteredAssets, asset => asset.soldAmount),
+        推广费: sumMoney(filteredPaidPromotions, record => record.amount),
         商单数: filteredOrders.length,
         完成数: filteredOrders.filter(order => order.status === 'completed').length,
       }];
     }
     const months = month === 'all' ? 12 : 1;
     const startMonth = month === 'all' ? 0 : parseInt(month) - 1;
+    // 趋势图与汇总卡片保持同一筛选口径：年份、月份、品牌筛选全部生效
+    const matchesBrandOrder = (brandName: string | null | undefined) => brandFilter === 'all' || brandName === brandFilter;
     return Array.from({ length: months }, (_, i) => {
       const m = month === 'all' ? i : startMonth;
       const monthStr = (m + 1).toString().padStart(2, '0');
-      const monthOrders = orders.filter(o => o.acceptDate?.startsWith(year) && o.acceptDate?.substring(5, 7) === monthStr);
+      const monthOrders = orders.filter(o => matchesBrandOrder(o.brandName)
+        && o.acceptDate?.startsWith(year) && o.acceptDate?.substring(5, 7) === monthStr);
       const monthPayments = payments.filter(p => {
         const settledDate = getSettledDate(p);
-        return settledDate.startsWith(year) && settledDate.substring(5, 7) === monthStr && p.type === 'settled';
+        return matchesBrandOrder(p.brand)
+          && settledDate.startsWith(year) && settledDate.substring(5, 7) === monthStr && p.type === 'settled';
       });
-      const monthAssetIncome = assets
-        .filter(a => a.saleStatus === 'sold' && a.soldDate?.startsWith(year) && a.soldDate?.substring(5, 7) === monthStr)
-        .reduce((sum, a) => sum + a.soldAmount, 0);
-      const monthPromotionCost = paidPromotions
-        .filter(record => {
+      const monthAssetIncome = sumMoney(
+        assets.filter(a => a.saleStatus === 'sold' && matchesBrandOrder(a.brandName)
+          && a.soldDate?.startsWith(year) && a.soldDate?.substring(5, 7) === monthStr),
+        a => a.soldAmount,
+      );
+      const monthPromotionCost = sumMoney(
+        paidPromotions.filter(record => {
           const order = orderById.get(record.orderId);
           const recordDate = order?.acceptDate || record.createdAt?.substring(0, 10) || '';
-          return recordDate.startsWith(year) && recordDate.substring(5, 7) === monthStr;
-        })
-        .reduce((sum, record) => sum + record.amount, 0);
+          return matchesBrandOrder(order?.brandName)
+            && recordDate.startsWith(year) && recordDate.substring(5, 7) === monthStr;
+        }),
+        record => record.amount,
+      );
       return {
         name: `${m + 1}月`,
-        收入: monthPayments.reduce((sum, p) => sum + p.amount, 0) + monthAssetIncome,
+        收入: sumMoney(monthPayments, p => p.amount) + monthAssetIncome,
         推广费: monthPromotionCost,
         商单数: monthOrders.length,
         完成数: monthOrders.filter(o => o.status === 'completed').length
       };
     });
-  }, [orders, payments, assets, paidPromotions, orderById, year, month, reportPeriod, filteredOrders, filteredPayments, filteredAssets, filteredPaidPromotions]);
+  }, [orders, payments, assets, paidPromotions, orderById, year, month, brandFilter, reportPeriod, filteredOrders, filteredPayments, filteredAssets, filteredPaidPromotions]);
 
   const brandRanking = useMemo(() => {
-    const brandIncome: Record<string, number> = {};
-    filteredPayments.forEach(payment => {
-      if (payment.brand) {
-        brandIncome[payment.brand] = (brandIncome[payment.brand] || 0) + payment.amount;
-      }
-    });
+    const brandIncomeCents: Record<string, number> = {};
+    const addIncome = (brand: string | null | undefined, amount: number) => {
+      if (!brand) return;
+      brandIncomeCents[brand] = (brandIncomeCents[brand] || 0) + Math.round(amount * 100);
+    };
+    filteredPayments.forEach(payment => addIncome(payment.brand, payment.amount));
     filteredAssets.forEach(asset => {
-      if (asset.soldAmount <= 0 || !asset.brandName) return;
-      brandIncome[asset.brandName] = (brandIncome[asset.brandName] || 0) + asset.soldAmount;
+      if (asset.soldAmount <= 0) return;
+      addIncome(asset.brandName, asset.soldAmount);
     });
-    return Object.entries(brandIncome).map(([name, income]) => ({ name, income })).sort((a, b) => b.income - a.income).slice(0, 5);
+    return Object.entries(brandIncomeCents)
+      .map(([name, cents]) => ({ name, income: cents / 100 }))
+      .sort((a, b) => b.income - a.income)
+      .slice(0, 5);
   }, [filteredPayments, filteredAssets]);
+
+  if (loadState === 'loading') return <div role="status" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">数据统计</h1>正在加载统计数据…</div>;
+  if (loadState === 'error') return <div role="alert" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">数据统计</h1>统计数据加载失败，请检查连接后重试。<button type="button" className="ml-3 underline" onClick={() => void retryLoad()}>重试</button></div>;
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-panda-black">数据统计</h1>
         <div className="flex flex-wrap items-center gap-3">
-          <Filter size={16} className="text-gray-400" />
-          <select value={year} onChange={(e) => handleYearChange(e.target.value)} className="bg-white border border-border rounded-xl px-4 py-2 text-sm outline-none focus:border-accent">
-            {availableYears.map(y => <option key={y} value={y}>{y}年</option>)}
-          </select>
-          <select value={month} onChange={(e) => handleMonthChange(e.target.value)} className="bg-white border border-border rounded-xl px-4 py-2 text-sm outline-none focus:border-accent">
-            <option value="all">全年</option>
-            {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={(i + 1).toString().padStart(2, '0')}>{i + 1}月</option>)}
-          </select>
-          <select value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)} className="bg-white border border-border rounded-xl px-4 py-2 text-sm outline-none focus:border-accent">
-            <option value="all">全部品牌</option>
-            {brandNames.map(name => <option key={name} value={name}>{name}</option>)}
-          </select>
+          <Filter size={16} className="text-gray-500" />
+          <Select
+            value={year}
+            onChange={handleYearChange}
+            className="w-28"
+            aria-label="统计年份"
+            options={availableYears.map(y => ({ value: y, label: `${y}年` }))}
+          />
+          <Select
+            value={month}
+            onChange={handleMonthChange}
+            className="w-24"
+            aria-label="统计月份"
+            options={[{ value: 'all', label: '全年' }, ...Array.from({ length: 12 }, (_, i) => ({ value: (i + 1).toString().padStart(2, '0'), label: `${i + 1}月` }))]}
+          />
+          <Select
+            value={brandFilter}
+            onChange={setBrandFilter}
+            className="w-32"
+            aria-label="统计品牌"
+            options={[{ value: 'all', label: '全部品牌' }, ...brandNames.map(name => ({ value: name, label: name }))]}
+          />
         </div>
       </div>
 
@@ -267,14 +300,14 @@ export default function Analytics() {
 
       {/* 统计概览卡片 */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <div className="card-pixel p-5 bg-white">
+        <div className="card-pixel p-5 bg-panda-white">
           <div className="flex items-center justify-between mb-2">
             <span className="text-gray-500 text-sm">总收入</span>
             <DollarSign size={18} className="text-success" />
           </div>
           <div className="text-2xl font-bold text-panda-black">¥{overviewStats.totalIncome.toLocaleString()}</div>
           {overviewStats.incomeGrowth === null ? (
-            <div className="text-xs text-gray-500 mt-1">所选周期内</div>
+            <div className="text-xs text-gray-500 mt-1">{reportPeriod ? '所选周期内' : '上年同期无收入'}</div>
           ) : (
             <div className={clsx("text-xs mt-1 flex items-center gap-1", parseFloat(overviewStats.incomeGrowth) >= 0 ? "text-success" : "text-danger")}>
               {parseFloat(overviewStats.incomeGrowth) >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
@@ -282,51 +315,53 @@ export default function Analytics() {
             </div>
           )}
         </div>
-        <div className="card-pixel p-5 bg-white">
+        <div className="card-pixel p-5 bg-panda-white">
           <div className="flex items-center justify-between mb-2">
             <span className="text-gray-500 text-sm">商单总数</span>
             <Package size={18} className="text-accent" />
           </div>
           <div className="text-2xl font-bold text-panda-black">{overviewStats.totalOrders}</div>
-          <div className="text-xs text-gray-400 mt-1">{overviewStats.completedOrders} 已完成</div>
+          <div className="text-xs text-gray-500 mt-1">{overviewStats.completedOrders} 已完成</div>
         </div>
-        <div className="card-pixel p-5 bg-white">
+        <div className="card-pixel p-5 bg-panda-white">
           <div className="flex items-center justify-between mb-2">
             <span className="text-gray-500 text-sm">平均客单价</span>
             <TrendingUp size={18} className="text-warning" />
           </div>
           <div className="text-2xl font-bold text-panda-black">¥{overviewStats.avgOrderValue.toFixed(0)}</div>
-          <div className="text-xs text-gray-400 mt-1">基于总订单数</div>
+          <div className="text-xs text-gray-500 mt-1">当期商单金额均值</div>
         </div>
-        <div className="card-pixel p-5 bg-white">
+        <div className="card-pixel p-5 bg-panda-white">
           <div className="flex items-center justify-between mb-2">
             <span className="text-gray-500 text-sm">付费推广</span>
             <Megaphone size={18} className="text-danger" />
           </div>
           <div className="text-2xl font-bold text-panda-black">¥{overviewStats.paidPromotionTotal.toLocaleString()}</div>
-          <div className="text-xs text-gray-400 mt-1">推广费用总计</div>
+          <div className="text-xs text-gray-500 mt-1">推广费用总计</div>
         </div>
-        <div className="card-pixel p-5 bg-white">
+        <div className="card-pixel p-5 bg-panda-white">
           <div className="flex items-center justify-between mb-2">
             <span className="text-gray-500 text-sm">完成率</span>
             <CheckCircle size={18} className="text-success" />
           </div>
           <div className="text-2xl font-bold text-panda-black">{overviewStats.completionRate}%</div>
-          <div className="text-xs text-gray-400 mt-1">{overviewStats.inProgressOrders} 进行中</div>
+          <div className="text-xs text-gray-500 mt-1">{overviewStats.inProgressOrders} 进行中</div>
         </div>
       </div>
 
       {/* 图表区域 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="card-pixel p-6 bg-white min-w-0">
+        <div className="card-pixel p-6 bg-panda-white min-w-0">
           <h2 className="text-lg font-bold mb-6">{reportPeriod ? '周期概览' : '月度趋势'}</h2>
+          {/* 与其它图表一致：筛选后没有任何数据时不画全零折线 */}
+          {monthlyData.some(point => point.收入 > 0 || point.推广费 > 0 || point.商单数 > 0) ? (
           <div className="h-[300px] w-full min-w-0">
             <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <LineChart data={monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E0E0E0" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#9CA3AF' }} dy={10} />
-                <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fill: '#9CA3AF' }} dx={-10} />
-                <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fill: '#9CA3AF' }} dx={10} />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} dy={10} />
+                <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} dx={-10} />
+                <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} dx={10} />
                 <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }} />
                 <Legend />
                 <Line yAxisId="left" type="monotone" dataKey="收入" stroke="#09090b" strokeWidth={2} dot={{ fill: '#09090b' }} />
@@ -335,9 +370,15 @@ export default function Analytics() {
               </LineChart>
             </ResponsiveContainer>
           </div>
+          ) : (
+            <div className="h-28 sm:h-[300px] w-full flex flex-col items-center justify-center text-gray-600">
+              <div className="text-4xl mb-2 opacity-50">🐼</div>
+              <p>暂无该周期的收入数据</p>
+            </div>
+          )}
         </div>
 
-        <div className="card-pixel p-6 bg-white min-w-0">
+        <div className="card-pixel p-6 bg-panda-white min-w-0">
           <h2 className="text-lg font-bold mb-6">平台分布</h2>
           {platformData.length > 0 ? (
             <>
@@ -361,31 +402,39 @@ export default function Analytics() {
               </div>
             </>
           ) : (
-            <div className="h-[240px] w-full flex flex-col items-center justify-center text-gray-400">
+            <div className="h-28 sm:h-[240px] w-full flex flex-col items-center justify-center text-gray-600">
               <div className="text-4xl mb-2 opacity-50">🐼</div>
               <p>暂无平台数据</p>
             </div>
           )}
         </div>
 
-        <div className="card-pixel p-6 bg-white min-w-0">
+        <div className="card-pixel p-6 bg-panda-white min-w-0">
           <h2 className="text-lg font-bold mb-6">订单状态分布</h2>
-          <div className="h-[200px] w-full min-w-0">
-            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-              <BarChart data={statusData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                <XAxis type="number" axisLine={false} tickLine={false} />
-                <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} width={60} />
-                <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }} />
-                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                  {statusData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          {/* 与"平台分布"一致：无数据时不留下空白图框 */}
+          {statusData.length > 0 ? (
+            <div className="h-[200px] w-full min-w-0">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                <BarChart data={statusData} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                  <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} />
+                  <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} width={60} />
+                  <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }} />
+                  <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                    {statusData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-28 sm:h-[200px] w-full flex flex-col items-center justify-center text-gray-600">
+              <div className="text-4xl mb-2 opacity-50">🐼</div>
+              <p>暂无订单数据</p>
+            </div>
+          )}
         </div>
 
-        <div className="card-pixel p-6 bg-white">
+        <div className="card-pixel p-6 bg-panda-white">
           <h2 className="text-lg font-bold mb-6">品牌收入排行 TOP 5</h2>
           {brandRanking.length > 0 ? (
             <div className="space-y-3">
@@ -397,7 +446,7 @@ export default function Analytics() {
                   <div className="flex-1">
                     <div className="text-sm font-medium text-panda-black truncate">{brand.name}</div>
                     <div className="w-full bg-gray-100 rounded-full h-1.5 mt-1">
-                      <div className="bg-accent h-1.5 rounded-full" style={{ width: `${(brand.income / brandRanking[0].income) * 100}%` }}></div>
+                      <div className="bg-accent h-1.5 rounded-full" style={{ width: `${brandRanking[0].income > 0 ? (brand.income / brandRanking[0].income) * 100 : 0}%` }}></div>
                     </div>
                   </div>
                   <div className="text-sm font-bold text-panda-black">¥{brand.income.toLocaleString()}</div>
@@ -405,7 +454,7 @@ export default function Analytics() {
               ))}
             </div>
           ) : (
-            <div className="h-[200px] w-full flex flex-col items-center justify-center text-gray-400">
+            <div className="h-28 sm:h-[200px] w-full flex flex-col items-center justify-center text-gray-600">
               <div className="text-4xl mb-2 opacity-50">🐼</div>
               <p>暂无品牌数据</p>
             </div>

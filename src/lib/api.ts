@@ -25,7 +25,7 @@ export const isNativeAppRuntime = (): boolean => {
   if (Capacitor.isNativePlatform()) return true;
   if (typeof window === 'undefined') return false;
 
-  const runtime = (window as any).Capacitor;
+  const runtime = (window as Window & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
   if (runtime?.isNativePlatform?.()) return true;
   return ['capacitor:', 'file:', 'ionic:'].includes(window.location.protocol);
 };
@@ -129,8 +129,70 @@ const createResponseFromNative = (data: unknown, status: number, headers?: Recor
   });
 };
 
+// 会话级请求登记：账号切换（登录/登出/清空）时统一中止在途请求。
+// 登记一直保留到"响应体被读完"为止：只在 fetch 落地（收到响应头）时注销的话，
+// 切号发生在 await res.json() 期间就再也找不到该请求，无法统一中止。
+const sessionAbortControllers = new Set<AbortController>();
+
+export const abortSessionRequests = (): void => {
+  for (const controller of sessionAbortControllers) {
+    try {
+      controller.abort();
+    } catch {
+      // 忽略重复中止
+    }
+  }
+  sessionAbortControllers.clear();
+};
+
+/** 是否为"会话切换导致的中止"（用于避免把中止当成业务错误提示用户） */
+export const isSessionAbort = (error: unknown): boolean => (
+  typeof error === 'object' && error !== null && (error as { name?: string }).name === 'AbortError'
+);
+
+const createSessionAbortError = (): Error => {
+  const error = new Error('请求已随会话切换中止');
+  error.name = 'AbortError';
+  return error;
+};
+
+type ResponseBodyMethod = 'json' | 'text' | 'arrayBuffer' | 'blob' | 'formData';
+
+// 包装响应对象，把"读取响应体"纳入会话保护：
+// ① 读取期间保持登记 —— 此时 abort() 会真正中断 body 读取；
+// ② 读取完成后再检查一次 —— 若期间已切换账号，抛 AbortError 而不是把旧账号数据交给调用方。
+const trackResponseBody = (response: Response, controller: AbortController): Response => {
+  const methods: ResponseBodyMethod[] = ['json', 'text', 'arrayBuffer', 'blob', 'formData'];
+  for (const method of methods) {
+    const original = response[method] as ((...args: never[]) => Promise<unknown>) | undefined;
+    if (typeof original !== 'function') continue;
+    Object.defineProperty(response, method, {
+      configurable: true,
+      writable: true,
+      value: async (...args: never[]): Promise<unknown> => {
+        try {
+          const result = await original.apply(response, args);
+          if (controller.signal.aborted) throw createSessionAbortError();
+          return result;
+        } finally {
+          sessionAbortControllers.delete(controller);
+        }
+      },
+    });
+  }
+  return response;
+};
+
 export const apiFetch = async (path: string, options: RequestInit = {}): Promise<Response> => {
   const headers = new Headers(options.headers);
+  // 登记本次请求，会话切换时中止；同时保留调用方自带的 signal 语义
+  const sessionController = new AbortController();
+  sessionAbortControllers.add(sessionController);
+  const callerSignal = options.signal;
+  if (callerSignal) {
+    if (callerSignal.aborted) sessionController.abort();
+    else callerSignal.addEventListener('abort', () => sessionController.abort(), { once: true });
+  }
   if (options.body && !isFormDataBody(options.body) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
@@ -150,14 +212,33 @@ export const apiFetch = async (path: string, options: RequestInit = {}): Promise
       nativeOptions.data = typeof options.body === 'string' ? options.body : String(options.body);
     }
 
-    const nativeResponse = await CapacitorHttp.request(nativeOptions);
-    return createResponseFromNative(nativeResponse.data, nativeResponse.status, nativeResponse.headers);
+    try {
+      const nativeResponse = await CapacitorHttp.request(nativeOptions);
+      // CapacitorHttp 不支持 AbortSignal（无法中断在途原生请求），
+      // 因此只能在拿到结果后校验：已切换账号则丢弃这次响应，不交给调用方。
+      if (sessionController.signal.aborted) throw createSessionAbortError();
+      return trackResponseBody(
+        createResponseFromNative(nativeResponse.data, nativeResponse.status, nativeResponse.headers),
+        sessionController,
+      );
+    } finally {
+      sessionAbortControllers.delete(sessionController);
+    }
   }
 
-  return fetch(url, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers,
+      signal: sessionController.signal,
+    });
+  } catch (error) {
+    sessionAbortControllers.delete(sessionController);
+    throw error;
+  }
+  // 不在此处注销：登记随响应体读取结束（见 trackResponseBody）
+  return trackResponseBody(response, sessionController);
 };
 
 export const authFetch = (path: string, options: RequestInit = {}): Promise<Response> => {

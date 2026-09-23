@@ -1,7 +1,15 @@
 // 共享常量和工具
 
-// 邀请码（支持环境变量配置，生产环境建议修改）
-export const VALID_INVITE_CODE = process.env.INVITE_CODE || 'panda995';
+// 邀请码（支持环境变量配置）。空白值视为未配置，回落到内置默认码。
+const configuredInviteCode = process.env.INVITE_CODE?.trim();
+export const VALID_INVITE_CODE = configuredInviteCode || 'panda995';
+
+if (!configuredInviteCode && process.env.NODE_ENV === 'production') {
+  console.warn(
+    '[安全提醒] 正在使用内置默认邀请码，任何知道该默认值的人都能注册账号。' +
+    '请通过环境变量 INVITE_CODE 设置自己的邀请码。'
+  );
+}
 
 // 商单类型映射
 export const ORDER_TYPE_MAP: Record<string, string> = {

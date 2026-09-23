@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import crypto from 'crypto';
+import type { SqliteMasterRow, TableInfoRow } from './dbRows.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -154,7 +155,6 @@ db.exec(`
     weeklyReport INTEGER DEFAULT 0,
     avatar TEXT,
     apiKey TEXT,
-    darkMode INTEGER DEFAULT 0,
     reportFrequency TEXT DEFAULT 'weekly',
     FOREIGN KEY (userId) REFERENCES users(id)
   );
@@ -184,7 +184,7 @@ db.exec(`
 // 获取第一个实际用户的 ID 作为默认值，避免多用户数据混乱
 let defaultUserId = '1';
 try {
-  const firstUser = db.prepare('SELECT id FROM users LIMIT 1').get() as any;
+  const firstUser = db.prepare('SELECT id FROM users LIMIT 1').get() as { id: string } | undefined;
   if (firstUser) {
     defaultUserId = firstUser.id;
   }
@@ -202,15 +202,22 @@ const migrations = [
 ];
 
 for (const migration of migrations) {
-  const columns = db.prepare(`PRAGMA table_info(${migration.table})`).all() as any[];
+  const columns = db.prepare(`PRAGMA table_info(${migration.table})`).all() as TableInfoRow[];
   const columnNames = columns.map(c => c.name);
   if (!columnNames.includes(migration.column)) {
     db.exec(`ALTER TABLE ${migration.table} ADD COLUMN ${migration.column} ${migration.type};`);
   }
 }
 
+// 会话撤销：修改密码时递增 tokenVersion，使旧 JWT 立即失效
+const userColumns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
+const userColumnNames = userColumns.map(c => c.name);
+if (!userColumnNames.includes('tokenVersion')) {
+  db.exec('ALTER TABLE users ADD COLUMN tokenVersion INTEGER NOT NULL DEFAULT 0;');
+}
+
 // Ensure settings has userId column
-const settingsColumns = db.prepare("PRAGMA table_info(settings)").all() as any[];
+const settingsColumns = db.prepare("PRAGMA table_info(settings)").all() as TableInfoRow[];
 const settingsColumnNames = settingsColumns.map(c => c.name);
 if (!settingsColumnNames.includes('userId')) {
   db.exec(`ALTER TABLE settings ADD COLUMN userId TEXT;`);
@@ -223,7 +230,7 @@ if (!settingsColumnNames.includes('userId')) {
 }
 
 // Ensure all columns exist in settings (for migrations)
-const columns = db.prepare("PRAGMA table_info(settings)").all() as any[];
+const columns = db.prepare("PRAGMA table_info(settings)").all() as TableInfoRow[];
 const columnNames = columns.map(c => c.name);
 
 const requiredColumns = [
@@ -234,7 +241,6 @@ const requiredColumns = [
   { name: 'weeklyReport', type: 'INTEGER DEFAULT 0' },
   { name: 'avatar', type: 'TEXT' },
   { name: 'apiKey', type: 'TEXT' },
-  { name: 'darkMode', type: 'INTEGER DEFAULT 0' },
   { name: 'reportFrequency', type: "TEXT DEFAULT 'weekly'" }
 ];
 
@@ -299,7 +305,7 @@ db.exec(`
 `);
 
 // Ensure publish_links table exists
-const publishLinksExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='publish_links'").get() as any;
+const publishLinksExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='publish_links'").get() as SqliteMasterRow | undefined;
 if (!publishLinksExists) {
   db.exec(`
     CREATE TABLE publish_links (
@@ -316,14 +322,14 @@ if (!publishLinksExists) {
 }
 
 // Ensure publish_links has userId column
-const publishLinksColumns = db.prepare("PRAGMA table_info(publish_links)").all() as any[];
+const publishLinksColumns = db.prepare("PRAGMA table_info(publish_links)").all() as TableInfoRow[];
 const publishLinksColumnNames = publishLinksColumns.map(c => c.name);
 if (publishLinksColumnNames.length > 0 && !publishLinksColumnNames.includes('userId')) {
   db.exec(`ALTER TABLE publish_links ADD COLUMN userId TEXT NOT NULL DEFAULT "${defaultUserId}";`);
 }
 
 // Ensure paid_promotions table exists for older versions
-const paidPromotionsExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='paid_promotions'").get() as any;
+const paidPromotionsExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='paid_promotions'").get() as SqliteMasterRow | undefined;
 if (!paidPromotionsExists) {
   db.exec(`
     CREATE TABLE paid_promotions (
@@ -340,7 +346,7 @@ if (!paidPromotionsExists) {
 }
 
 // Ensure todos has orderId and brandId
-const todoColumns = db.prepare("PRAGMA table_info(todos)").all() as any[];
+const todoColumns = db.prepare("PRAGMA table_info(todos)").all() as TableInfoRow[];
 const todoColumnNames = todoColumns.map(c => c.name);
 if (!todoColumnNames.includes('orderId')) {
   db.exec('ALTER TABLE todos ADD COLUMN orderId TEXT;');
@@ -353,7 +359,7 @@ if (!todoColumnNames.includes('category')) {
 }
 
 // Ensure orders has acceptDate and submitDate (迁移旧字段)
-const orderColumns = db.prepare("PRAGMA table_info(orders)").all() as any[];
+const orderColumns = db.prepare("PRAGMA table_info(orders)").all() as TableInfoRow[];
 const orderColumnNames = orderColumns.map(c => c.name);
 if (!orderColumnNames.includes('acceptDate')) {
   db.exec('ALTER TABLE orders ADD COLUMN acceptDate TEXT;');
@@ -365,11 +371,11 @@ if (!orderColumnNames.includes('submitDate')) {
 }
 
 // Ensure brands has contacts column and migrate existing data
-const brandColumns = db.prepare("PRAGMA table_info(brands)").all() as any[];
+const brandColumns = db.prepare("PRAGMA table_info(brands)").all() as TableInfoRow[];
 const brandColumnNames = brandColumns.map(c => c.name);
 if (!brandColumnNames.includes('contacts')) {
   db.exec('ALTER TABLE brands ADD COLUMN contacts TEXT;');
-  const brandsWithContact = db.prepare('SELECT id, contact, phone FROM brands WHERE contact IS NOT NULL OR phone IS NOT NULL').all() as any[];
+  const brandsWithContact = db.prepare('SELECT id, contact, phone FROM brands WHERE contact IS NOT NULL OR phone IS NOT NULL').all() as Array<{ id: string; contact: string | null; phone: string | null }>;
   const updateStmt = db.prepare('UPDATE brands SET contacts = ? WHERE id = ?');
   for (const brand of brandsWithContact) {
     const contactEntry = {
@@ -391,8 +397,8 @@ if (!orderColumnNames.includes('productValue')) {
 }
 
 // Ensure assets has saleStatus and soldAmount columns
-const assetColumns = db.prepare("PRAGMA table_info(assets)").all() as any[];
-const assetColumnNames = assetColumns.map((c: any) => c.name);
+const assetColumns = db.prepare("PRAGMA table_info(assets)").all() as TableInfoRow[];
+const assetColumnNames = assetColumns.map(c => c.name);
 if (!assetColumnNames.includes('saleStatus')) {
   db.exec("ALTER TABLE assets ADD COLUMN saleStatus TEXT DEFAULT 'keep';");
 }
@@ -421,6 +427,7 @@ const createIndexes = () => {
     'CREATE INDEX IF NOT EXISTS idx_todos_userId ON todos(userId)',
     'CREATE INDEX IF NOT EXISTS idx_todos_dueDate ON todos(dueDate)',
     'CREATE INDEX IF NOT EXISTS idx_todos_completed ON todos(completed)',
+    'CREATE INDEX IF NOT EXISTS idx_todos_upcoming ON todos(userId, completed, dueDate)',
     'CREATE INDEX IF NOT EXISTS idx_activity_logs_userId ON activity_logs(userId)',
     'CREATE INDEX IF NOT EXISTS idx_activity_logs_createdAt ON activity_logs(createdAt)',
     'CREATE INDEX IF NOT EXISTS idx_comments_orderId ON comments(orderId)',
@@ -431,13 +438,11 @@ const createIndexes = () => {
     'CREATE INDEX IF NOT EXISTS idx_payments_userId_type ON payments(userId, type)',
   ];
 
-  let successCount = 0;
   let failCount = 0;
 
   indexes.forEach(indexSql => {
     try {
       db.exec(indexSql);
-      successCount++;
     } catch (e) {
       failCount++;
       console.error('索引创建失败:', indexSql, e);

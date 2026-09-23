@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle } from 'lucide-react';
 import { clsx } from 'clsx';
+import { useDialogA11y } from '../hooks/useDialogA11y';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -24,6 +26,8 @@ export default function ConfirmDialog({
   type = 'danger'
 }: ConfirmDialogProps) {
   const [isConfirming, setIsConfirming] = useState(false);
+  // 确认执行中禁止 Esc 关闭（与取消按钮的禁用条件一致）
+  const containerRef = useDialogA11y<HTMLDivElement>(isOpen, onClose, { canClose: () => !isConfirming });
 
   if (!isOpen) return null;
 
@@ -34,7 +38,8 @@ export default function ConfirmDialog({
     },
     warning: {
       icon: 'text-warning bg-warning/10',
-      button: 'bg-warning hover:bg-warning/90 text-white'
+      // 黄底配白字对比仅约 2:1，改用深色文字满足可读性
+      button: 'bg-warning hover:bg-warning/90 text-panda-black'
     },
     info: {
       icon: 'text-info bg-info/10',
@@ -58,9 +63,17 @@ export default function ConfirmDialog({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+  // 与 Modal 一致：portal 到 body，保证相对视口居中且不被滚动容器带走
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+      <div
+        ref={containerRef}
+        role="alertdialog"
+        aria-modal="true"
+        aria-label={title}
+        tabIndex={-1}
+        className="bg-panda-white rounded-2xl border-2 border-panda-black shadow-[6px_6px_0_0_var(--shadow-hard)] w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 outline-none"
+      >
         <div className="p-4 md:p-6">
           <div className="flex items-start gap-3 md:gap-4 mb-4">
             <div className={clsx('w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center flex-shrink-0', style.icon)}>
@@ -74,22 +87,25 @@ export default function ConfirmDialog({
 
           <div className="flex justify-end gap-2 md:gap-3 mt-4 md:mt-6">
             <button
+              type="button"
               onClick={onClose}
               disabled={isConfirming}
-              className="px-3 md:px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl transition-colors text-xs md:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-secondary px-3 md:px-4 py-2 text-xs md:text-sm"
             >
               {cancelText}
             </button>
             <button
+              type="button"
               onClick={handleConfirm}
               disabled={isConfirming}
-              className={clsx('px-3 md:px-4 py-2 rounded-xl transition-colors text-xs md:text-sm font-medium disabled:opacity-70 disabled:cursor-not-allowed', style.button)}
+              className={clsx('px-3 md:px-4 py-2 text-xs md:text-sm font-medium rounded-xl border-2 transition-all shadow-[3px_3px_0_0_var(--shadow-hard)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[5px_5px_0_0_var(--shadow-hard)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0_0_var(--shadow-hard)] disabled:opacity-60 disabled:cursor-not-allowed', style.button)}
             >
               {isConfirming ? '处理中...' : confirmText}
             </button>
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
