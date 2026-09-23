@@ -245,11 +245,11 @@ export default function Analytics() {
       .slice(0, 5);
   }, [filteredPayments, filteredAssets]);
 
-  if (loadState === 'loading') return <div role="status" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">数据统计</h1>正在加载统计数据…</div>;
-  if (loadState === 'error') return <div role="alert" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">数据统计</h1>统计数据加载失败，请检查连接后重试。<button type="button" className="ml-3 underline" onClick={() => void retryLoad()}>重试</button></div>;
+  if (loadState === 'loading') return <div key="loading" role="status" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">数据统计</h1>正在加载统计数据…</div>;
+  if (loadState === 'error') return <div key="error" role="alert" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">数据统计</h1>统计数据加载失败，请检查连接后重试。<button type="button" className="ml-3 underline" onClick={() => void retryLoad()}>重试</button></div>;
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div key="content" className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-panda-black">数据统计</h1>
         <div className="flex flex-wrap items-center gap-3">

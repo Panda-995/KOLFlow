@@ -1,6 +1,6 @@
 spec_version: "2.1"
 app_id: com.panda.kolflow
-version: 1.4.5
+version: 1.4.6
 support_arch:
   - amd64
   - arm64

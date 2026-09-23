@@ -410,11 +410,11 @@ export default function Orders() {
   const ordersView = useProgressiveList(filteredOrders, undefined, `${searchTerm}|${statusFilter}|${brandFilter}|${yearFilter}|${monthFilter}`);
 
 
-  if (loadState === 'loading') return <div role="status" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">商单管理</h1>正在加载商单…</div>;
-  if (loadState === 'error') return <div role="alert" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">商单管理</h1>商单数据加载失败，请检查连接后重试。<button type="button" className="ml-3 underline" onClick={() => void retryLoad()}>重试</button></div>;
+  if (loadState === 'loading') return <div key="loading" role="status" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">商单管理</h1>正在加载商单…</div>;
+  if (loadState === 'error') return <div key="error" role="alert" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">商单管理</h1>商单数据加载失败，请检查连接后重试。<button type="button" className="ml-3 underline" onClick={() => void retryLoad()}>重试</button></div>;
 
   return (
-    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div key="content" className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-lg font-bold text-panda-black">商单管理</h1>
         <div className="flex items-center gap-2">

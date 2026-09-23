@@ -223,11 +223,11 @@ export default function Brands() {
   const brandsView = useProgressiveList(filteredBrands, undefined, `${searchTerm}|${industryFilter}`);
 
 
-  if (loadState === 'loading') return <div role="status" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">品牌/客户管理</h1>正在加载品牌…</div>;
-  if (loadState === 'error') return <div role="alert" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">品牌/客户管理</h1>品牌数据加载失败，请检查连接后重试。<button type="button" className="ml-3 underline" onClick={() => void retryLoad()}>重试</button></div>;
+  if (loadState === 'loading') return <div key="loading" role="status" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">品牌/客户管理</h1>正在加载品牌…</div>;
+  if (loadState === 'error') return <div key="error" role="alert" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">品牌/客户管理</h1>品牌数据加载失败，请检查连接后重试。<button type="button" className="ml-3 underline" onClick={() => void retryLoad()}>重试</button></div>;
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-7xl mx-auto pb-10">
+    <div key="content" className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-7xl mx-auto pb-10">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-panda-black">品牌/客户管理</h1>

@@ -263,14 +263,14 @@ export default function Billing() {
 
 
   if (loadState === 'loading') {
-    return <div role="status" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">账单管理</h1>正在加载账单…</div>;
+    return <div key="loading" role="status" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">账单管理</h1>正在加载账单…</div>;
   }
   if (loadState === 'error') {
-    return <div role="alert" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">账单管理</h1>账单加载失败，请检查连接后重试。<button type="button" className="ml-3 underline" onClick={() => void loadPayments()}>重试</button></div>;
+    return <div key="error" role="alert" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">账单管理</h1>账单加载失败，请检查连接后重试。<button type="button" className="ml-3 underline" onClick={() => void loadPayments()}>重试</button></div>;
   }
 
   return (
-    <div className="space-y-4 md:space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div key="content" className="space-y-4 md:space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <h1 className="text-lg md:text-lg font-bold text-panda-black">账单管理</h1>
         <div className="flex items-center gap-2">

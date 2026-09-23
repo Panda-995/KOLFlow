@@ -289,11 +289,11 @@ export default function Todos() {
     return <div className="border-2 border-panda-black/20 rounded-2xl overflow-hidden">{rows}</div>;
   }, [calendarData, toggleTodo, formData, invalidateFormSession]);
 
-  if (loadState === 'loading') return <div role="status" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">任务与日程</h1>正在加载待办…</div>;
-  if (loadState === 'error') return <div role="alert" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">任务与日程</h1>待办数据加载失败，请检查连接后重试。<button type="button" className="ml-3 underline" onClick={() => void retryLoad()}>重试</button></div>;
+  if (loadState === 'loading') return <div key="loading" role="status" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">任务与日程</h1>正在加载待办…</div>;
+  if (loadState === 'error') return <div key="error" role="alert" className="card-pixel p-6"><h1 className="text-lg font-bold mb-3">任务与日程</h1>待办数据加载失败，请检查连接后重试。<button type="button" className="ml-3 underline" onClick={() => void retryLoad()}>重试</button></div>;
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-6xl mx-auto pb-10">
+    <div key="content" className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-6xl mx-auto pb-10">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-panda-black">任务与日程</h1>
