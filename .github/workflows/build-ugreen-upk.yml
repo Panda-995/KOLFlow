@@ -11,6 +11,11 @@ on:
         description: Optional GitHub Release tag to publish the UPK files to
         required: false
         default: ""
+      use_cached_ugcli:
+        description: Use a checksum-verified ugcli binary temporarily attached to the target draft release
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
@@ -72,11 +77,22 @@ jobs:
             ${GHCR_IMAGE}:${APP_VERSION}
 
       - name: Install official ugcli
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          USE_CACHED_UGCLI: ${{ inputs.use_cached_ugcli }}
         run: |
-          curl -fsSL \
-            https://osswaf.ugnas.com/pro/ugcli/download/ugcli-v1.1.0.13-linux-amd64 \
-            -o /usr/local/bin/ugcli
-          chmod +x /usr/local/bin/ugcli
+          tool=ugcli-v1.1.0.13-linux-amd64
+          if [ "$USE_CACHED_UGCLI" = "true" ]; then
+            test -n "$RELEASE_TAG"
+            gh release download "$RELEASE_TAG" --pattern "$tool" --dir "$RUNNER_TEMP"
+          else
+            curl -fsSL --connect-timeout 15 --max-time 60 --retry 2 --retry-all-errors \
+              "https://osswaf.ugnas.com/pro/ugcli/download/$tool" \
+              -o "$RUNNER_TEMP/$tool"
+          fi
+          echo "c455dd38def630db2566ae32d0850230ee89abbc948bd1df4819364e88b77713  $RUNNER_TEMP/$tool" | sha256sum -c -
+          install -m 755 "$RUNNER_TEMP/$tool" /usr/local/bin/ugcli
           ugcli --version
 
       - name: Check and package UPK
