@@ -1,6 +1,6 @@
 services:
   kolflow:
-    image: ghcr.io/panda-995/kolflow:1.4.6
+    image: ghcr.io/panda-995/kolflow:1.4.7
     container_name: kolflow
     ports:
       - "3441:3000"
@@ -10,6 +10,7 @@ services:
         source: |-
           ${DATA_PATH}
         target: /app/data
+        read_only: false
       # {{ else }}
       - ./data:/app/data
       # {{ end }}
@@ -18,6 +19,7 @@ services:
       NODE_ENV: production
       PORT: 3000
       DATA_DIR: /app/data
+      ALLOW_ROOT_DATA_FALLBACK: "true"
       JWT_SECRET: ${JWT_SECRET}
       INVITE_CODE: ${INVITE_CODE}
       CORS_ORIGIN: "*"

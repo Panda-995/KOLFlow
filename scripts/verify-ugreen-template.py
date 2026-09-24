@@ -8,6 +8,8 @@ import yaml
 root = Path(__file__).resolve().parents[1]
 package = Path(sys.argv[1])
 config = json.loads((package / "config.json").read_text(encoding="utf-8"))
+assert config["allowAddAccessPath"] is True
+assert config["baseAccessInfo"]["portInfo"]["port"] == "3441"
 params = {p["key"]: p for p in config["installParameters"]["list"]}
 data = params["DATA_PATH"]
 assert data["paramType"] == 1 and not data["multi"]
@@ -36,6 +38,8 @@ for case in json.loads(rendered):
         source, target = mount["source"], mount["target"]
     assert source == case["source"] and target == "/app/data", case
     assert service["environment"]["DATA_DIR"] == "/app/data"
+    assert service["environment"]["ALLOW_ROOT_DATA_FALLBACK"] == "true"
+    assert service["ports"] == ["3441:3000"]
     assert service["environment"]["INVITE_CODE"] == "test-invite"
     print(f"PASS {case['name']}: exactly one correct data mount")
 print("PASS bilingual installer metadata, optional folder picker and invite-code rules")

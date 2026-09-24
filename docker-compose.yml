@@ -10,6 +10,8 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - DATA_DIR=/app/data
+      # NAS bind mounts may reject chown; auto-select a writable identity.
+      - ALLOW_ROOT_DATA_FALLBACK=${ALLOW_ROOT_DATA_FALLBACK:-false}
       # ===== 安全配置（生产环境必须设置） =====
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET必须配置}
       - INVITE_CODE=${INVITE_CODE:-panda995}

@@ -1,6 +1,6 @@
 spec_version: "2.1"
 app_id: com.panda.kolflow
-version: 1.4.6
+version: 1.4.7
 support_arch:
   - amd64
   - arm64
@@ -9,6 +9,7 @@ supports:
   - pc
 is_docker_app: true
 only_admin: true
+allow_add_access_path: true
 port: 3441
 open_type: tab
 tag_types:
@@ -30,10 +31,10 @@ parameters:
     i18n:
       en-US:
         name: Data folder
-        description: Choose a folder for the database and business data. Leave blank to use the existing data directory. Stop the app and copy existing data before switching folders, or restore a backup.
+        description: Choose a writable folder for the database and business data, and grant the app access to shared folders in UGOS Pro. Leave blank to keep the existing data directory. Stop the app and copy existing data before switching folders, or restore a backup.
       zh-CN:
         name: 数据文件夹
-        description: 选择用于保存数据库和业务数据的文件夹；留空沿用原数据目录。更换文件夹前请停用应用并迁移原数据，或导入备份。
+        description: 选择可读写的数据文件夹；共享文件夹还需在绿联应用设置中授权本应用访问。留空沿用原数据目录。更换文件夹前请停用应用并迁移原数据，或导入备份。
   - key: JWT_SECRET
     type: password
     required: true

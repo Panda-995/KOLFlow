@@ -244,7 +244,7 @@ docker run -d -p 3000:3000 \
 | Tag | 说明 |
 |-----|------|
 | `latest` | 最新版（多架构） |
-| `1.4.6` | v1.4.6 固定版本（多架构） |
+| `1.4.7` | v1.4.7 固定版本（多架构） |
 | `arm64` | ARM64 架构专用 |
 | `amd64` | x86_64 架构专用 |
 
@@ -459,6 +459,12 @@ External order create/update supports `productName` and `productValue`. When an 
 ---
 
 ## 📝 更新日志 | Changelog
+
+### 2026-09-24 · v1.4.7
+
+- 修复 NAS 挂载目录拒绝 `chown` 时的 `SQLITE_CANTOPEN` 重启循环。容器先检查数据、WAL/SHM 与上传目录的实际读写能力，并优先使用可写的普通用户；必要时使用容器管理员，完全不可写时明确报错。
+- 绿联应用可在系统设置中授权共享文件夹；安装时仍可选数据目录，保留旧目录和数据格式。普通 Docker 镜像也使用相同权限适配。
+- Android versionCode 14，UGOS Pro 1.4.7.0016。
 
 ### 2026-09-24 · v1.4.6
 

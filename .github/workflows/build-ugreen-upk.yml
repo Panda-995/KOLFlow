@@ -6,7 +6,7 @@ on:
       build_number:
         description: UGOS Pro package build number
         required: true
-        default: "15"
+        default: "16"
       release_tag:
         description: Optional GitHub Release tag to publish the UPK files to
         required: false
@@ -22,7 +22,7 @@ permissions:
   packages: read
 
 env:
-  APP_VERSION: 1.4.6
+  APP_VERSION: 1.4.7
   GHCR_IMAGE: ghcr.io/panda-995/kolflow
 
 jobs:

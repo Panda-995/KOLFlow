@@ -81,3 +81,83 @@ for folder in "$legacy" "$custom"; do
   docker rm -v "$container"
 done
 echo 'PASS: old data in original folder, copied custom folder and restart persistence'
+
+# NAS ACL or root-squashed bind mounts may reject chown. Simulate this with a
+# root-owned mount and no CHOWN capability: the packaged app can still use a
+# writable root mount without silently failing SQLite startup.
+fallback="$storage_test_root/root-owned-no-chown"
+sudo mkdir -p "$fallback"
+sudo cp -a "$legacy/." "$fallback/"
+sudo chown -R 0:0 "$fallback"
+sudo chmod 700 "$fallback" "$fallback/uploads"
+sudo chmod 600 "$fallback/database.sqlite"
+docker run --name "$container" --cap-drop=CHOWN \
+  -v "$fallback:/app/data" -e ALLOW_ROOT_DATA_FALLBACK=false "$new_image" >/dev/null 2>&1 && {
+    echo 'Expected a clear failure when the data mount is not writable by the app user' >&2
+    exit 1
+  }
+test "$(docker inspect -f '{{.State.ExitCode}}' "$container")" = 73
+docker logs "$container" 2>&1 | grep -q 'cannot write SQLite data'
+docker rm -v "$container"
+docker run -d --name "$container" --cap-drop=CHOWN -p 127.0.0.1:3441:3000 \
+  -v "$fallback:/app/data" -v "$storage_test_root:/verification:ro" \
+  -e JWT_SECRET=kolflow-release-storage-isolated-secret \
+  -e INVITE_CODE=storage-invite \
+  -e ALLOW_ROOT_DATA_FALLBACK=true \
+  "$new_image"
+docker exec -i "$container" node --input-type=module <<'JS'
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+for (let attempt = 0; attempt < 30; attempt++) {
+  try { if ((await fetch('http://127.0.0.1:3000/api/health')).ok) break; } catch {}
+  await new Promise(resolve => setTimeout(resolve, 1000));
+}
+assert((await fetch('http://127.0.0.1:3000/api/health')).ok);
+assert.equal(fs.readFileSync('/proc/1/status', 'utf8').match(/^Uid:\s+(\d+)/m)?.[1], '0');
+const db = (await import('./build/src/server/db.js')).default;
+const before = JSON.parse(fs.readFileSync('/verification/before.json', 'utf8'));
+const { verifyStorageMigration } = await import('./scripts/verify-storage-migration.mjs');
+verifyStorageMigration(db, before);
+db.close();
+JS
+docker logs "$container" 2>&1 | grep -q 'continuing as container root for this mount'
+curl -fsS http://127.0.0.1:3441/api/health >/dev/null
+curl -fsS http://127.0.0.1:3441/ >/dev/null
+docker restart "$container"
+docker exec "$container" node -e "(async()=>{for(let i=0;i<30;i++){try{if((await fetch('http://127.0.0.1:3000/api/health')).ok)process.exit(0)}catch{}await new Promise(r=>setTimeout(r,1000))}process.exit(1)})()"
+docker rm -fv "$container"
+echo 'PASS: root-owned NAS mount with chown denied preserves old rows and survives restart'
+
+owner_mount="$storage_test_root/nas-user-owned-no-chown"
+sudo mkdir -p "$owner_mount"
+sudo cp -a "$legacy/." "$owner_mount/"
+sudo chown -R 2000:2000 "$owner_mount"
+sudo rmdir "$owner_mount/uploads"
+sudo chmod 700 "$owner_mount"
+sudo chmod 600 "$owner_mount/database.sqlite"
+docker run -d --name "$container" --cap-drop=CHOWN -p 127.0.0.1:3441:3000 \
+  -v "$owner_mount:/app/data" -v "$storage_test_root:/verification:ro" \
+  -e JWT_SECRET=kolflow-release-storage-isolated-secret \
+  -e INVITE_CODE=storage-invite "$new_image"
+docker exec -i "$container" node --input-type=module <<'JS'
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+for (let attempt = 0; attempt < 30; attempt++) {
+  try { if ((await fetch('http://127.0.0.1:3000/api/health')).ok) break; } catch {}
+  await new Promise(resolve => setTimeout(resolve, 1000));
+}
+assert((await fetch('http://127.0.0.1:3000/api/health')).ok);
+assert.equal(fs.readFileSync('/proc/1/status', 'utf8').match(/^Uid:\s+(\d+)/m)?.[1], '2000');
+const db = (await import('./build/src/server/db.js')).default;
+const before = JSON.parse(fs.readFileSync('/verification/before.json', 'utf8'));
+const { verifyStorageMigration } = await import('./scripts/verify-storage-migration.mjs');
+verifyStorageMigration(db, before);
+db.close();
+JS
+docker logs "$container" 2>&1 | grep -q 'using its writable owner 2000:2000'
+curl -fsS http://127.0.0.1:3441/api/health >/dev/null
+curl -fsS http://127.0.0.1:3441/ >/dev/null
+docker restart "$container"
+docker exec "$container" node -e "(async()=>{for(let i=0;i<30;i++){try{if((await fetch('http://127.0.0.1:3000/api/health')).ok)process.exit(0)}catch{}await new Promise(r=>setTimeout(r,1000))}process.exit(1)})()"
+docker rm -fv "$container"
+echo 'PASS: NAS user-owned mount with chown denied runs as UID 2000 and preserves data'

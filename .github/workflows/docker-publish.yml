@@ -11,7 +11,7 @@ on:
         default: ""
 
 env:
-  APP_VERSION: 1.4.6
+  APP_VERSION: 1.4.7
   GHCR_IMAGE: ghcr.io/panda-995/kolflow
   DOCKERHUB_IMAGE: panda995/kolflow
   HAS_DOCKERHUB: ${{ secrets.DOCKER_HUB_USERNAME != '' && secrets.DOCKER_HUB_TOKEN != '' }}
@@ -127,7 +127,7 @@ jobs:
 
       - name: Verify old data and custom folder persistence
         run: |
-          bash scripts/verify-container-storage.sh "${GHCR_IMAGE}:1.4.5-${{ matrix.suffix }}" "${GHCR_IMAGE}:${APP_VERSION}-${{ matrix.suffix }}"
+          bash scripts/verify-container-storage.sh "${GHCR_IMAGE}:1.4.6-${{ matrix.suffix }}" "${GHCR_IMAGE}:${APP_VERSION}-${{ matrix.suffix }}"
 
       - name: Verify Compose authentication, reports and restart persistence
         env:

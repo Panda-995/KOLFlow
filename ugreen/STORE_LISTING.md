@@ -2,7 +2,7 @@
 
 - 应用名称：KOLFlow
 - 应用 ID：`com.panda.kolflow`
-- 当前版本：`1.4.6.0015`
+- 当前版本：`1.4.7.0016`
 - 分类：实用工具
 - 支持架构：amd64、arm64
 - 开发者：熊猫不是猫QAQ
@@ -25,11 +25,10 @@ KOLFlow is an independently developed, self-hosted collaboration manager for con
 
 ## 更新说明
 
-- 修复切换侧边栏时，加载卡片的边框、背景和阴影短暂出现在正式页面周围的问题。
-- 桌面和移动端覆盖商单、账单、待办、品牌、统计页面的逐帧切换检查，保留键盘焦点提示。
-- 本次不修改数据库结构、API 或备份格式，继续使用原数据目录及 v4 备份，并兼容 v2/v3 备份导入。
-- Web / Docker / Android 版本为 1.4.6，Android versionCode 13，UGOS Pro 版本为 1.4.6.0015。保留应用 ID 和 Android 签名。
+- 修复部分 NAS 共享目录无法更改属主时容器循环重启、HTTP 页面无法访问的问题。启动时检查数据库、WAL/SHM 和上传目录的实际读写权限，优先使用可写的普通用户，必要时使用容器管理员；都不可写时明确提示目录权限或只读挂载。
+- 绿联包允许在应用设置中授权共享文件夹访问，安装时仍可自定义数据目录，留空沿用原目录。升级不移动数据，已有数据库和备份格式不变。
+- Docker 和绿联包共用读写适配逻辑。Web / Docker / Android 为 1.4.7，Android versionCode 14，UGOS Pro 为 1.4.7.0016；应用 ID 与 Android 签名保持兼容。
 
 ## 上架素材
 
-原图保存在 `public/store-listing/pc` 和 `public/store-listing/mobile`，随 Docker 镜像包含在双架构 UPK 内。Release 同时提供 `KOLFlow-v1.4.6-ugreen-store-assets.zip`，包含图标、六张详情图、本说明和素材校验清单，供应用中心提交使用。详情图仍需在上架时提交，UPK 内包含图片不会自动更新应用中心展示。
+原图保存在 `public/store-listing/pc` 和 `public/store-listing/mobile`，随 Docker 镜像包含在双架构 UPK 内。Release 同时提供 `KOLFlow-v1.4.7-ugreen-store-assets.zip`，包含图标、六张详情图、本说明和素材校验清单，供应用中心提交使用。详情图仍需在上架时提交，UPK 内包含图片不会自动更新应用中心展示。
