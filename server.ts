@@ -141,15 +141,16 @@ async function startServer() {
   // 通用写操作限流同样前置于解析，避免先读满 100MB 才拿到 429
   app.use('/api/', apiLimiter);
 
-  // 公开认证端点（密钥下发/用户检查）单设低成本限流，避免被无限调用
-  const publicAuthLimiter = rateLimit({
+  // 两个公开端点各自限流：页面启动会同时请求它们，共用额度会把正常请求误判为 429。
+  const createPublicAuthLimiter = () => rateLimit({
     windowMs: 60 * 1000,
     max: 60,
     message: { error: '请求过于频繁，请稍后再试' },
     standardHeaders: true,
     legacyHeaders: false,
   });
-  app.use(['/api/auth/encryption-key', '/api/auth/check-users'], publicAuthLimiter);
+  app.use('/api/auth/encryption-key', createPublicAuthLimiter());
+  app.use('/api/auth/check-users', createPublicAuthLimiter());
 
   configureJsonBodyParsers(app);
 

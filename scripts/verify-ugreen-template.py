@@ -10,11 +10,22 @@ package = Path(sys.argv[1])
 config = json.loads((package / "config.json").read_text(encoding="utf-8"))
 assert config["allowAddAccessPath"] is True
 assert config["baseAccessInfo"]["portInfo"]["port"] == "3441"
+assert config["version"]["version"] == "1.4.8.0017"
+warning_zh = "请勿让应用的 Docker 配置版 与绿联应用中心版同时读写同一数据库目录"
+warning_en = "Never let the Docker Compose deployment and the UGOS Pro App Center installation read and write the same database folder at the same time."
+listing = (root / "ugreen/STORE_LISTING.md").read_text(encoding="utf-8")
+assert warning_zh in listing and warning_en in listing
+store_descriptions = {item["langName"]: item["description"] for item in config["i18n"]}
+assert warning_zh in store_descriptions["zh-CN"]
+assert warning_en in store_descriptions["en-US"]
 params = {p["key"]: p for p in config["installParameters"]["list"]}
 data = params["DATA_PATH"]
 assert data["paramType"] == 1 and not data["multi"]
 assert not data["isRequired"] and data["changeable"]
 assert {p["langName"] for p in data["i18ns"]} == {"en-US", "zh-CN"}
+folder_descriptions = {p["langName"]: p["description"] for p in data["i18ns"]}
+assert warning_zh in folder_descriptions["zh-CN"]
+assert warning_en in folder_descriptions["en-US"]
 invite = params["INVITE_CODE"]
 assert invite["miniLength"] == 6 and invite["maxLength"] == 64
 assert invite["isRequired"] and invite["changeable"]
@@ -42,4 +53,4 @@ for case in json.loads(rendered):
     assert service["ports"] == ["3441:3000"]
     assert service["environment"]["INVITE_CODE"] == "test-invite"
     print(f"PASS {case['name']}: exactly one correct data mount")
-print("PASS bilingual installer metadata, optional folder picker and invite-code rules")
+print("PASS bilingual installer/store warnings, optional folder picker and invite-code rules")
