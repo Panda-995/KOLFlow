@@ -8,6 +8,7 @@
 - 开发者：熊猫不是猫QAQ
 - 发布者：熊猫不是猫QAQ
 - 发布者主页：https://github.com/Panda-995
+- 官方网站：https://kolflow.hicp.fun/
 - 帮助文档：https://post.smzdm.com/p/a6zg63m0/
 - 源码链接：https://github.com/Panda-995/KOLFlow
 - 许可协议：https://github.com/Panda-995/KOLFlow/blob/main/LICENSE

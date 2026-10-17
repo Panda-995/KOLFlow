@@ -66,7 +66,7 @@ i18n:
     name: KOLFlow
     description: KOLFlow is an independently developed, self-hosted collaboration manager for content creators. Deploy it on a personal server or NAS and access it through desktop and mobile browsers or an Android client connected to your server. Track orders, delivery dates and progress; reuse order templates; manage brand contacts, tasks, calendars, publication links and paid promotion costs. Record bill settlements, exchanged products and asset sales, and review dashboards, statistics, periodic notifications and activity logs. Data import, export and backup restoration help maintain historical records. Never let the Docker Compose deployment and the UGOS Pro App Center installation read and write the same database folder at the same time. Licensed under GNU AGPL v3.0. The project is not affiliated with or partnered with the third-party brands mentioned.
     author: 熊猫不是猫QAQ
-    official: https://github.com/Panda-995/KOLFlow
+    official: https://kolflow.hicp.fun/
     help: https://post.smzdm.com/p/a6zg63m0/
     publisher: 熊猫不是猫QAQ
     publisher_link: https://github.com/Panda-995
@@ -74,7 +74,7 @@ i18n:
     name: KOLFlow
     description: KOLFlow 是面向内容创作者和达人的自托管商单管理套件，可部署在个人服务器或 NAS 上，通过电脑浏览器、手机浏览器和 Android 客户端访问。套件支持记录商单信息、合作类型、交付日期与执行状态，使用模板创建重复商单，管理品牌联系人、待办日历、发布链接和付费推广费用；可跟踪账单结算、置换商品及资产出售情况，并通过仪表盘、数据统计和周期通知查看业务进展。支持操作日志、数据导入导出和备份恢复，便于整理合作记录与维护历史数据。请勿让应用的 Docker 配置版 与绿联应用中心版同时读写同一数据库目录。Android 客户端需连接用户自行部署的服务。本项目独立开发，采用 GNU AGPL v3.0 开源，与所提及的第三方品牌不存在隶属或合作关系。
     author: 熊猫不是猫QAQ
-    official: https://github.com/Panda-995/KOLFlow
+    official: https://kolflow.hicp.fun/
     help: https://post.smzdm.com/p/a6zg63m0/
     publisher: 熊猫不是猫QAQ
     publisher_link: https://github.com/Panda-995

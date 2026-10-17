@@ -6,6 +6,7 @@
 
 - 开发者：熊猫不是猫QAQ
 - 发布者：熊猫不是猫QAQ
+- 官网：https://kolflow.hicp.fun/
 - 源码：https://github.com/Panda-995/KOLFlow
 - 帮助文档：https://post.smzdm.com/p/a6zg63m0/
 - 许可协议：https://github.com/Panda-995/KOLFlow/blob/main/LICENSE
