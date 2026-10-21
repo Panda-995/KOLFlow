@@ -396,6 +396,12 @@ if (!orderColumnNames.includes('productValue')) {
   db.exec('ALTER TABLE orders ADD COLUMN productValue REAL DEFAULT 0;');
 }
 
+// Additive, idempotent migration: legacy fields remain readable by older clients.
+for (const [table, column] of [['orders', 'products'], ['order_templates', 'products'], ['assets', 'images'], ['assets', 'orderProductId']]) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as TableInfoRow[];
+  if (!columns.some(item => item.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} TEXT`);
+}
+
 // Ensure assets has saleStatus and soldAmount columns
 const assetColumns = db.prepare("PRAGMA table_info(assets)").all() as TableInfoRow[];
 const assetColumnNames = assetColumns.map(c => c.name);

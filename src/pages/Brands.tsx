@@ -655,7 +655,7 @@ export default function Brands() {
                 </div>
                 <div className="flex items-center gap-3 mt-1.5 text-[10px]">
                   <span className="text-gray-500">
-                    {order.type === 'paid' ? '付费' : order.type === 'product_exchange' ? '置换' : '直发'}
+                    {({ paid: '付费', paid_product: '费用+产品', product_exchange: '置换', ecard: 'E卡', direct: '直发' })[order.type]}
                   </span>
                   <span className="font-bold text-success">¥{order.actualAmount.toLocaleString()}</span>
                   {order.submitDate && <span className="text-gray-600">{order.submitDate}</span>}

@@ -6,6 +6,7 @@ export const ORDER_STATUS_MAP: Record<string, { label: string; color: string; ic
 
 export const ORDER_TYPE_MAP = {
   paid: { label: '付费', icon: '💵' },
+  paid_product: { label: '费用+产品', icon: '🎁' },
   product_exchange: { label: '置换', icon: '🎁' },
   direct: { label: '直发', icon: '🚀' },
   ecard: { label: 'E卡', icon: '💳' },

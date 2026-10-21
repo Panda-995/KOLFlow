@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { hasOrderProducts, validateOrderProducts, summarizeProducts } from '../../lib/orderProducts.js';
+import { getAssetImages, validateAssetImages } from '../../lib/assetImages.js';
 import db from '../db.js';
 import fs from 'fs';
 import path from 'path';
@@ -463,8 +465,8 @@ router.post('/import', (req, res) => {
         const templateStmt = db.prepare(`
           INSERT INTO order_templates (
             id, userId, name, title, type, actualAmount, brandName, platforms,
-            productName, productValue, createdAt, updatedAt
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            productName, productValue, products, createdAt, updatedAt
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         orderTemplates.forEach((template: ImportRow) => {
           const rawPlatforms = Array.isArray(template.platforms)
@@ -474,9 +476,11 @@ router.post('/import', (req, res) => {
             rawPlatforms.map((platform: unknown) => String(platform).trim().slice(0, 30)).filter(Boolean),
           )).slice(0, 10);
           const templateType = asString(template.type);
-          const type = ['paid', 'product_exchange', 'direct', 'ecard'].includes(templateType)
+          const type = ['paid', 'paid_product', 'product_exchange', 'direct', 'ecard'].includes(templateType)
             ? templateType
             : 'paid';
+          const products = template.products === undefined || template.products === null ? null : validateOrderProducts(template.products);
+          const summary = products && hasOrderProducts(type) ? summarizeProducts(products) : null;
           templateStmt.run(
             allocateImportedId('order_templates', userId, template.id),
             userId,
@@ -486,8 +490,9 @@ router.post('/import', (req, res) => {
             (() => { const n = Number(template.actualAmount); return Number.isFinite(n) && n > 0 ? Math.min(n, 99999999) : 0; })(),
             String(template.brandName || '').trim().slice(0, 50) || null,
             JSON.stringify(platforms),
-            String(template.productName || '').trim().slice(0, 100) || null,
-            (() => { const n = Number(template.productValue); return Number.isFinite(n) && n > 0 ? Math.min(n, 99999999) : 0; })(),
+            summary ? summary.productName : String(template.productName || '').trim().slice(0, 100) || null,
+            summary ? summary.productValue : (() => { const n = Number(template.productValue); return Number.isFinite(n) && n > 0 ? Math.min(n, 99999999) : 0; })(),
+            products ? JSON.stringify(products) : null,
             template.createdAt || new Date().toISOString(),
             template.updatedAt || template.createdAt || new Date().toISOString(),
           );
@@ -577,8 +582,8 @@ router.post('/import', (req, res) => {
 
       if (Array.isArray(assets)) {
         const assetStmt = db.prepare(`
-          INSERT INTO assets (id, userId, orderId, orderNo, brandName, productName, productValue, image, saleStatus, soldAmount, soldDate, createdAt)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO assets (id, userId, orderId, orderNo, brandName, productName, productValue, image, images, orderProductId, saleStatus, soldAmount, soldDate, createdAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         assets.forEach((asset: ImportRow) => {
           const assetId = allocateImportedId('assets', userId, asset.id);
@@ -591,7 +596,9 @@ router.post('/import', (req, res) => {
             asset.brandName ? String(asset.brandName).slice(0, 50) : (asset.brand ? String(asset.brand).slice(0, 50) : null),
             String(asset.productName || asset.name || '未知产品').slice(0, 100),
             (() => { const n = Number(asset.productValue ?? asset.value ?? 0); return Number.isFinite(n) && n > 0 ? Math.min(n, 99999999) : 0; })(),
-            normalizeAssetImage(asset.image),
+            asset.images != null ? getAssetImages(asset as { images?: unknown })[0] || null : normalizeAssetImage(asset.image),
+            asset.images != null ? JSON.stringify(validateAssetImages(getAssetImages(asset as { images?: unknown }))) : null,
+            clampText(asset.orderProductId, 100),
             normalizeSaleStatus(asset.saleStatus),
             (() => { const n = Number(asset.soldAmount ?? 0); return Number.isFinite(n) && n > 0 ? Math.min(n, 99999999) : 0; })(),
             asDateOnlyOrNull(asset.soldDate),

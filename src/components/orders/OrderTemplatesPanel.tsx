@@ -6,6 +6,8 @@ import { useToast } from '../Toast';
 import { useStore, type OrderTemplate, type OrderType } from '../../store/useStore';
 import { ORDER_TYPE_MAP } from '../../constants/orders';
 import Select from '../common/Select';
+import ProductFields, { productsToForm, type ProductFormItem } from './ProductFields';
+import { getOrderProducts, hasOrderProducts, summarizeProducts } from '../../lib/orderProducts';
 
 type TemplateForm = {
   name: string;
@@ -16,6 +18,7 @@ type TemplateForm = {
   platforms: string;
   productName: string;
   productValue: string;
+  products: ProductFormItem[];
 };
 
 const EMPTY_FORM: TemplateForm = {
@@ -27,6 +30,7 @@ const EMPTY_FORM: TemplateForm = {
   platforms: '',
   productName: '',
   productValue: '',
+  products: [],
 };
 
 const templateToForm = (template: OrderTemplate): TemplateForm => ({
@@ -38,6 +42,7 @@ const templateToForm = (template: OrderTemplate): TemplateForm => ({
   platforms: template.platforms.join(', '),
   productName: template.productName || '',
   productValue: template.productValue ? String(template.productValue) : '',
+  products: productsToForm(getOrderProducts(template)),
 });
 
 export default function OrderTemplatesPanel() {
@@ -65,7 +70,7 @@ export default function OrderTemplatesPanel() {
 
   const openEditor = (template?: OrderTemplate) => {
     setEditingTemplate(template || null);
-    setForm(template ? templateToForm(template) : EMPTY_FORM);
+    setForm(template ? templateToForm(template) : { ...EMPTY_FORM, products: productsToForm([]) });
     setIsEditorOpen(true);
   };
 
@@ -80,15 +85,17 @@ export default function OrderTemplatesPanel() {
     event.preventDefault();
     if (saving) return;
 
+    const products = hasOrderProducts(form.type) ? form.products.map(product => ({ ...product, productValue: Number(product.productValue) || 0 })) : [];
     const payload = {
       name: form.name.trim(),
       title: form.title.trim(),
       brandName: form.brandName.trim(),
       type: form.type,
-      actualAmount: Number(form.actualAmount) || 0,
+      actualAmount: form.type === 'product_exchange' || form.type === 'ecard' ? 0 : Number(form.actualAmount) || 0,
       platforms: form.platforms.split(/[,，]/).map(item => item.trim()).filter(Boolean),
-      productName: form.productName.trim(),
-      productValue: Number(form.productValue) || 0,
+      productName: hasOrderProducts(form.type) ? summarizeProducts(products).productName : '',
+      productValue: hasOrderProducts(form.type) ? summarizeProducts(products).productValue : form.type === 'ecard' ? Number(form.productValue) || 0 : 0,
+      products,
     };
 
     setSaving(true);
@@ -193,7 +200,7 @@ export default function OrderTemplatesPanel() {
                   </div>
                   <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-600">
                     <span>{template.brandName || '无品牌'}</span>
-                    <span>¥{(value || 0).toLocaleString()}</span>
+                    <span>¥{(value || 0).toLocaleString()}{template.type === 'paid_product' ? ` + ${getOrderProducts(template).length}件产品` : ''}</span>
                     <span className="truncate max-w-full">{template.platforms.join('、') || '未设置平台'}</span>
                   </div>
                   <div className="mt-3 grid grid-cols-[1fr_44px_44px] gap-2">
@@ -285,13 +292,14 @@ export default function OrderTemplatesPanel() {
                 aria-label="模板合作类型"
                 options={[
                   { value: 'paid', label: '付费' },
+                  { value: 'paid_product', label: '费用+产品' },
                   { value: 'product_exchange', label: '置换' },
                   { value: 'ecard', label: 'E卡' },
                   { value: 'direct', label: '直发' },
                 ]}
               />
             </label>
-            {(form.type === 'product_exchange' || form.type === 'ecard') ? (
+            {form.type === 'ecard' ? (
               <label className="text-xs font-medium text-gray-700">
                 {form.type === 'ecard' ? 'E卡面值 (¥)' : '产品价值 (¥)'}
                 <input
@@ -303,7 +311,7 @@ export default function OrderTemplatesPanel() {
                   className="mt-1 w-full form-control"
                 />
               </label>
-            ) : (
+            ) : form.type !== 'product_exchange' && (
               <label className="text-xs font-medium text-gray-700">
                 金额 (¥)
                 <input
@@ -317,16 +325,8 @@ export default function OrderTemplatesPanel() {
               </label>
             )}
           </div>
-          {form.type === 'product_exchange' && (
-            <label className="block text-xs font-medium text-gray-700">
-              产品名称
-              <input
-                maxLength={100}
-                value={form.productName}
-                onChange={event => setForm({ ...form, productName: event.target.value })}
-                className="mt-1 w-full form-control"
-              />
-            </label>
+          {hasOrderProducts(form.type) && (
+            <ProductFields prefix="template-product" products={form.products} onChange={products => setForm({ ...form, products })} />
           )}
           <label className="block text-xs font-medium text-gray-700">
             发布平台

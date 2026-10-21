@@ -1,8 +1,10 @@
+import ProductFields, { productsToForm, type ProductFormItem } from '../../components/orders/ProductFields';
+import { getOrderProducts, hasOrderProducts, summarizeProducts } from '../../lib/orderProducts';
 import { useEffect, useState } from 'react';
 import Modal from '../../components/Modal';
 import Select from '../../components/common/Select';
 import { useToast } from '../../components/Toast';
-import type { Brand, Order, OrderStatus, OrderType } from '../../types';
+import type { Brand, Order, OrderStatus, OrderType, OrderProduct } from '../../types';
 
 export interface OrderFormPayload {
   title: string;
@@ -15,6 +17,7 @@ export interface OrderFormPayload {
   acceptDate: string;
   submitDate: string;
   productName: string;
+  products: OrderProduct[];
 }
 
 const EMPTY_FORM = {
@@ -27,7 +30,8 @@ const EMPTY_FORM = {
   acceptDate: '',
   submitDate: '',
   productName: '',
-  productValue: ''
+  productValue: '',
+  products: [] as ProductFormItem[]
 };
 
 interface OrderFormModalProps {
@@ -58,10 +62,11 @@ export default function OrderFormModal({ isOpen, editingOrder, brands, onClose, 
         acceptDate: editingOrder.acceptDate || '',
         submitDate: editingOrder.submitDate || '',
         productName: editingOrder.productName || '',
-        productValue: editingOrder.productValue?.toString() || ''
+        productValue: editingOrder.productValue?.toString() || '',
+        products: productsToForm(getOrderProducts(editingOrder))
       });
     } else {
-      setFormData(EMPTY_FORM);
+      setFormData({ ...EMPTY_FORM, products: productsToForm([]) });
     }
   }, [isOpen, editingOrder]);
 
@@ -70,10 +75,13 @@ export default function OrderFormModal({ isOpen, editingOrder, brands, onClose, 
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
+      const products = hasOrderProducts(formData.type) ? formData.products.map(product => ({ ...product, productValue: Number(product.productValue) || 0 })) : [];
       await onSubmit({
         ...formData,
-        actualAmount: Number(formData.actualAmount) || 0,
-        productValue: Number(formData.productValue) || 0,
+        actualAmount: formData.type === 'product_exchange' || formData.type === 'ecard' ? 0 : Number(formData.actualAmount) || 0,
+        productName: hasOrderProducts(formData.type) ? summarizeProducts(products).productName : '',
+        productValue: hasOrderProducts(formData.type) ? summarizeProducts(products).productValue : formData.type === 'ecard' ? Number(formData.productValue) || 0 : 0,
+        products,
         platforms: formData.platforms.split(',').map(s => s.trim()).filter(Boolean)
       });
     } catch (error) {
@@ -109,7 +117,7 @@ export default function OrderFormModal({ isOpen, editingOrder, brands, onClose, 
             </datalist>
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <div>
             <label htmlFor="order-type" className="block text-xs font-medium text-gray-700 mb-1">合作类型</label>
             <Select
@@ -119,6 +127,7 @@ export default function OrderFormModal({ isOpen, editingOrder, brands, onClose, 
               className="w-full"
               options={[
                 { value: 'paid', label: '付费' },
+                { value: 'paid_product', label: '费用+产品' },
                 { value: 'product_exchange', label: '置换' },
                 { value: 'ecard', label: 'E卡' },
                 { value: 'direct', label: '直发' },
@@ -142,23 +151,14 @@ export default function OrderFormModal({ isOpen, editingOrder, brands, onClose, 
             </div>
           )}
           {formData.type !== 'product_exchange' && formData.type !== 'ecard' && (
-          <div className={!editingOrder ? "col-span-2" : ""}>
+          <div className={!editingOrder ? "sm:col-span-2" : "col-span-2 sm:col-span-1"}>
             <label htmlFor="order-amount" className="block text-xs font-medium text-gray-700 mb-1">金额 (¥)</label>
-            <input id="order-amount" type="number" min="0" inputMode="decimal" value={formData.actualAmount} onChange={e => setFormData({...formData, actualAmount: e.target.value})} className="w-full form-control" />
+            <input id="order-amount" type="number" min="0" step="0.01" inputMode="decimal" value={formData.actualAmount} onChange={e => setFormData({...formData, actualAmount: e.target.value})} className="w-full form-control" />
           </div>
           )}
         </div>
-        {formData.type === 'product_exchange' && (
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="order-productName" className="block text-xs font-medium text-gray-700 mb-1">产品名称</label>
-              <input id="order-productName" type="text" value={formData.productName} onChange={e => setFormData({...formData, productName: e.target.value})} placeholder="如：XX品牌蓝牙耳机" className="w-full form-control" />
-            </div>
-            <div>
-              <label htmlFor="order-productValue" className="block text-xs font-medium text-gray-700 mb-1">产品价值 (¥)</label>
-              <input id="order-productValue" type="number" min="0" value={formData.productValue} onChange={e => setFormData({...formData, productValue: e.target.value})} placeholder="产品市场价值" className="w-full form-control" />
-            </div>
-          </div>
+        {hasOrderProducts(formData.type) && (
+          <ProductFields prefix="order-product" products={formData.products} onChange={products => setFormData({ ...formData, products })} />
         )}
         {formData.type === 'ecard' && (
           <div>

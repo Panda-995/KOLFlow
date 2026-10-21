@@ -2,7 +2,7 @@
 
 - 应用名称：KOLFlow
 - 应用 ID：`com.panda.kolflow`
-- 当前版本：`1.4.8.0017`
+- 当前版本：`1.4.9.0018`
 - 分类：实用工具
 - 支持架构：amd64、arm64
 - 开发者：熊猫不是猫QAQ
@@ -26,18 +26,20 @@ KOLFlow is an independently developed, self-hosted collaboration manager for con
 
 ## 更新说明
 
+- 商单新增「费用+产品」，可同时填写合作费用与多件赠送产品；模板同步支持，完成后生成费用账单及逐件资产。
+- 资产库支持每件产品最多9张图片，可批量上传、预览和删除；关于项目显示当前版本。
+- 升级只新增可空字段并保留旧数据，兼容旧版单产品、单图及 v2/v3/v4 备份。回退旧程序请使用升级前备份。
 - 请勿让应用的 Docker 配置版 与绿联应用中心版同时读写同一数据库目录。
-- 改进连续访问登录或注册页面时的稳定性：用户状态与加密公钥接口分别限流，避免共用额度造成误提示。
-- 两种部署方式仍可分别使用已有数据；切换方式时，先停止原实例，再迁移完整数据目录或恢复备份。数据库结构与备份格式不变。
-- Web / Docker / Android 为 1.4.8，Android versionCode 15，UGOS Pro 为 1.4.8.0017；应用 ID 与 Android 签名保持兼容。
+- Web / Docker / Android 为 1.4.9，Android versionCode 16，UGOS Pro 为 1.4.9.0018；应用 ID 与 Android 签名保持兼容。
 
 ## Update Notes
 
+- Add fee plus products collaborations and multiple gifted products in orders and templates, generating separate bills and per-product assets on completion.
+- Support up to nine images per asset, batch upload, preview and deletion. Display the build version in About.
+- Add nullable database fields while retaining historical data and support for legacy single-product, single-image and v2/v3/v4 backups. Use a pre-upgrade backup when reverting to older software.
 - Never let the Docker Compose deployment and the UGOS Pro App Center installation read and write the same database folder at the same time.
-- Improve repeated login and registration page visits by giving the user-status and encryption-key endpoints separate rate-limit budgets.
-- To switch deployments, stop the original instance before copying the complete data folder or restoring a backup. The database schema and backup format are unchanged.
-- Web / Docker / Android are version 1.4.8 (Android versionCode 15); UGOS Pro is 1.4.8.0017. The app ID and Android signing certificate remain compatible.
+- Web / Docker / Android are version 1.4.9 (Android versionCode 16); UGOS Pro is 1.4.9.0018. The app ID and Android signing certificate remain compatible.
 
 ## 上架素材
 
-原图保存在 `public/store-listing/pc` 和 `public/store-listing/mobile`，随 Docker 镜像包含在双架构 UPK 内。Release 同时提供 `KOLFlow-v1.4.8-ugreen-store-assets.zip`，包含图标、六张详情图、本说明和素材校验清单，供应用中心提交使用。详情图仍需在上架时提交，UPK 内包含图片不会自动更新应用中心展示。
+原图保存在 `public/store-listing/pc` 和 `public/store-listing/mobile`，随 Docker 镜像包含在双架构 UPK 内。Release 同时提供 `KOLFlow-v1.4.9-ugreen-store-assets.zip`，包含图标、六张详情图、本说明和素材校验清单，供应用中心提交使用。详情图仍需在上架时提交，UPK 内包含图片不会自动更新应用中心展示。

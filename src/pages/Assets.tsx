@@ -8,6 +8,9 @@ import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
 import { ALL_MONTHS, ALL_YEARS, getAvailableYears, matchesYearMonth, monthOptions } from '../lib/dateFilter';
+import { getAssetImages, MAX_ASSET_IMAGES, validateAssetImages } from '../lib/assetImages';
+import { getSessionEpoch, isSessionCurrent } from '../store/cache';
+import { useFormSessionGuard } from '../hooks/useFormSessionGuard';
 import { authFetch } from '../lib/api';
 import { useProgressiveList } from '../hooks/useProgressiveList';
 
@@ -24,10 +27,11 @@ const loadAssetImage = async (assetId: string): Promise<string | null> => {
 
   const request = (async () => {
     try {
+      const epoch = getSessionEpoch();
       const response = await authFetch(`/api/assets/${assetId}/image`);
       if (!response.ok) return null;
       const data = await response.json() as { image?: string };
-      if (!data.image) return null;
+      if (!data.image || !isSessionCurrent(epoch)) return null;
       assetImageCache.set(assetId, data.image);
       return data.image;
     } catch {
@@ -139,7 +143,7 @@ function AssetThumbnail({ asset, onClick }: { asset: Asset; onClick: () => void 
     <div
       ref={containerRef}
       className={clsx(
-        "w-20 h-20 rounded-xl flex-shrink-0 flex items-center justify-center overflow-hidden border-2",
+        "relative w-20 h-20 rounded-xl flex-shrink-0 flex items-center justify-center overflow-hidden border-2",
         hasImage
           ? "border-transparent cursor-pointer bg-bg-tertiary"
           : "border-dashed border-gray-200 hover:border-panda-black/30 cursor-pointer"
@@ -155,6 +159,7 @@ function AssetThumbnail({ asset, onClick }: { asset: Asset; onClick: () => void 
       }}
       onClick={onClick}
     >
+      {(asset.imageCount || 0) > 1 && <span className="absolute bottom-0 right-0 bg-black/70 text-white text-[10px] px-1.5 rounded-tl-lg">{asset.imageCount}张</span>}
       {imageSource ? (
         <img
           src={imageSource}
@@ -198,6 +203,11 @@ export default function Assets() {
   const [editForm, setEditForm] = useState({ productName: '', productValue: '', saleStatus: 'keep' as 'keep' | 'sold', soldAmount: '' });
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [imageAsset, setImageAsset] = useState<Asset | null>(null);
+  const [imageBusy, setImageBusy] = useState(false);
+  const [imageLoading, setImageLoading] = useState(false);
+  const [imageLoadError, setImageLoadError] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(0);
+  const imageSession = useFormSessionGuard();
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; asset: Asset | null }>({ isOpen: false, asset: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -308,41 +318,82 @@ export default function Assets() {
 
   const isEcard = (asset: Asset) => asset.productName.includes('E卡');
 
+  const closeImageModal = () => {
+    imageSession.invalidateFormSession();
+    setIsImageModalOpen(false);
+    setImageAsset(null);
+  };
+
   const handleImageUpload = async (asset: Asset) => {
     if (isEcard(asset)) return;
-    const cachedImage = asset.image || assetImageCache.get(asset.id);
-    setImageAsset(cachedImage ? { ...asset, image: cachedImage } : asset);
+    const session = imageSession.invalidateFormSession();
+    const epoch = getSessionEpoch();
+    setImageAsset(asset);
+    setSelectedImage(0);
+    setImageLoadError(false);
+    setImageBusy(false);
     setIsImageModalOpen(true);
-
-    if (!cachedImage && asset.hasImage) {
-      const image = await loadAssetImage(asset.id);
-      if (image) {
-        setImageAsset(current => current?.id === asset.id ? { ...current, image } : current);
+    setImageLoading(true);
+    try {
+      const response = await authFetch(`/api/assets/${asset.id}`);
+      if (!response.ok) throw new Error('加载产品图片失败');
+      const detail: Asset = await response.json();
+      if (imageSession.isFormSessionCurrent(session) && isSessionCurrent(epoch)) setImageAsset(detail);
+    } catch {
+      if (imageSession.isFormSessionCurrent(session) && isSessionCurrent(epoch)) {
+        setImageLoadError(true);
+        showToast('图片加载失败，请关闭后重试', 'error');
       }
+    } finally {
+      if (imageSession.isFormSessionCurrent(session)) setImageLoading(false);
+    }
+  };
+
+  const saveImages = async (images: string[]) => {
+    if (!imageAsset || imageBusy || imageLoading || imageLoadError) return;
+    const asset = imageAsset;
+    const session = imageSession.captureFormSession();
+    const epoch = getSessionEpoch();
+    setImageBusy(true);
+    try {
+      validateAssetImages(images);
+      await updateAsset(asset.id, { images });
+      if (!isSessionCurrent(epoch)) return;
+      assetImageCache.delete(asset.id);
+      if (images[0]) assetImageCache.set(asset.id, images[0]);
+      if (!imageSession.isFormSessionCurrent(session)) return;
+      setImageAsset({ ...asset, images, image: images[0] || '', imageCount: images.length });
+      setSelectedImage(index => Math.min(index, Math.max(0, images.length - 1)));
+      showToast('产品图片已保存');
+    } catch (error) {
+      if (imageSession.isFormSessionCurrent(session)) showToast(error instanceof Error ? error.message : '图片保存失败', 'error');
+    } finally {
+      if (imageSession.isFormSessionCurrent(session)) setImageBusy(false);
     }
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !imageAsset) return;
-
-    if (file.size > 5 * 1024 * 1024) {
-      showToast('图片大小不能超过5MB', 'error');
-      e.target.value = '';
-      return;
-    }
-
+    const input = e.target;
+    const files = Array.from(input.files || []);
+    if (!files.length || !imageAsset || imageBusy || imageLoading || imageLoadError) return;
+    const session = imageSession.captureFormSession();
+    const currentImages = getAssetImages(imageAsset);
     try {
-      const optimizedImage = await optimizeAssetImage(file);
-      await updateAsset(imageAsset.id, { image: optimizedImage });
-      assetImageCache.set(imageAsset.id, optimizedImage);
-      showToast('图片已压缩并上传');
-      setIsImageModalOpen(false);
-      setImageAsset(null);
+      if (files.length + currentImages.length > MAX_ASSET_IMAGES) throw new Error('每件产品最多添加9张图片');
+      if (files.some(file => file.size > 5 * 1024 * 1024)) throw new Error('单张图片大小不能超过5MB');
+      setImageBusy(true);
+      const images = await Promise.all(files.map(optimizeAssetImage));
+      if (imageSession.isFormSessionCurrent(session)) {
+        setImageBusy(false);
+        await saveImages([...currentImages, ...images]);
+      }
     } catch (error) {
-      showToast(error instanceof Error ? error.message : '图片上传失败', 'error');
+      if (imageSession.isFormSessionCurrent(session)) {
+        setImageBusy(false);
+        showToast(error instanceof Error ? error.message : '图片上传失败', 'error');
+      }
     } finally {
-      e.target.value = '';
+      input.value = '';
     }
   };
 
@@ -373,7 +424,7 @@ export default function Assets() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-panda-black">资产库</h1>
-          <p className="text-xs text-gray-500 mt-0.5">管理置换合作获得的产品资产</p>
+          <p className="text-xs text-gray-500 mt-0.5">管理合作获得的产品资产</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="text-right">
@@ -675,28 +726,42 @@ export default function Assets() {
         </form>
       </Modal>
 
-      <Modal isOpen={isImageModalOpen} onClose={() => { setIsImageModalOpen(false); setImageAsset(null); }} title="上传产品图片">
-        <div className="space-y-4">
-          {imageAsset?.image && (
-            <div className="flex justify-center">
-              <img src={imageAsset.image} alt={imageAsset.productName} className="w-40 h-40 object-cover rounded-xl border-2 border-gray-200" />
-            </div>
+      <Modal isOpen={isImageModalOpen} onClose={closeImageModal} title="上传产品图片">
+        <div className="space-y-4" aria-busy={imageBusy || imageLoading}>
+          {imageLoading ? <p role="status" className="text-sm text-gray-600">图片加载中…</p> : imageLoadError ? (
+            <p role="alert" className="text-sm text-danger">图片加载失败，请关闭后重试。</p>
+          ) : (
+            <>
+              {imageAsset && getAssetImages(imageAsset).length > 0 && (
+                <>
+                  <img src={getAssetImages(imageAsset)[selectedImage]} alt={`${imageAsset.productName} 产品图 ${selectedImage + 1}`}
+                    className="w-full max-h-72 object-contain rounded-xl bg-bg-tertiary" />
+                  <div className="grid grid-cols-3 gap-3">
+                    {getAssetImages(imageAsset).map((image, index) => (
+                      <div key={index} className="relative">
+                        <button type="button" aria-label={`查看产品图 ${index + 1}`} aria-pressed={selectedImage === index}
+                          onClick={() => setSelectedImage(index)} className={clsx('w-full rounded-xl overflow-hidden border-2', selectedImage === index ? 'border-panda-black' : 'border-transparent')}>
+                          <img src={image} alt={`缩略图 ${index + 1}`} className="w-full aspect-square object-cover" />
+                        </button>
+                        <button type="button" disabled={imageBusy} aria-label={`删除产品图 ${index + 1}`}
+                          onClick={() => void saveImages(getAssetImages(imageAsset).filter((_, imageIndex) => imageIndex !== index))}
+                          className="absolute top-1 right-1 bg-white text-danger rounded-lg p-2 disabled:opacity-50"><X size={16} /></button>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+              <button type="button" disabled={imageBusy || (imageAsset ? getAssetImages(imageAsset).length : 0) >= MAX_ASSET_IMAGES}
+                className="w-full border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-panda-black/30 transition-colors disabled:opacity-50"
+                onClick={() => fileInputRef.current?.click()}>
+                <Upload size={24} className="mx-auto text-gray-600 mb-2" />
+                <span className="block text-sm text-gray-600">{imageBusy ? '保存中…' : '添加产品图片'}</span>
+                <span className="block text-xs text-gray-600 mt-1">{imageAsset ? getAssetImages(imageAsset).length : 0}/9 张 · 支持 JPG、PNG、WebP，单张最大 5MB，自动压缩</span>
+              </button>
+            </>
           )}
-          <div
-            className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-panda-black/30 transition-colors"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Upload size={24} className="mx-auto text-gray-600 mb-2" />
-            <p className="text-sm text-gray-500">点击选择图片</p>
-            <p className="text-xs text-gray-500 mt-1">支持 JPG、PNG、WebP，最大 5MB；上传时自动压缩</p>
-          </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleFileChange}
-            className="hidden"
-          />
+          <input ref={fileInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp" aria-label="选择产品图片"
+            disabled={imageBusy || imageLoading || imageLoadError} onChange={handleFileChange} className="hidden" />
         </div>
       </Modal>
 

@@ -1,6 +1,12 @@
 // 商单类型
 export type OrderStatus = 'in_progress' | 'completed' | 'cancelled';
-export type OrderType = 'paid' | 'product_exchange' | 'direct' | 'ecard';
+export type OrderType = 'paid' | 'paid_product' | 'product_exchange' | 'direct' | 'ecard';
+
+export interface OrderProduct {
+  id: string;
+  productName: string;
+  productValue: number;
+}
 
 // 商单接口
 export interface Order {
@@ -16,6 +22,7 @@ export interface Order {
   submitDate: string;
   productName?: string;
   productValue?: number;
+  products?: OrderProduct[];
 }
 
 // 商单模板只保存可重用的业务字段，不复制商单状态、日期和关联记录。
@@ -29,6 +36,7 @@ export interface OrderTemplate {
   platforms: string[];
   productName?: string;
   productValue?: number;
+  products?: OrderProduct[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -91,6 +99,9 @@ export interface Asset {
   productName: string;
   productValue: number;
   image?: string;
+  images?: string[];
+  imageCount?: number;
+  orderProductId?: string;
   hasImage?: boolean;
   saleStatus: 'keep' | 'sold';
   soldAmount: number;

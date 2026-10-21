@@ -36,6 +36,7 @@ export function AboutTab({ previewImage, setPreviewImage }: AboutTabProps) {
           关于 KOLFlow
         </h2>
         <div className="space-y-6">
+          <p className="text-sm text-gray-600" data-testid="app-version">当前版本 v{__APP_VERSION__}</p>
           {/* 项目介绍 */}
           <div className="p-6 bg-gradient-to-br from-gray-50 to-panda-white rounded-2xl border border-border/30">
             <h3 className="text-xl font-bold text-panda-black mb-4 flex items-center gap-2">

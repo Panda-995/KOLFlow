@@ -1,3 +1,4 @@
+import { getOrderProducts, hasOrderProducts } from '../lib/orderProducts';
 import { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from 'react';
 import { useStore, Order } from '../store/useStore';
 import { useSearchParams } from 'react-router-dom';
@@ -94,7 +95,7 @@ export default function Orders() {
       '商单号': order.orderNo,
       '标题': order.title,
       '品牌': order.brandName,
-      '合作类型': order.type === 'paid' ? '付费' : order.type === 'product_exchange' ? '置换' : order.type === 'ecard' ? 'E卡' : '直发',
+      '合作类型': typeMap[order.type]?.label || order.type,
       '金额': order.actualAmount,
       '平台': order.platforms.join(', '),
       '接单日期': order.acceptDate || '',
@@ -576,18 +577,12 @@ export default function Orders() {
                 <span className="text-gray-500 text-xs block">金额</span>
                 <span className="font-medium text-success">¥{currentViewingOrder!.actualAmount.toLocaleString()}</span>
               </div>
-              {currentViewingOrder!.type === 'product_exchange' && currentViewingOrder!.productName && (
-                  <>
-                    <div>
-                      <span className="text-gray-500 text-xs block">置换产品</span>
-                      <span className="font-medium">{currentViewingOrder!.productName}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500 text-xs block">产品价值</span>
-                      <span className="font-medium text-success">¥{(currentViewingOrder!.productValue || 0).toLocaleString()}</span>
-                    </div>
-                  </>
-                )}
+              {hasOrderProducts(currentViewingOrder!.type) && getOrderProducts(currentViewingOrder!).map(product => (
+                <div key={product.id} className="col-span-2 flex justify-between gap-3">
+                  <span className="font-medium break-words">{product.productName || '未知产品'}</span>
+                  <span className="font-medium text-success shrink-0">¥{product.productValue.toLocaleString()}</span>
+                </div>
+              ))}
                 {currentViewingOrder!.type === 'ecard' && (
                   <div>
                     <span className="text-gray-500 text-xs block">面值</span>

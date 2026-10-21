@@ -1,3 +1,5 @@
+import { hasOrderProducts, validateOrderProducts, summarizeProducts } from '../../lib/orderProducts.js';
+import { validateAssetImages } from '../../lib/assetImages.js';
 import db, { generateUniqueApiKey } from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
@@ -382,10 +384,23 @@ const analyzeAdjustments = (collections: Record<ImportCollection, ImportRow[]>):
     value !== undefined && value !== null && value !== '' && !isValidDateOnly(value)
   );
 
+  for (const row of [...collections.orders, ...collections.orderTemplates]) {
+    if (row.products !== undefined && row.products !== null) {
+      try { validateOrderProducts(row.products); } catch (error) { throw new ApiError(error instanceof Error ? error.message : '产品列表格式无效'); }
+    }
+  }
+  for (const asset of collections.assets) {
+    if (asset.images !== undefined && asset.images !== null) {
+      try {
+        const images: unknown = typeof asset.images === 'string' ? JSON.parse(asset.images) : asset.images;
+        validateAssetImages(images);
+      } catch (error) { throw new ApiError(error instanceof Error ? error.message : '图片列表格式无效'); }
+    }
+  }
   for (const order of collections.orders) {
     if (amountIsInvalid(order?.actualAmount ?? order?.amount) || amountIsInvalid(order?.expectedAmount)) result.invalidAmounts++;
     if (dateIsInvalid(order?.acceptDate) || dateIsInvalid(order?.submitDate)) result.invalidDates++;
-    if (order?.type && !['paid', 'product_exchange', 'direct', 'ecard'].includes(String(order.type))) result.invalidEnums++;
+    if (order?.type && !['paid', 'paid_product', 'product_exchange', 'direct', 'ecard'].includes(String(order.type))) result.invalidEnums++;
     if (order?.status && !['in_progress', 'completed', 'cancelled'].includes(String(order.status))) result.invalidEnums++;
     if (String(order?.title || order?.name || '').length > 100) result.truncatedText++;
   }
@@ -586,17 +601,19 @@ export const insertImportedOrder = (
   const acceptDate = asDateOnly(mappedRow.acceptDate) || asDateOnly(mappedRow.publishDate);
   const submitDate = asDateOnly(mappedRow.submitDate) || asDateOnly(mappedRow.deadline);
   const type = normalizeOrderType(mappedRow.type);
-  const safeType = ['paid', 'product_exchange', 'direct', 'ecard'].includes(type) ? type : 'paid';
+  const safeType = ['paid', 'paid_product', 'product_exchange', 'direct', 'ecard'].includes(type) ? type : 'paid';
   const status = normalizeOrderStatus(mappedRow.status);
   const safeStatus = ['in_progress', 'completed', 'cancelled'].includes(status) ? status : 'in_progress';
   const productName = typeof mappedRow.productName === 'string' && mappedRow.productName.trim()
     ? mappedRow.productName.trim().slice(0, 100)
     : null;
+  const products = mappedRow.products === undefined || mappedRow.products === null ? null : validateOrderProducts(mappedRow.products);
+  const summary = products && hasOrderProducts(safeType) ? summarizeProducts(products) : { productName, productValue };
   const createdAt = mappedRow.createdAt || new Date().toISOString();
 
   db.prepare(`
-    INSERT INTO orders (id, userId, orderNo, title, type, status, expectedAmount, actualAmount, brandName, platforms, acceptDate, submitDate, productName, productValue, createdAt)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO orders (id, userId, orderNo, title, type, status, expectedAmount, actualAmount, brandName, platforms, acceptDate, submitDate, productName, productValue, products, createdAt)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     userId,
@@ -610,8 +627,9 @@ export const insertImportedOrder = (
     JSON.stringify(platforms),
     acceptDate,
     submitDate,
-    productName,
-    productValue,
+    summary.productName,
+    summary.productValue,
+    products ? JSON.stringify(products) : null,
     createdAt,
   );
 

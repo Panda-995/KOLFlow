@@ -1,3 +1,5 @@
+import { getOrderProducts, hasOrderProducts, summarizeProducts, validateOrderProducts } from '../../lib/orderProducts.js';
+import type { OrderProduct } from '../../types/index.js';
 import db from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { logActivity } from '../routes/utils/index.js';
@@ -19,6 +21,7 @@ export type OrderRow = {
   submitDate?: string | null;
   productName?: string | null;
   productValue: number | null;
+  products?: string | OrderProduct[] | null;
   createdAt?: string;
 };
 
@@ -34,6 +37,7 @@ type OrderInput = {
   submitDate?: string | null;
   productName?: string | null;
   productValue?: number;
+  products?: OrderProduct[];
   operationDate?: string;
 };
 
@@ -47,13 +51,13 @@ const isMonetaryType = (type: string | null | undefined): boolean => {
   return !isExchangeType(type || '');
 };
 
-const VALID_ORDER_TYPES = ['paid', 'product_exchange', 'direct', 'ecard'];
+const VALID_ORDER_TYPES = ['paid', 'paid_product', 'product_exchange', 'direct', 'ecard'];
 const VALID_ORDER_STATUSES = ['in_progress', 'completed', 'cancelled'];
 
 const assertValidOrderType = (value: unknown): string | undefined => {
   if (value === undefined || value === null || value === '') return undefined;
   if (typeof value !== 'string' || !VALID_ORDER_TYPES.includes(value)) {
-    throw new Error('商单类型无效，必须为付费/置换/直发/E卡之一');
+    throw new Error('商单类型无效，必须为付费/费用+产品/置换/直发/E卡之一');
   }
   return value;
 };
@@ -120,6 +124,7 @@ const parseOrderForClient = (order: OrderRow | undefined) => {
   return {
     ...order,
     platforms: parsePlatformsField(order.platforms),
+    products: getOrderProducts(order),
   };
 };
 
@@ -127,13 +132,6 @@ const getBrandId = (userId: string, brandName: string | null): string | null => 
   if (!brandName) return null;
   const brand = db.prepare('SELECT id FROM brands WHERE name = ? AND userId = ?').get(brandName, userId) as { id: string } | undefined;
   return brand?.id || null;
-};
-
-const getAssetProductName = (order: OrderRow): string => {
-  if (order.type === 'ecard') {
-    return `${order.brandName || '未知品牌'} E卡`;
-  }
-  return order.productName?.trim() || '未知产品';
 };
 
 const syncOrderTodo = (order: OrderRow, userId: string): void => {
@@ -228,33 +226,35 @@ const upsertPaymentFromOrder = (order: OrderRow, userId: string, operationDate?:
   return paymentId;
 };
 
-const upsertAssetFromOrder = (order: OrderRow, userId: string): string | null => {
-  if (order.status !== 'completed' || !isExchangeType(order.type)) {
-    // 仅移除未出售的自动资产；已出售记录是交易历史，商单状态回退不能删除
-    db.prepare("DELETE FROM assets WHERE orderId = ? AND userId = ? AND (saleStatus IS NULL OR saleStatus <> 'sold')")
-      .run(order.id, userId);
-    return null;
+const upsertAssetFromOrder = (order: OrderRow, userId: string): void => {
+  const existing = db.prepare('SELECT id, orderProductId, saleStatus FROM assets WHERE orderId = ? AND userId = ?').all(order.id, userId) as Array<{
+    id: string; orderProductId: string | null; saleStatus: string | null;
+  }>;
+  const products = order.status !== 'completed' ? [] : order.type === 'ecard'
+    ? [{ id: 'legacy-product', productName: `${order.brandName || '未知品牌'} E卡`, productValue: toNumber(order.productValue) }]
+    : getOrderProducts(order);
+  const retained = new Set<string>();
+  for (const product of products) {
+    const asset = existing.find(item => item.orderProductId === product.id)
+      || (product.id === 'legacy-product' ? existing.find(item => !item.orderProductId) : undefined);
+    if (asset) {
+      retained.add(asset.id);
+      if (asset.saleStatus === 'sold') continue;
+      db.prepare(`UPDATE assets SET orderNo = ?, brandName = ?, productName = ?, productValue = ?, orderProductId = ?
+        WHERE id = ? AND userId = ?`).run(order.orderNo, order.brandName, product.productName || '未知产品', product.productValue, product.id, asset.id, userId);
+    } else {
+      const id = uuidv4();
+      db.prepare(`INSERT INTO assets (id, userId, orderId, orderNo, brandName, productName, productValue, orderProductId, saleStatus, soldAmount)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'keep', 0)`).run(id, userId, order.id, order.orderNo, order.brandName, product.productName || '未知产品', product.productValue, product.id);
+      retained.add(id);
+      logActivity(userId, 'auto_create', 'asset', id, `商单完成自动创建资产: ${product.productName || '未知产品'}`);
+    }
   }
-
-  const productName = getAssetProductName(order);
-  const productValue = toNumber(order.productValue);
-  const existing = db.prepare('SELECT * FROM assets WHERE orderId = ? AND userId = ?').get(order.id, userId) as { id: string } | undefined;
-  if (existing) {
-    db.prepare(`
-      UPDATE assets
-      SET orderNo = ?, brandName = ?, productName = ?, productValue = ?
-      WHERE id = ? AND userId = ?
-    `).run(order.orderNo, order.brandName || null, productName, productValue, existing.id, userId);
-    return existing.id;
+  for (const asset of existing) {
+    if (!retained.has(asset.id) && asset.saleStatus !== 'sold') {
+      db.prepare('DELETE FROM assets WHERE id = ? AND userId = ?').run(asset.id, userId);
+    }
   }
-
-  const assetId = uuidv4();
-  db.prepare(`
-    INSERT INTO assets (id, userId, orderId, orderNo, brandName, productName, productValue, saleStatus, soldAmount, soldDate)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'keep', 0, NULL)
-  `).run(assetId, userId, order.id, order.orderNo, order.brandName || null, productName, productValue);
-  logActivity(userId, 'auto_create', 'asset', assetId, `${order.type === 'ecard' ? 'E卡' : '置换'}商单完成自动创建资产: ${productName}`);
-  return assetId;
 };
 
 export const syncOrderDerivedRecords = (order: OrderRow, userId: string, operationDate?: string): void => {
@@ -265,7 +265,7 @@ export const syncOrderDerivedRecords = (order: OrderRow, userId: string, operati
 };
 
 export const createOrderWithTodo = (userId: string, orderData: OrderInput) => {
-  const { title, type, status, expectedAmount, actualAmount, brandName, platforms, acceptDate, submitDate, productName, productValue, operationDate } = orderData;
+  const { title, type, status, expectedAmount, actualAmount, brandName, platforms, acceptDate, submitDate, productName, productValue, products, operationDate } = orderData;
 
   if (typeof title !== 'string' || title.trim().length === 0) {
     throw new Error('商单标题不能为空');
@@ -293,11 +293,14 @@ export const createOrderWithTodo = (userId: string, orderData: OrderInput) => {
   const orderNo = generateOrderNo();
   const normalizedStatus = assertValidOrderStatus(status) || 'in_progress';
   const normalizedType = assertValidOrderType(type) || 'paid';
+  const normalizedProducts = products !== undefined && hasOrderProducts(normalizedType) ? validateOrderProducts(products) : null;
+  const summary = normalizedProducts ? summarizeProducts(normalizedProducts) : { productName, productValue: parseAmountInput(productValue) };
+  if (!validateAmount(summary.productValue)) throw new Error('产品总金额数值无效');
 
   const createOrder = db.transaction(() => {
     db.prepare(`
-      INSERT INTO orders (id, userId, orderNo, title, type, status, expectedAmount, actualAmount, brandName, platforms, acceptDate, submitDate, productName, productValue)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO orders (id, userId, orderNo, title, type, status, expectedAmount, actualAmount, brandName, platforms, acceptDate, submitDate, productName, productValue, products)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       userId,
@@ -311,8 +314,9 @@ export const createOrderWithTodo = (userId: string, orderData: OrderInput) => {
       JSON.stringify(normalizedPlatforms),
       normalizedAcceptDate,
       normalizedSubmitDate,
-      productName?.trim() || null,
-      parseAmountInput(productValue),
+      summary.productName?.trim() || null,
+      summary.productValue,
+      normalizedProducts ? JSON.stringify(normalizedProducts) : null,
     );
 
     const todoId = uuidv4();
@@ -386,6 +390,23 @@ export const updateOrderWithSync = (userId: string, orderId: string, updateData:
     productValue: updateData.productValue !== undefined ? parseAmountInput(updateData.productValue) : toNumber(existing.productValue),
   };
 
+  if (hasOrderProducts(newOrder.type)) {
+    if (updateData.products !== undefined) {
+      const products = validateOrderProducts(updateData.products);
+      Object.assign(newOrder, summarizeProducts(products), { products: JSON.stringify(products) });
+    } else if (updateData.productName !== undefined || updateData.productValue !== undefined) {
+      // Legacy clients may edit a single product; never erase a multi-product list silently.
+      const products = getOrderProducts(existing);
+      if (products.length > 1) throw new Error('多件产品商单请使用新版产品列表编辑');
+      if (products.length === 1) {
+        products[0] = { ...products[0], productName: newOrder.productName || '', productValue: newOrder.productValue || 0 };
+        newOrder.products = JSON.stringify(products);
+      }
+    }
+  } else {
+    newOrder.products = null;
+  }
+
   if (!validateAmount(newOrder.actualAmount) || !validateAmount(newOrder.expectedAmount) || !validateAmount(newOrder.productValue)) {
     throw new Error('金额数值无效');
   }
@@ -396,7 +417,7 @@ export const updateOrderWithSync = (userId: string, orderId: string, updateData:
   const updateOrder = db.transaction(() => {
     db.prepare(`
       UPDATE orders
-      SET status = ?, title = ?, type = ?, expectedAmount = ?, actualAmount = ?, brandName = ?, platforms = ?, acceptDate = ?, submitDate = ?, productName = ?, productValue = ?
+      SET status = ?, title = ?, type = ?, expectedAmount = ?, actualAmount = ?, brandName = ?, platforms = ?, acceptDate = ?, submitDate = ?, productName = ?, productValue = ?, products = ?
       WHERE id = ? AND userId = ?
     `).run(
       newOrder.status,
@@ -410,6 +431,7 @@ export const updateOrderWithSync = (userId: string, orderId: string, updateData:
       newOrder.submitDate,
       newOrder.productName,
       newOrder.productValue,
+      typeof newOrder.products === 'string' ? newOrder.products : null,
       orderId,
       userId,
     );

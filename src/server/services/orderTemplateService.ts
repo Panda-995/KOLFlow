@@ -1,10 +1,12 @@
 import { v4 as uuidv4 } from 'uuid';
+import { getOrderProducts, hasOrderProducts, summarizeProducts, validateOrderProducts } from '../../lib/orderProducts.js';
+import type { OrderProduct } from '../../types/index.js';
 import db from '../db.js';
 import { formatLocalDate, isValidDateOnly, safeJsonParse, validateAmount } from '../routes/utils/helpers.js';
 import { logActivity } from '../routes/utils/index.js';
 import { createOrderWithTodo } from './orderService.js';
 
-const ORDER_TYPES = new Set(['paid', 'product_exchange', 'direct', 'ecard']);
+const ORDER_TYPES = new Set(['paid', 'paid_product', 'product_exchange', 'direct', 'ecard']);
 
 interface OrderTemplateInput {
   name: string;
@@ -15,6 +17,7 @@ interface OrderTemplateInput {
   platforms?: string[];
   productName?: string | null;
   productValue?: number;
+  products?: OrderProduct[];
 }
 
 type OrderTemplateUpdate = Partial<OrderTemplateInput>;
@@ -30,6 +33,7 @@ interface OrderTemplateRow {
   platforms: string | string[] | null;
   productName: string | null;
   productValue: number;
+  products?: string | OrderProduct[] | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -43,6 +47,7 @@ const parseTemplateForClient = (template: OrderTemplateRow | undefined) => {
   if (!template) return template;
   return {
     ...template,
+    products: getOrderProducts(template),
     actualAmount: Number(template.actualAmount) || 0,
     productValue: Number(template.productValue) || 0,
     platforms: Array.isArray(template.platforms)
@@ -59,17 +64,24 @@ const normalizePlatforms = (value: unknown): string[] => {
   return platforms;
 };
 
-const validateTemplate = (template: OrderTemplateInput): Required<Omit<OrderTemplateInput, 'brandName' | 'productName'>> & {
+const validateTemplate = (template: OrderTemplateInput): Required<Omit<OrderTemplateInput, 'brandName' | 'productName' | 'products'>> & {
   brandName: string | null;
   productName: string | null;
+  products?: OrderProduct[];
 } => {
   const name = String(template.name || '').trim();
   const title = String(template.title || '').trim();
   const type = template.type || 'paid';
   const actualAmount = toNumber(template.actualAmount);
-  const productValue = toNumber(template.productValue);
+  let productValue = toNumber(template.productValue);
   const brandName = template.brandName?.trim() || null;
-  const productName = template.productName?.trim() || null;
+  let productName = template.productName?.trim() || null;
+  const products = hasOrderProducts(type) && template.products !== undefined ? validateOrderProducts(template.products) : undefined;
+  if (products) {
+    const summary = summarizeProducts(products);
+    productName = summary.productName;
+    productValue = summary.productValue;
+  }
 
   if (!name) throw new Error('模板名称不能为空');
   if (name.length > 50) throw new Error('模板名称不能超过50个字符');
@@ -78,7 +90,7 @@ const validateTemplate = (template: OrderTemplateInput): Required<Omit<OrderTemp
   if (!ORDER_TYPES.has(type)) throw new Error('合作类型无效');
   if (!validateAmount(actualAmount) || !validateAmount(productValue)) throw new Error('金额数值无效');
   if (brandName && brandName.length > 50) throw new Error('品牌名称不能超过50个字符');
-  if (productName && productName.length > 100) throw new Error('产品名称不能超过100个字符');
+  if ((!products || products.length <= 1) && productName && productName.length > 100) throw new Error('产品名称不能超过100个字符');
 
   return {
     name,
@@ -89,6 +101,7 @@ const validateTemplate = (template: OrderTemplateInput): Required<Omit<OrderTemp
     platforms: normalizePlatforms(template.platforms),
     productName,
     productValue,
+    products,
   };
 };
 
@@ -114,8 +127,8 @@ export const createOrderTemplate = (userId: string, input: OrderTemplateInput) =
   const id = uuidv4();
   db.prepare(`
     INSERT INTO order_templates (
-      id, userId, name, title, type, actualAmount, brandName, platforms, productName, productValue
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, userId, name, title, type, actualAmount, brandName, platforms, productName, productValue, products
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     userId,
@@ -127,6 +140,7 @@ export const createOrderTemplate = (userId: string, input: OrderTemplateInput) =
     JSON.stringify(template.platforms),
     template.productName,
     template.productValue,
+    template.products ? JSON.stringify(template.products) : null,
   );
   logActivity(userId, 'create', 'order_template', id, `创建商单模板: ${template.name}`);
   return parseTemplateForClient(db.prepare('SELECT * FROM order_templates WHERE id = ? AND userId = ?').get(id, userId) as OrderTemplateRow);
@@ -147,13 +161,21 @@ export const updateOrderTemplate = (userId: string, templateId: string, input: O
     ),
     productName: input.productName !== undefined ? input.productName : existing.productName,
     productValue: input.productValue ?? existing.productValue,
+    products: input.products ?? (existing.products == null ? undefined : (() => {
+      const products = getOrderProducts(existing);
+      if (input.productName !== undefined || input.productValue !== undefined) {
+        if (products.length > 1) throw new Error('多件产品模板请使用新版产品列表编辑');
+        if (products.length === 1) products[0] = { ...products[0], productName: input.productName ?? products[0].productName, productValue: input.productValue ?? products[0].productValue };
+      }
+      return products;
+    })()),
   });
   ensureTemplateNameAvailable(userId, template.name, templateId);
 
   db.prepare(`
     UPDATE order_templates
     SET name = ?, title = ?, type = ?, actualAmount = ?, brandName = ?, platforms = ?,
-        productName = ?, productValue = ?, updatedAt = CURRENT_TIMESTAMP
+        productName = ?, productValue = ?, products = ?, updatedAt = CURRENT_TIMESTAMP
     WHERE id = ? AND userId = ?
   `).run(
     template.name,
@@ -164,6 +186,7 @@ export const updateOrderTemplate = (userId: string, templateId: string, input: O
     JSON.stringify(template.platforms),
     template.productName,
     template.productValue,
+    template.products ? JSON.stringify(template.products) : null,
     templateId,
     userId,
   );
@@ -200,6 +223,7 @@ export const createOrderFromTemplate = (userId: string, templateId: string, oper
     submitDate: null,
     productName: template.productName,
     productValue: template.productValue,
+    products: template.products == null ? undefined : getOrderProducts(template),
     operationDate: acceptDate,
   });
   logActivity(userId, 'instantiate', 'order_template', templateId, `从模板创建商单: ${template.name}`);

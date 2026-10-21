@@ -72,7 +72,7 @@ router.get('/orders', async (req, res) => {
 router.post('/orders', (req, res) => {
   try {
     const userId = getUserId(req);
-    const { title, type, actualAmount, brandName, platforms, acceptDate, submitDate, productName, productValue, operationDate } = req.body;
+    const { title, type, actualAmount, brandName, platforms, acceptDate, submitDate, productName, productValue, products, operationDate } = req.body;
 
     const newOrder = createOrderWithTodo(userId, {
       title,
@@ -84,6 +84,7 @@ router.post('/orders', (req, res) => {
       submitDate,
       productName,
       productValue,
+      products,
       operationDate
     });
 
@@ -98,7 +99,7 @@ router.put('/orders/:id', (req, res) => {
   try {
     const userId = getUserId(req);
     const { id } = req.params;
-    const { status, title, type, actualAmount, brandName, platforms, acceptDate, submitDate, productName, productValue, operationDate } = req.body;
+    const { status, title, type, actualAmount, brandName, platforms, acceptDate, submitDate, productName, productValue, products, operationDate } = req.body;
 
     const updatedOrder = updateOrderWithSync(userId, id, {
       status,
@@ -111,6 +112,7 @@ router.put('/orders/:id', (req, res) => {
       submitDate,
       productName,
       productValue,
+      products,
       operationDate
     });
 

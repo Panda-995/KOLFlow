@@ -15,6 +15,7 @@ if (!configuredInviteCode && process.env.NODE_ENV === 'production') {
 export const ORDER_TYPE_MAP: Record<string, string> = {
   '付费': 'paid',
   '付费合作': 'paid',
+  '费用+产品': 'paid_product',
   '置换': 'product_exchange',
   '置换合作': 'product_exchange',
   '直发': 'direct',

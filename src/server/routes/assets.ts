@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { getAssetImages, validateAssetImages } from '../../lib/assetImages.js';
 import db from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { logActivity, getUserId } from './utils/index.js';
@@ -7,6 +8,11 @@ import { formatLocalDate, isValidDateOnly, parseListPaging, validateAmount } fro
 import { ApiError, getApiErrorMessage, getApiErrorStatus } from '../services/errors.js';
 
 const router = Router();
+
+const parseAssetForClient = (asset: AssetRow) => ({ ...asset, images: getAssetImages(asset) });
+const parseImagesInput = (value: unknown): string[] => {
+  try { return validateAssetImages(value); } catch (error) { throw new ApiError(error instanceof Error ? error.message : '图片格式无效'); }
+};
 
 // 资产图片体量上限（POST/PUT 共用）：约 8MB 的 base64 文本
 const MAX_ASSET_IMAGE_LENGTH = 8 * 1024 * 1024;
@@ -58,7 +64,8 @@ router.get('/', (req, res) => {
         soldAmount,
         soldDate,
         createdAt,
-        CASE WHEN image IS NOT NULL AND image <> '' THEN 1 ELSE 0 END AS hasImage
+        CASE WHEN image IS NOT NULL AND image <> '' THEN 1 ELSE 0 END AS hasImage,
+        CASE WHEN images IS NOT NULL THEN json_array_length(images) WHEN image IS NOT NULL AND image <> '' THEN 1 ELSE 0 END AS imageCount
       FROM assets
       WHERE userId = ?
       ORDER BY createdAt DESC${pagingClause}
@@ -82,17 +89,19 @@ router.get('/:id/image', (req, res) => {
   try {
     const userId = getUserId(req);
     const { id } = req.params;
-    const asset = db.prepare('SELECT image FROM assets WHERE id = ? AND userId = ?').get(id, userId) as { image?: string | null } | undefined;
+    const asset = db.prepare('SELECT image, images FROM assets WHERE id = ? AND userId = ?').get(id, userId) as AssetRow | undefined;
 
     if (!asset) {
       return res.status(404).json({ error: '资产不存在' });
     }
 
-    if (!asset.image) {
+    const images = getAssetImages(asset);
+    if (!images.length) {
       return res.status(404).json({ error: '资产图片不存在' });
     }
 
-    return res.json({ image: asset.image });
+    // Keep the thumbnail response small; the asset detail endpoint returns the gallery.
+    return res.json({ image: images[0] });
   } catch (error) {
     console.error('获取资产图片错误:', error instanceof Error ? error.message : error);
     return res.status(500).json({
@@ -106,11 +115,11 @@ router.get('/:id', (req, res) => {
   try {
     const userId = getUserId(req);
     const { id } = req.params;
-    const asset = db.prepare('SELECT * FROM assets WHERE id = ? AND userId = ?').get(id, userId);
+    const asset = db.prepare('SELECT * FROM assets WHERE id = ? AND userId = ?').get(id, userId) as AssetRow | undefined;
     if (!asset) {
       return res.status(404).json({ error: '资产不存在' });
     }
-    return res.json(asset);
+    return res.json(parseAssetForClient(asset));
   } catch (error) {
     console.error('获取资产详情错误:', error instanceof Error ? error.message : error);
     return res.status(500).json({
@@ -123,7 +132,7 @@ router.get('/:id', (req, res) => {
 router.post('/', (req, res) => {
   try {
     const userId = getUserId(req);
-    const { brandName, productName, productValue, image, saleStatus, soldAmount, operationDate } = req.body;
+    const { brandName, productName, productValue, image, images, saleStatus, soldAmount, operationDate } = req.body;
     // 图片必须是 data:image/ 数据且体量受限，避免任意字符串入库并放大数据库
     if (image !== undefined && image !== null && image !== '') {
       if (typeof image !== 'string' || !image.trim().startsWith('data:image/') || image.length > MAX_ASSET_IMAGE_LENGTH) {
@@ -131,7 +140,9 @@ router.post('/', (req, res) => {
       }
     }
 
-    if (!productName || productName.trim().length === 0) {
+    const normalizedImages = images !== undefined ? parseImagesInput(images) : (image ? [image] : []);
+
+    if (typeof productName !== 'string' || productName.trim().length === 0) {
       return res.status(400).json({ error: '资产名称不能为空' });
     }
 
@@ -149,8 +160,8 @@ router.post('/', (req, res) => {
 
     const createAsset = db.transaction(() => {
       db.prepare(`
-        INSERT INTO assets (id, userId, orderId, orderNo, brandName, productName, productValue, image, saleStatus, soldAmount, soldDate)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO assets (id, userId, orderId, orderNo, brandName, productName, productValue, image, images, saleStatus, soldAmount, soldDate)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id,
         userId,
@@ -159,7 +170,8 @@ router.post('/', (req, res) => {
         brandName?.trim() || null,
         productName.trim(),
         Number(productValue) || 0,
-        image || null,
+        normalizedImages[0] || null,
+        images !== undefined ? JSON.stringify(normalizedImages) : null,
         normalizedSaleStatus,
         normalizedSoldAmount,
         soldDate
@@ -168,7 +180,7 @@ router.post('/', (req, res) => {
       adjustBrandIncome(userId, brandName?.trim(), normalizedSoldAmount);
       logActivity(userId, 'create', 'asset', id, `手动创建资产: ${productName.trim()}`);
 
-      return db.prepare('SELECT * FROM assets WHERE id = ? AND userId = ?').get(id, userId);
+      return parseAssetForClient(db.prepare('SELECT * FROM assets WHERE id = ? AND userId = ?').get(id, userId) as AssetRow);
     });
 
     const created = createAsset();
@@ -186,7 +198,7 @@ router.put('/:id', (req, res) => {
   try {
     const userId = getUserId(req);
     const { id } = req.params;
-    const { productName, productValue, image, saleStatus, soldAmount, operationDate } = req.body;
+    const { productName, productValue, image, images, saleStatus, soldAmount, operationDate } = req.body;
 
     const existing = db.prepare('SELECT * FROM assets WHERE id = ? AND userId = ?').get(id, userId) as AssetRow | undefined;
     if (!existing) {
@@ -204,7 +216,9 @@ router.put('/:id', (req, res) => {
         return res.status(400).json({ error: '图片格式无效或体积过大' });
       }
     }
-    const newImage = image !== undefined ? image : existing.image;
+    if (images === undefined && image !== undefined && getAssetImages(existing).length > 1) throw new ApiError('多张图片资产请使用新版图片列表编辑');
+    const newImages = images !== undefined ? parseImagesInput(images) : image !== undefined ? (image ? [image] : []) : getAssetImages(existing);
+    const newImage = newImages[0] || null;
     const newSaleStatus = saleStatus !== undefined ? saleStatus : (existing.saleStatus || 'keep');
     if (newSaleStatus !== 'sold' && newSaleStatus !== 'keep') {
       return res.status(400).json({ error: '资产状态无效' });
@@ -226,8 +240,8 @@ router.put('/:id', (req, res) => {
 
     const updateAsset = db.transaction(() => {
       db.prepare(`
-        UPDATE assets SET productName = ?, productValue = ?, image = ?, saleStatus = ?, soldAmount = ?, soldDate = ? WHERE id = ? AND userId = ?
-      `).run(newProductName.trim(), Number(newProductValue) || 0, newImage, newSaleStatus, newSoldAmount, newSoldDate, id, userId);
+        UPDATE assets SET productName = ?, productValue = ?, image = ?, images = ?, saleStatus = ?, soldAmount = ?, soldDate = ? WHERE id = ? AND userId = ?
+      `).run(newProductName.trim(), Number(newProductValue) || 0, newImage, images !== undefined || existing.images != null ? JSON.stringify(newImages) : null, newSaleStatus, newSoldAmount, newSoldDate, id, userId);
 
       const oldIncome = getAssetIncome(existing);
       const newIncome = getAssetIncome({ saleStatus: newSaleStatus, soldAmount: newSoldAmount });
@@ -235,7 +249,7 @@ router.put('/:id', (req, res) => {
 
       logActivity(userId, 'update', 'asset', id, `更新资产: ${newProductName.trim()}`);
 
-      return db.prepare('SELECT * FROM assets WHERE id = ? AND userId = ?').get(id, userId);
+      return parseAssetForClient(db.prepare('SELECT * FROM assets WHERE id = ? AND userId = ?').get(id, userId) as AssetRow);
     });
 
     const updated = updateAsset();

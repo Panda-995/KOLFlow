@@ -50,6 +50,7 @@ export interface OrderRow {
   submitDate: string | null;
   productName: string | null;
   productValue: number | null;
+  products?: string | null;
   createdAt?: string;
 }
 
@@ -64,6 +65,7 @@ export interface OrderTemplateRow {
   platforms: string | null;
   productName: string | null;
   productValue: number | null;
+  products?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -103,7 +105,10 @@ export interface AssetRow {
   brandName: string | null;
   productName: string;
   productValue: number | null;
+  products?: string | null;
   image: string | null;
+  images?: string | null;
+  orderProductId?: string | null;
   saleStatus: string | null;
   soldAmount: number | null;
   soldDate: string | null;

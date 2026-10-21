@@ -1,6 +1,6 @@
 # KOLFlow 绿联 UGOS Pro 应用包
 
-此目录保存 KOLFlow 的绿联 UGOS Pro 打包配置，支持 `amd64` 与 `arm64`。应用包基于项目公开的多架构 Docker 镜像制作，应用 ID 保持为 `com.panda.kolflow`，当前版本为 `1.4.8`（构建号 `0017`）。
+此目录保存 KOLFlow 的绿联 UGOS Pro 打包配置，支持 `amd64` 与 `arm64`。应用包基于项目公开的多架构 Docker 镜像制作，应用 ID 保持为 `com.panda.kolflow`，当前版本为 `1.4.9`（构建号 `0018`）。
 
 ## 应用信息
 
@@ -35,9 +35,9 @@ To change folders, export a full backup, stop the app, copy the entire existing 
 
 The Compose source contains Go template directives in YAML comments for UGOS Pro packaging. Use the UPK for this installation flow; for plain Docker deployments, use the repository's normal Compose file and set its host-side bind path. Never let the Docker Compose deployment and the UGOS Pro App Center installation read and write the same database folder at the same time.
 
-## v1.4.8 更新说明
+## v1.4.9 更新说明
 
-本版在绿联应用更新说明、上架描述和安装目录提示中增加了 Docker 配置版与绿联应用中心版不可同时读写同一数据库目录的提醒。登录/注册页面使用的两个公开接口改为分别限流，避免连续访问时共用额度导致误提示。应用 ID、数据库结构、备份格式和默认数据目录保持不变；升级时继续使用原目录即可。如需切换部署方式，请先停止原实例，并迁移完整数据目录或恢复备份。Android versionCode 为 15，UGOS Pro 构建号为 `0017`。
+本版新增「费用+产品」合作类型，以及商单和模板的多产品编辑；完成商单后按件生成资产，费用独立生成账单。资产库支持每件产品最多9张图片，关于项目显示版本号。升级仅新增可空字段并保留旧数据，兼容旧版单产品、单图资产及 v2/v3/v4 备份。新版多产品和多图备份需在新版恢复；回退旧程序应使用升级前备份。Android versionCode 为 16，UGOS Pro 构建号为 `0018`。请勿让应用的 Docker 配置版 与绿联应用中心版同时读写同一数据库目录。
 
 ## v1.4.7 升级说明
 
@@ -53,10 +53,10 @@ KOLFlow 保留 UGOS Pro 的 HTTP 与 HTTPS 访问方式。`1.3.0.0007` 起，HTT
 
 ## 构建方式
 
-在 GitHub Actions 中手动运行 `Build UGOS Pro UPK` 工作流。工作流会分别拉取 `1.4.8-amd64`、`1.4.8-arm64` 不可变镜像，使用绿联官方 `ugcli` 校验项目并生成两个 UPK 安装包，同时生成 `SHA256SUMS-UPK`。
+在 GitHub Actions 中手动运行 `Build UGOS Pro UPK` 工作流。工作流会分别拉取 `1.4.9-amd64`、`1.4.9-arm64` 不可变镜像，使用绿联官方 `ugcli` 校验项目并生成两个 UPK 安装包，同时生成 `SHA256SUMS-UPK`。
 
 本地生成的镜像归档和 UPK 文件属于构建产物，不提交到 Git 仓库。
 
 ## 详情素材
 
-PC 详情图（1854×1236）和移动端详情图（1125×2436）各三张，原图位于 `public/store-listing/`，随应用镜像进入 UPK。商店提交素材另见 Release 中的 `KOLFlow-v1.4.8-ugreen-store-assets.zip`。Docker UPK 的 `rootfs_common` 仅保留规范允许的图标和 Compose 文件。
+PC 详情图（1854×1236）和移动端详情图（1125×2436）各三张，原图位于 `public/store-listing/`，随应用镜像进入 UPK。商店提交素材另见 Release 中的 `KOLFlow-v1.4.9-ugreen-store-assets.zip`。Docker UPK 的 `rootfs_common` 仅保留规范允许的图标和 Compose 文件。

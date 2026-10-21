@@ -109,6 +109,162 @@ const externalRequest = (path: string, init: RequestInit = {}) => fetch(`${baseU
   },
 });
 
+test('费用+产品完成后生成费用账单及逐件资产，重排和编辑不重复生成且保留图片', async () => {
+  const products = [
+    { id: 'headphones', productName: '耳机', productValue: 199.1 },
+    { id: 'keyboard', productName: '键盘', productValue: 299.2 },
+  ];
+  const response = await internalRequest('/orders', { method: 'POST', body: JSON.stringify({
+    title: '费用与赠品', type: 'paid_product', actualAmount: 1500, products,
+  }) });
+  assert.equal(response.status, 200);
+  const order = await response.json() as any;
+  assert.equal(order.productValue, 498.3);
+  assert.deepEqual(order.products, products);
+  assert.equal((await (await internalRequest('/assets')).json() as any[]).length, 0);
+  assert.equal((await internalRequest(`/orders/${order.id}`, { method: 'PUT', body: JSON.stringify({ status: 'completed' }) })).status, 200);
+  const assets = await (await internalRequest('/assets')).json() as any[];
+  assert.equal(assets.length, 2);
+  const earphones = assets.find(asset => asset.productName === '耳机');
+  const image = 'data:image/png;base64,aGVsbG8=';
+  assert.equal((await internalRequest(`/assets/${earphones.id}`, { method: 'PUT', body: JSON.stringify({ images: [image] }) })).status, 200);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const updated = await internalRequest(`/orders/${order.id}`, { method: 'PUT', body: JSON.stringify({ products: [...products].reverse(), actualAmount: 1600 }) });
+    assert.equal(updated.status, 200);
+  }
+  const updatedAssets = await (await internalRequest('/assets')).json() as any[];
+  assert.deepEqual(updatedAssets.map(asset => asset.id).sort(), assets.map(asset => asset.id).sort());
+  assert.equal((await (await internalRequest(`/assets/${earphones.id}/image`)).json() as any).image, image);
+  const payments = await (await internalRequest('/payments')).json() as any[];
+  assert.equal(payments.length, 1);
+  assert.equal(payments[0].amount, 1600);
+});
+
+test('多产品变更和商单回退保留已出售资产及已结算账单历史', async () => {
+  const response = await internalRequest('/orders', { method: 'POST', body: JSON.stringify({
+    title: '保留历史', brandName: '历史品牌', type: 'paid_product', status: 'completed', actualAmount: 100,
+    products: [{ id: 'p1', productName: '相机', productValue: 900 }, { id: 'p2', productName: '镜头', productValue: 500 }],
+  }) });
+  const order = await response.json() as any;
+  const assets = await (await internalRequest('/assets')).json() as any[];
+  const sold = assets.find(asset => asset.productName === '相机');
+  assert.equal((await internalRequest(`/assets/${sold.id}`, { method: 'PUT', body: JSON.stringify({ saleStatus: 'sold', soldAmount: 600 }) })).status, 200);
+  const payments = await (await internalRequest('/payments')).json() as any[];
+  assert.equal((await internalRequest(`/payments/${payments[0].id}`, { method: 'PUT', body: JSON.stringify({ type: 'settled', amount: 80 }) })).status, 200);
+  assert.equal((await internalRequest(`/orders/${order.id}`, { method: 'PUT', body: JSON.stringify({
+    actualAmount: 200, products: [{ id: 'p1', productName: '改名相机', productValue: 1000 }],
+  }) })).status, 200);
+  const preserved = await (await internalRequest('/assets')).json() as any[];
+  assert.equal(preserved.length, 1);
+  assert.equal(preserved[0].productName, '相机');
+  assert.equal(preserved[0].soldAmount, 600);
+  assert.equal((await (await internalRequest('/payments')).json() as any[])[0].amount, 80);
+  assert.equal((await internalRequest(`/orders/${order.id}`, { method: 'PUT', body: JSON.stringify({ status: 'in_progress' }) })).status, 200);
+  assert.equal((await (await internalRequest('/assets')).json() as any[])[0].id, sold.id);
+  assert.equal((await (await internalRequest('/payments')).json() as any[]).length, 1);
+});
+
+test('旧单产品与单图记录升级编辑保留原资产ID和图片', async () => {
+  db.prepare(`INSERT INTO orders (id,userId,orderNo,title,type,status,platforms,actualAmount,productName,productValue)
+    VALUES ('legacy-order',?,'LEGACY','旧置换','product_exchange','completed','[]',0,'旧产品',88)`).run(primaryUserId);
+  const image = 'data:image/png;base64,bGVnYWN5';
+  db.prepare(`INSERT INTO assets (id,userId,orderId,productName,productValue,image) VALUES ('legacy-asset',?,'legacy-order','旧产品',88,?)`).run(primaryUserId, image);
+  const orders = await (await internalRequest('/orders')).json() as any[];
+  assert.deepEqual(orders[0].products, [{ id: 'legacy-product', productName: '旧产品', productValue: 88 }]);
+  const updated = await internalRequest('/orders/legacy-order', { method: 'PUT', body: JSON.stringify({
+    products: [...orders[0].products, { id: 'added', productName: '新增产品', productValue: 22 }],
+  }) });
+  assert.equal(updated.status, 200);
+  const detail = await (await internalRequest('/assets/legacy-asset')).json() as any;
+  assert.equal(detail.id, 'legacy-asset');
+  assert.deepEqual(detail.images, [image]);
+  assert.equal((await (await internalRequest('/assets')).json() as any[]).length, 2);
+});
+
+test('资产多图增删、封面、按需加载与账号隔离', async () => {
+  const images = ['data:image/png;base64,YQ==', 'data:image/webp;base64,Yg=='];
+  const response = await internalRequest('/assets', { method: 'POST', body: JSON.stringify({ productName: '多图产品', images }) });
+  assert.equal(response.status, 200);
+  const asset = await response.json() as any;
+  assert.deepEqual(asset.images, images);
+  assert.equal(asset.image, images[0]);
+  const list = await (await internalRequest('/assets')).json() as any[];
+  assert.equal(list[0].imageCount, 2);
+  assert.equal(list[0].image, undefined);
+  assert.equal(list[0].images, undefined);
+  assert.equal((await (await internalRequest(`/assets/${asset.id}/image`)).json() as any).images, undefined);
+  assert.equal((await internalRequest(`/assets/${asset.id}`, { method: 'PUT', body: JSON.stringify({ image: images[0] }) })).status, 400);
+  assert.deepEqual((await (await internalRequest(`/assets/${asset.id}`)).json() as any).images, images);
+  const { generateToken } = await import('../src/server/routes/utils/index.ts');
+  const otherHeaders = jsonHeaders(`Bearer ${generateToken(secondaryUserId, 'secondary@example.com')}`);
+  for (const path of [`/assets/${asset.id}`, `/assets/${asset.id}/image`]) {
+    assert.equal((await internalRequest(path, { headers: otherHeaders })).status, 404);
+  }
+  assert.equal((await internalRequest(`/assets/${asset.id}`, { method: 'PUT', body: JSON.stringify({ images: images.slice(1) }) })).status, 200);
+  assert.equal((await (await internalRequest(`/assets/${asset.id}/image`)).json() as any).image, images[1]);
+  assert.equal((await internalRequest(`/assets/${asset.id}`, { method: 'PUT', body: JSON.stringify({ images: [] }) })).status, 200);
+  assert.equal((await internalRequest(`/assets/${asset.id}/image`)).status, 404);
+  assert.equal((await (await internalRequest('/assets')).json() as any[])[0].hasImage, false);
+});
+
+test('拒绝非法或重复产品标识、负数金额、超量图片，失败不会改写原数据', async () => {
+  const product = { id: 'p1', productName: '产品', productValue: 1 };
+  for (const products of [[product, product], [{ ...product, productValue: -1 }], [{ ...product, productName: '' }], Array(51).fill(product), {}]) {
+    assert.equal((await internalRequest('/orders', { method: 'POST', body: JSON.stringify({ title: '无效', type: 'paid_product', products }) })).status, 400);
+  }
+  for (const images of [Array(10).fill('data:image/png;base64,YQ=='), ['https://example.com/image.jpg'], ['data:image/svg+xml;base64,YQ=='], {}]) {
+    assert.equal((await internalRequest('/assets', { method: 'POST', body: JSON.stringify({ productName: '无效', images }) })).status, 400);
+  }
+  assert.equal((await (await internalRequest('/orders')).json() as any[]).length, 0);
+  assert.equal((await (await internalRequest('/assets')).json() as any[]).length, 0);
+});
+
+test('费用+多产品模板和完整备份恢复保留产品标识、图片、派生关系并可继续编辑', async () => {
+  const products = [{ id: 'first', productName: '鼠标', productValue: 99 }, { id: 'second', productName: '键盘', productValue: 199 }];
+  const templateResponse = await internalRequest('/order-templates', { method: 'POST', body: JSON.stringify({
+    name: '组合模板', title: '组合合作', type: 'paid_product', actualAmount: 800, products,
+  }) });
+  assert.equal(templateResponse.status, 200);
+  const template = await templateResponse.json() as any;
+  const created = await internalRequest(`/order-templates/${template.id}/create-order`, { method: 'POST', body: '{}' });
+  assert.equal(created.status, 200);
+  const order = await created.json() as any;
+  assert.deepEqual(order.products, products);
+  assert.equal((await internalRequest(`/orders/${order.id}`, { method: 'PUT', body: JSON.stringify({ status: 'completed' }) })).status, 200);
+  const assets = await (await internalRequest('/assets')).json() as any[];
+  const images = ['data:image/png;base64,YQ==', 'data:image/png;base64,Yg=='];
+  assert.equal((await internalRequest(`/assets/${assets[0].id}`, { method: 'PUT', body: JSON.stringify({ images }) })).status, 200);
+  const backup = await (await internalRequest('/data/export')).json() as any;
+  assert.equal((await internalRequest('/data/import', { method: 'POST', body: JSON.stringify(backup) })).status, 200);
+  assert.deepEqual((await (await internalRequest('/orders')).json() as any[])[0].products, products);
+  assert.deepEqual((await (await internalRequest('/order-templates')).json() as any[])[0].products, products);
+  assert.deepEqual((await (await internalRequest(`/assets/${assets[0].id}`)).json() as any).images, images);
+  assert.equal((await internalRequest(`/orders/${order.id}`, { method: 'PUT', body: JSON.stringify({ title: '恢复后编辑' }) })).status, 200);
+  assert.deepEqual((await (await internalRequest('/assets')).json() as any[]).map(asset => asset.id).sort(), assets.map(asset => asset.id).sort());
+  const invalidBackup = { ...backup, orders: [{ ...backup.orders[0], products: [{ ...products[0], productValue: -5 }] }] };
+  assert.equal((await internalRequest('/data/import', { method: 'POST', body: JSON.stringify(invalidBackup) })).status, 400);
+  assert.equal((await (await internalRequest('/orders')).json() as any[])[0].title, '恢复后编辑');
+});
+
+test('置换多产品不生成费用账单，外部API支持费用+产品，旧模板和E卡面值可恢复', async () => {
+  const products = [{ id: 'p1', productName: '产品一', productValue: 25 }, { id: 'p2', productName: '产品二', productValue: 75 }];
+  assert.equal((await internalRequest('/orders', { method: 'POST', body: JSON.stringify({ title: '多件置换', type: 'product_exchange', status: 'completed', products }) })).status, 200);
+  assert.equal((await (await internalRequest('/assets')).json() as any[]).length, 2);
+  assert.equal((await (await internalRequest('/payments')).json() as any[]).length, 0);
+  const external = await externalRequest('/orders', { method: 'POST', body: JSON.stringify({ title: '外部费用产品', type: 'paid_product', actualAmount: 50, products }) });
+  assert.equal(external.status, 200);
+  assert.deepEqual((await external.json() as any).products, products);
+  const template = await internalRequest('/order-templates', { method: 'POST', body: JSON.stringify({ name: 'E卡模板', title: 'E卡合作', type: 'ecard', productValue: 500 }) });
+  assert.equal(template.status, 200);
+  db.prepare(`INSERT INTO order_templates (id,userId,name,title,type,platforms,productName,productValue) VALUES ('old-template',?,'旧模板','旧置换','product_exchange','[]','旧产品',88)`).run(primaryUserId);
+  assert.equal((await internalRequest('/order-templates/old-template', { method: 'PUT', body: JSON.stringify({ productName: '旧模板修改产品' }) })).status, 200);
+  const backup = await (await internalRequest('/data/export')).json();
+  assert.equal((await internalRequest('/data/import', { method: 'POST', body: JSON.stringify(backup) })).status, 200);
+  const templates = await (await internalRequest('/order-templates')).json() as any[];
+  assert.equal(templates.find(item => item.type === 'ecard').productValue, 500);
+  assert.equal(templates.find(item => item.id === 'old-template').products[0].productName, '旧模板修改产品');
+});
+
 before(async () => {
   db = (await import('../src/server/db.ts')).default;
   const apiRoutes = (await import('../src/server/api.ts')).default;

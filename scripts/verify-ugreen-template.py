@@ -10,7 +10,7 @@ package = Path(sys.argv[1])
 config = json.loads((package / "config.json").read_text(encoding="utf-8"))
 assert config["allowAddAccessPath"] is True
 assert config["baseAccessInfo"]["portInfo"]["port"] == "3441"
-assert config["version"]["version"] == "1.4.8.0017"
+assert config["version"]["version"] == "1.4.9.0018"
 warning_zh = "请勿让应用的 Docker 配置版 与绿联应用中心版同时读写同一数据库目录"
 warning_en = "Never let the Docker Compose deployment and the UGOS Pro App Center installation read and write the same database folder at the same time."
 listing = (root / "ugreen/STORE_LISTING.md").read_text(encoding="utf-8")
